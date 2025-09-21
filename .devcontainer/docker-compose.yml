@@ -1,0 +1,19 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../..:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker-host.sock
+    working_dir: /workspace
+    command: sleep infinity
+    networks:
+      - bsai-dev
+    environment:
+      - PYTHONPATH=/workspace
+      - ENVIRONMENT=development
+
+networks:
+  bsai-dev:
+    driver: bridge
