@@ -59,5 +59,11 @@ RUN apt-get update && apt-get install -y nodejs npm \
     && npm install -g @anthropic-ai/claude-code
 
 USER vscode
+WORKDIR /home/vscode
+
+RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
+RUN echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.zshrc
+RUN source ~/.zshrc
 
 CMD ["sleep", "infinity"]

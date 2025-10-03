@@ -42,8 +42,6 @@
         "editor.codeActionsOnSave": {
           "source.organizeImports": "explicit"
         },
-        "dev.containers.copyGitConfig": true,
-        "terminal.integrated.defaultProfile.linux": "bash",
         "gitleaks.enable": true,
         "gitleaks.configPath": ".gitleaks.toml",
         "claude.apiKey": "${env:ANTHROPIC_API_KEY}"
