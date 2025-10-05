@@ -1,69 +1,49 @@
-FROM mcr.microsoft.com/devcontainers/python:3.11
+FROM mcr.microsoft.com/devcontainers/python:3.12
 
-USER vscode
+ARG USERNAME=vscode
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+ARG CLAUDE_CODE_VERSION=latest
+
+ARG TZ
+ENV TZ="$TZ"
 WORKDIR /workspace
 
-# Install system tools and CLI utilities
-USER root
-RUN apt-get update && apt-get install -y \
-    curl wget git vim tree jq \
-    build-essential \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  git sudo zsh iptables ipset iproute2 \
+  dnsutils aggregate vim nodejs npm \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Kind (Kubernetes in Docker)
-RUN curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64 \
-    && chmod +x ./kind \
-    && mv ./kind /usr/local/bin/kind
+RUN mkdir -p /usr/local/share/npm-global && \
+  chown -R $USER_UID:$USER_GID /usr/local/share
 
-# Install 1Password Connect SDK dependencies
-RUN pip install onepassword-sdk
+# Persist bash history.
+RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
+  && mkdir /commandhistory \
+  && touch /commandhistory/.bash_history \
+  && chown -R $USER_UID:$USER_GID /commandhistory
 
-# Install GitLeaks
-RUN curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz | tar -xz \
-    && mv gitleaks /usr/local/bin/ \
-    && chmod +x /usr/local/bin/gitleaks
+# Set `DEVCONTAINER` environment variable to help with orientation
+ENV DEVCONTAINER=true
 
+# Create workspace and config directories and set permissions
+RUN mkdir -p /workspace /home/$USERNAME/.claude && \
+  chown -R $USER_UID:$USER_GID /workspace /home/$USERNAME/.claude
+
+# Set up non-root user
 USER vscode
 
-# Install uv (Python package manager)
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/home/vscode/.cargo/bin:$PATH"
+# Install global packages
+ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
+ENV PATH=$PATH:/usr/local/share/npm-global/bin
 
-# Pre-install common Python development tools
-RUN pip install --upgrade pip \
-    && pip install \
-    black isort ruff mypy \
-    pytest pytest-asyncio pytest-cov \
-    anthropic langchain langchain-anthropic \
-    fastapi uvicorn typer rich \
-    pydantic pydantic-settings \
-    python-dotenv httpx aiofiles \
-    mkdocs mkdocs-material mkdocstrings \
-    bandit safety pre-commit
+# Install Claude
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
-# Setup development environment
-RUN git config --global init.defaultBranch main \
-    && echo 'export PS1="bsai-dev:\w\$ "' >> ~/.bashrc \
-    && echo 'alias ll="ls -alF"' >> ~/.bashrc \
-    && echo 'alias bsai="python -m bsai.cli.main"' >> ~/.bashrc
-
-# Create necessary directories with proper permissions
+# Copy and set up firewall script
+COPY init-firewall.sh /usr/local/bin/
 USER root
-RUN mkdir -p /workspace/temp/{logs,data,uploads} \
-    && chown -R vscode:vscode /workspace
-
-# Install Node.js & npm (needed for Claude CLI)
-USER root
-RUN apt-get update && apt-get install -y nodejs npm \
-    && npm install -g @anthropic-ai/claude-code
-
+RUN chmod +x /usr/local/bin/init-firewall.sh && \
+  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
+  chmod 0440 /etc/sudoers.d/node-firewall
 USER vscode
-WORKDIR /home/vscode
-
-RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
-RUN echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.zshrc
-RUN source ~/.zshrc
-
-CMD ["sleep", "infinity"]

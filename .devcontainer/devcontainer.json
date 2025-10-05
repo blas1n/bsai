@@ -1,77 +1,42 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/python
 {
-  "name": "BSAI Development Environment",
-  "dockerComposeFile": "docker-compose.yml",
-  "service": "dev",
-  "workspaceFolder": "/workspace/bsai",
-  "features": {
-    "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.11",
-      "installTools": true
-    },
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "version": "latest",
-      "dockerDashComposeVersion": "v2",
-      "moby": false
-    },
-    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
-      "version": "latest",
-      "helm": "latest",
-      "minikube": "none"
-    }
-  },
-  "customizations": {
-    "vscode": {
-      "extensions": [
-        "ms-python.python",
-        "ms-python.black-formatter",
-        "ms-python.isort",
-        "anthropic.claude-code",
-        "ms-kubernetes-tools.vscode-kubernetes-tools",
-        "ms-vscode.vscode-docker",
-        "redhat.vscode-yaml",
-        "yzhang.markdown-all-in-one",
-        "eamodio.gitlens",
-        "charliermarsh.ruff",
-        "ms-python.mypy-type-checker",
-        "zricethezav.gitleaks"
-      ],
-      "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.formatting.provider": "black",
-        "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-          "source.organizeImports": "explicit"
-        },
-        "gitleaks.enable": true,
-        "gitleaks.configPath": ".gitleaks.toml",
-        "claude.apiKey": "${env:ANTHROPIC_API_KEY}"
-      }
-    }
-  },
-  "postCreateCommand": "bash .devcontainer/post-create.sh",
-  "forwardPorts": [
-    8000,
-    8001
-  ],
-  "portsAttributes": {
-    "8000": {
-      "label": "BSAI API Server",
-      "onAutoForward": "notify"
-    },
-    "8001": {
-      "label": "Documentation",
-      "onAutoForward": "ignore"
-    }
-  },
-  "containerEnv": {
-    "PYTHONPATH": "/workspace",
-    "ENVIRONMENT": "development",
-    "LOG_LEVEL": "DEBUG",
-    "BSAI_MODE": "safe_demo"
-  },
-  "mounts": [
-    "source=~/.claude,target=/root/.claude,type=bind,consistency=cached"
-  ],
-  "initializeCommand": "bash -c 'if [ -f .env ]; then export $(cat .env | grep -v \"^#\" | xargs); fi'",
-  "remoteUser": "vscode"
+	"name": "bsai",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"args": {
+			"TZ": "${localEnv:TZ:Asia/Seoul}"
+		}
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/python:1": {
+			"version": "3.12"
+		}
+	},
+	"runArgs": [
+		"--cap-add=NET_ADMIN",
+		"--cap-add=NET_RAW"
+	],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"anthropic.claude-code"
+			]
+		}
+	},
+	"remoteUser": "vscode",
+	"userEnvProbe": "loginInteractiveShell",
+	"mounts": [
+		"source=claude-code-bashhistory,target=/commandhistory,type=volume",
+		"source=claude-code-config,target=/home/vscode/.claude,type=volume"
+	],
+	"containerEnv": {
+		"CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+	},
+	"forwardPorts": [],
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+	"workspaceFolder": "/workspace",
+	"postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+	"waitFor": "postStartCommand"
 }
