@@ -1,19 +1,26 @@
 services:
   dev:
+    user: "vscode"
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
       - ../..:/workspace:cached
       - /var/run/docker.sock:/var/run/docker-host.sock
+      - claude-code-bashhistory:/commandhistory
+      - claude-code-config:/home/vscode/.claude,type=volume"
     working_dir: /workspace
-    command: sleep infinity
     networks:
       - bsai-dev
     environment:
       - PYTHONPATH=/workspace
       - ENVIRONMENT=development
-
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+volumes:
+  claude-code-bashhistory: {}
+  claude-code-config: {}
 networks:
   bsai-dev:
     driver: bridge

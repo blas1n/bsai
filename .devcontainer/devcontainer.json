@@ -5,18 +5,7 @@
   "workspaceFolder": "/workspace/bsai",
   "features": {
     "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.11",
-      "installTools": true
-    },
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "version": "latest",
-      "dockerDashComposeVersion": "v2",
-      "moby": false
-    },
-    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
-      "version": "latest",
-      "helm": "latest",
-      "minikube": "none"
+      "version": "3.11"
     }
   },
   "customizations": {
@@ -69,9 +58,7 @@
     "LOG_LEVEL": "DEBUG",
     "BSAI_MODE": "safe_demo"
   },
-  "mounts": [
-    "source=~/.claude,target=/root/.claude,type=bind,consistency=cached"
-  ],
+  "userEnvProbe": "loginInteractiveShell",
   "initializeCommand": "bash -c 'if [ -f .env ]; then export $(cat .env | grep -v \"^#\" | xargs); fi'",
   "remoteUser": "vscode"
 }
