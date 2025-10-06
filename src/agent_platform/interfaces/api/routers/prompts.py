@@ -4,11 +4,13 @@ Prompt management endpoints
 
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, Field
+
 import structlog
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from agent_platform.interfaces.api.dependencies.auth import get_current_user
+
 
 logger = structlog.get_logger()
 

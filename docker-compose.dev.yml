@@ -9,8 +9,6 @@ services:
     volumes:
       # Bind mount source code for live editing
       - .:/workspace:cached
-      # Persist Python packages between rebuilds
-      - venv:/workspace/.venv
     command: sleep infinity
     environment:
       - PYTHONUNBUFFERED=1
@@ -111,8 +109,6 @@ services:
       - bsai-network
 
 volumes:
-  venv:
-    driver: local
   postgres-data:
     driver: local
   redis-data:

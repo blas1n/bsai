@@ -2,9 +2,10 @@
 Tracing middleware for OpenTelemetry
 """
 
+import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-import structlog
+
 
 logger = structlog.get_logger()
 

@@ -3,7 +3,9 @@ Redis cache client
 """
 
 from typing import Optional
+
 import redis.asyncio as redis
+
 from agent_platform.core.config import settings
 
 

@@ -4,11 +4,13 @@ Experiment management endpoints (Labs)
 
 from typing import List, Optional
 from uuid import UUID
+
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-import structlog
 
 from agent_platform.interfaces.api.dependencies.auth import get_current_user
+
 
 logger = structlog.get_logger()
 router = APIRouter()

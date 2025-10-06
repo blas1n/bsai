@@ -87,3 +87,6 @@ Thumbs.db
 # Monitoring data
 prometheus_data/
 grafana_data/
+
+# Local claude
+.claude/

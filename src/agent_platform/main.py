@@ -3,8 +3,9 @@ BSAI - Platform-oriented AI Agent Orchestrator
 Main FastAPI application entry point
 """
 
+import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import structlog
 from fastapi import FastAPI
@@ -12,16 +13,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 
 from agent_platform.core.config import settings
-from agent_platform.infrastructure.database.postgres import database
 from agent_platform.infrastructure.cache.redis import redis_client
+from agent_platform.infrastructure.database.postgres import database
 from agent_platform.interfaces.api.routers import (
-    agents,
-    prompts,
-    experiments,
-    traces,
     admin,
+    agents,
+    experiments,
     health,
+    prompts,
+    traces,
 )
+
 
 # Structured logging setup
 structlog.configure(
@@ -46,13 +48,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup
     logger.info("starting_application", environment=settings.ENVIRONMENT)
 
-    # Initialize database connection
-    await database.connect()
-    logger.info("database_connected")
+    # Initialize database connection (optional)
+    try:
+        await database.connect()
+        logger.info("database_connected")
+    except Exception as e:
+        logger.warning("database_connection_failed", error=str(e))
 
-    # Initialize Redis connection
-    await redis_client.connect()
-    logger.info("redis_connected")
+    # Initialize Redis connection (optional)
+    try:
+        await redis_client.connect()
+        logger.info("redis_connected")
+    except Exception as e:
+        logger.warning("redis_connection_failed", error=str(e))
 
     # Initialize LLM providers registry
     from agent_platform.core.llm.registry import llm_registry
@@ -66,11 +74,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("shutting_down_application")
 
     # Close connections
-    await database.disconnect()
-    logger.info("database_disconnected")
+    try:
+        await database.disconnect()
+        logger.info("database_disconnected")
+    except Exception as e:
+        logger.warning("database_disconnect_failed", error=str(e))
 
-    await redis_client.disconnect()
-    logger.info("redis_disconnected")
+    try:
+        await redis_client.disconnect()
+        logger.info("redis_disconnected")
+    except Exception as e:
+        logger.warning("redis_disconnect_failed", error=str(e))
 
 
 def create_application() -> FastAPI:
@@ -109,9 +123,7 @@ def create_application() -> FastAPI:
     app.include_router(health.router, prefix="/api/health", tags=["Health"])
     app.include_router(agents.router, prefix="/api/v1/agents", tags=["Agents"])
     app.include_router(prompts.router, prefix="/api/v1/prompts", tags=["Prompts"])
-    app.include_router(
-        experiments.router, prefix="/api/v1/experiments", tags=["Experiments"]
-    )
+    app.include_router(experiments.router, prefix="/api/v1/experiments", tags=["Experiments"])
     app.include_router(traces.router, prefix="/api/v1/traces", tags=["Traces"])
     app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 

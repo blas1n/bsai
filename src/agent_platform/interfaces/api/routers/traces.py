@@ -3,11 +3,13 @@ Trace and observability endpoints
 """
 
 from uuid import UUID
+
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-import structlog
 
 from agent_platform.interfaces.api.dependencies.auth import get_current_user
+
 
 logger = structlog.get_logger()
 router = APIRouter()

@@ -3,7 +3,9 @@ Prompt Store - Central prompt management with versioning
 """
 
 from typing import List, Optional
+
 import structlog
+
 
 logger = structlog.get_logger()
 

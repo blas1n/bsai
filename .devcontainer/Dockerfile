@@ -93,65 +93,26 @@ USER $USERNAME
 # Install Claude Code
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
+# Install uv for Python package management
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/home/$USERNAME/.cargo/bin:$PATH"
+
 # Copy project files (only metadata for dependency installation)
 COPY --chown=$USERNAME:$USERNAME pyproject.toml ./
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir \
-    # Web framework
-    fastapi>=0.109.0 \
-    uvicorn[standard]>=0.27.0 \
-    # Data validation
-    pydantic>=2.5.0 \
-    pydantic-settings>=2.1.0 \
-    # Database
-    sqlalchemy>=2.0.25 \
-    alembic>=1.13.1 \
-    asyncpg>=0.29.0 \
-    databases>=0.8.0 \
-    # Cache
-    redis>=5.0.1 \
-    # LLM SDKs
-    openai>=1.10.0 \
-    anthropic>=0.18.0 \
-    google-generativeai>=0.3.2 \
-    litellm>=1.27.0 \
-    # Observability
-    opentelemetry-api>=1.22.0 \
-    opentelemetry-sdk>=1.22.0 \
-    opentelemetry-instrumentation-fastapi>=0.43b0 \
-    prometheus-client>=0.19.0 \
-    structlog>=24.1.0 \
-    # Security
-    python-jose[cryptography]>=3.3.0 \
-    passlib[bcrypt]>=1.7.4 \
-    # Utilities
-    python-multipart>=0.0.6 \
-    websockets>=12.0 \
-    tenacity>=8.2.3 \
-    httpx>=0.26.0 \
-    # Development tools
-    pytest>=7.4.0 \
-    pytest-asyncio>=0.23.0 \
-    pytest-cov>=4.1.0 \
-    pytest-mock>=3.12.0 \
-    faker>=22.0.0 \
-    black>=24.1.0 \
-    ruff>=0.1.14 \
-    mypy>=1.8.0 \
-    # Interactive dev tools
+# Create virtual environment in user home
+RUN uv venv ~/.venv
+
+# Install Python dependencies using uv into venv
+RUN ~/.local/bin/uv pip install -e ".[dev,docs]" && \
+    ~/.local/bin/uv pip install \
     ipython \
     ipdb \
     rich \
-    # Documentation
-    mkdocs>=1.5.3 \
-    mkdocs-material>=9.5.3 \
-    mkdocstrings[python]>=0.24.0 \
-    mkdocs-mermaid2-plugin>=1.1.1
+    databases>=0.8.0
 
-#RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-#ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
+# Add venv to PATH
+ENV PATH="/home/$USERNAME/.venv/bin:$PATH"
 
 # Copy and set up firewall script (for Claude Code)
 USER root
@@ -169,8 +130,7 @@ RUN mkdir -p $HOME/.linuxbrew \
     && mkdir -p $HOME/.linuxbrew/bin \
     && ln -s $HOME/.linuxbrew/Homebrew/bin/brew $HOME/.linuxbrew/bin/brew \
     && eval "$($HOME/.linuxbrew/bin/brew shellenv)"
-#    && echo 'eval "$($HOME/.linuxbrew/bin/brew shellenv)"' >> $HOME/.bashrc \
-#    && brew update --force --quiet
+
 ENV PATH=/home/$USERNAME/.linuxbrew/bin:/home/$USERNAME/.linuxbrew/sbin:$PATH
 
 # Health check

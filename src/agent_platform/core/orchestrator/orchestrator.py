@@ -2,9 +2,10 @@
 Agent Orchestrator - Coordinates planning and execution
 """
 
-from typing import Optional
 from uuid import UUID
+
 import structlog
+
 
 logger = structlog.get_logger()
 
@@ -15,9 +16,9 @@ class AgentResult:
     def __init__(
         self,
         message: str,
-        reasoning: Optional[str] = None,
-        tool_calls: Optional[list] = None,
-        metadata: Optional[dict] = None,
+        reasoning: str | None = None,
+        tool_calls: list | None = None,
+        metadata: dict | None = None,
     ):
         self.message = message
         self.reasoning = reasoning
@@ -39,11 +40,11 @@ class AgentOrchestrator:
         session_id: UUID,
         user_id: str,
         message: str,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        tools: Optional[list] = None,
-        metadata: Optional[dict] = None,
+        max_tokens: int | None = None,
+        tools: list | None = None,
+        metadata: dict | None = None,
     ) -> AgentResult:
         """Process agent request"""
         logger.info(

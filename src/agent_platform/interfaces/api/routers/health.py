@@ -3,9 +3,11 @@ Health check endpoints
 """
 
 from typing import Dict
+
+import structlog
 from fastapi import APIRouter, status
 from pydantic import BaseModel
-import structlog
+
 
 logger = structlog.get_logger()
 
@@ -45,8 +47,8 @@ async def health_check() -> HealthResponse:
 async def detailed_health_check() -> DetailedHealthResponse:
     """Detailed health check with component status"""
     from agent_platform.core.config import settings
-    from agent_platform.infrastructure.database.postgres import database
     from agent_platform.infrastructure.cache.redis import redis_client
+    from agent_platform.infrastructure.database.postgres import database
 
     components = {}
 

@@ -3,13 +3,14 @@ Tests for LLM base classes and interfaces
 """
 
 import pytest
+
 from agent_platform.core.llm.base import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
-    UsageInfo,
-    ModelInfo,
     LLMProvider,
+    ModelInfo,
+    UsageInfo,
 )
 
 

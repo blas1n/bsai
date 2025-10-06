@@ -2,7 +2,8 @@
 Application configuration using Pydantic Settings
 """
 
-from typing import List
+from typing import list
+
 from pydantic import Field, PostgresDsn, RedisDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=False, description="Debug mode")
 
     # CORS
-    CORS_ORIGINS: List[str] = Field(
+    CORS_ORIGINS: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:8000"],
         description="Allowed CORS origins",
     )
@@ -41,9 +42,7 @@ class Settings(BaseSettings):
     REDIS_URL: RedisDsn = Field(
         default="redis://localhost:6379/0", description="Redis connection URL"
     )
-    REDIS_MAX_CONNECTIONS: int = Field(
-        default=50, description="Redis max connections"
-    )
+    REDIS_MAX_CONNECTIONS: int = Field(default=50, description="Redis max connections")
 
     # LLM Providers
     OPENAI_API_KEY: str = Field(default="", description="OpenAI API Key")
@@ -56,29 +55,21 @@ class Settings(BaseSettings):
         description="Secret key for JWT",
     )
     ALGORITHM: str = Field(default="HS256", description="JWT algorithm")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        default=30, description="Access token expiration"
-    )
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, description="Access token expiration")
 
     # Observability
     OTLP_ENDPOINT: str = Field(
         default="http://localhost:4317", description="OpenTelemetry collector endpoint"
     )
     ENABLE_TRACING: bool = Field(default=True, description="Enable OpenTelemetry tracing")
-    TRACE_SAMPLE_RATE: float = Field(
-        default=1.0, description="Trace sampling rate (0.0-1.0)"
-    )
+    TRACE_SAMPLE_RATE: float = Field(default=1.0, description="Trace sampling rate (0.0-1.0)")
 
     # Sentry (optional)
     SENTRY_DSN: str = Field(default="", description="Sentry DSN for error tracking")
 
     # Cost Management
-    MONTHLY_BUDGET_USD: float = Field(
-        default=1000.0, description="Monthly LLM budget in USD"
-    )
-    COST_ALERT_THRESHOLD: float = Field(
-        default=0.8, description="Alert threshold (0.8 = 80%)"
-    )
+    MONTHLY_BUDGET_USD: float = Field(default=1000.0, description="Monthly LLM budget in USD")
+    COST_ALERT_THRESHOLD: float = Field(default=0.8, description="Alert threshold (0.8 = 80%)")
 
 
 # Global settings instance

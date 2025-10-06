@@ -20,10 +20,22 @@ until redis-cli -h redis ping > /dev/null 2>&1; do
 done
 echo "✅ Redis is ready"
 
-# Install project in editable mode
-echo "📦 Installing project in editable mode..."
+# Install project in editable mode using uv
+echo "📦 Installing project in editable mode with uv..."
 cd /workspace
-pip install --no-cache-dir -e . || true
+
+# Create virtual environment in user home if doesn't exist
+if [ ! -d "$HOME/.venv" ]; then
+  echo "🔧 Creating virtual environment..."
+  ~/.local/bin/uv venv ~/.venv
+fi
+
+# Activate virtual environment
+source ~/.venv/bin/activate
+
+# Install project with all extras
+echo "📥 Installing dependencies..."
+~/.local/bin/uv pip install -e ".[dev,docs]" || true
 
 # Run database migrations (if they exist)
 if [ -d "/workspace/migrations" ]; then

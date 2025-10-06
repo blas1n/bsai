@@ -4,12 +4,14 @@ Agent orchestration endpoints
 
 from typing import Optional
 from uuid import UUID, uuid4
+
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-import structlog
 
 from agent_platform.core.orchestrator.orchestrator import AgentOrchestrator
 from agent_platform.interfaces.api.dependencies.auth import get_current_user
+
 
 logger = structlog.get_logger()
 

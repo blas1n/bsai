@@ -3,8 +3,10 @@ PostgreSQL database connection
 """
 
 from typing import Any
+
 import databases
 import sqlalchemy
+
 from agent_platform.core.config import settings
 
 

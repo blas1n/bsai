@@ -2,11 +2,12 @@
 Admin endpoints for platform management
 """
 
-from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel
 import structlog
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
-from agent_platform.interfaces.api.dependencies.auth import get_current_user, require_admin
+from agent_platform.interfaces.api.dependencies.auth import require_admin
+
 
 logger = structlog.get_logger()
 router = APIRouter()

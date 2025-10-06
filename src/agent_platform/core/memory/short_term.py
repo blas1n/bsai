@@ -2,8 +2,10 @@
 Short-term memory (session-based conversation context)
 """
 
-from typing import List, Optional
+from typing import list
+
 import structlog
+
 
 logger = structlog.get_logger()
 
@@ -17,9 +19,7 @@ class ShortTermMemory:
         # TODO: Implement Redis storage
         pass
 
-    async def get_context(
-        self, session_id: str, limit: int = 20
-    ) -> List[dict]:
+    async def get_context(self, session_id: str, limit: int = 20) -> list[dict]:
         """Get recent messages for session"""
         logger.info("fetching_session_context", session_id=session_id, limit=limit)
         # TODO: Implement Redis retrieval
