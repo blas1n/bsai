@@ -1,13 +1,12 @@
 {
   "name": "BSAI - AI Agent Platform",
-  "dockerComposeFile": "../docker-compose.dev.yml",
+  "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/workspace",
   // Wait for services to be ready
   "waitFor": "onCreateCommand",
   // Lifecycle scripts
-  "onCreateCommand": "bash .devcontainer/scripts/on-create.sh",
-  "postStartCommand": "bash .devcontainer/scripts/post-start.sh",
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
   // VS Code customization
   "customizations": {
     "vscode": {
@@ -61,10 +60,7 @@
   // Forward ports for all services
   "forwardPorts": [
     8000, // FastAPI
-    5432, // PostgreSQL
-    6379, // Redis
-    9090, // Prometheus
-    3001 // Grafana
+    5432  // PostgreSQL
   ],
   "portsAttributes": {
     "8000": {
@@ -73,29 +69,12 @@
     },
     "5432": {
       "label": "PostgreSQL"
-    },
-    "6379": {
-      "label": "Redis"
-    },
-    "9090": {
-      "label": "Prometheus"
-    },
-    "3001": {
-      "label": "Grafana"
     }
   },
   // Features
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
-  },
-  // Environment
-  "remoteEnv": {
-    "PYTHONUNBUFFERED": "1",
-    "PYTHONDONTWRITEBYTECODE": "1",
-    "DATABASE_URL": "postgresql+asyncpg://postgres:postgres@postgres:5432/bsai",
-    "REDIS_URL": "redis://redis:6379/0",
-    "ENVIRONMENT": "development"
   },
   // Run as non-root user
   "remoteUser": "vscode",
