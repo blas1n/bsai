@@ -1,5 +1,5 @@
-site_name: BSAI - AI Agent Platform
-site_description: Platform-oriented AI Agent Orchestrator with LLMOps capabilities
+site_name: BSAI - Multi-Agent LLM Orchestration System
+site_description: LangGraph-based multi-agent system with cost optimization, QA validation, and context preservation
 site_author: BSAI Team
 repo_url: https://github.com/yourusername/bsai
 repo_name: bsai
@@ -40,18 +40,13 @@ plugins:
             show_root_heading: true
             show_root_full_path: false
             heading_level: 2
-  - mermaid2
 
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
   - admonition
@@ -61,27 +56,7 @@ markdown_extensions:
   - toc:
       permalink: true
 
+# Simplified nav - only core documentation
+# Additional pages will be added as they are created
 nav:
   - Home: index.md
-  - Getting Started:
-      - Installation: guides/installation.md
-      - Quick Start: guides/quickstart.md
-      - Configuration: guides/configuration.md
-  - Architecture:
-      - Overview: architecture/overview.md
-      - Modules: architecture/modules.md
-      - Database Schema: architecture/database_schema.md
-      - Observability: architecture/observability.md
-  - API Reference:
-      - REST API: api/rest.md
-      - WebSocket API: api/websocket.md
-      - MCP Interface: api/mcp.md
-  - Developer Guide:
-      - Contributing: guides/contributing.md
-      - Testing: guides/testing.md
-      - Deployment: deployment/index.md
-  - Platform Features:
-      - Prompt Management: features/prompts.md
-      - Experiments: features/experiments.md
-      - Cost Tracking: features/cost_tracking.md
-      - Tracing: features/tracing.md
