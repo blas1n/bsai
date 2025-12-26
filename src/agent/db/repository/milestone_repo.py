@@ -28,12 +28,12 @@ class MilestoneRepository(BaseRepository[Milestone]):
             task_id: Task UUID
 
         Returns:
-            List of milestones ordered by sequence_order
+            List of milestones ordered by sequence_number
         """
         stmt = (
             select(Milestone)
             .where(Milestone.task_id == task_id)
-            .order_by(Milestone.sequence_order.asc())
+            .order_by(Milestone.sequence_number.asc())
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
@@ -50,7 +50,7 @@ class MilestoneRepository(BaseRepository[Milestone]):
         stmt = (
             select(Milestone)
             .where(Milestone.task_id == task_id, Milestone.status == "pending")
-            .order_by(Milestone.sequence_order.asc())
+            .order_by(Milestone.sequence_number.asc())
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
@@ -67,64 +67,44 @@ class MilestoneRepository(BaseRepository[Milestone]):
         stmt = (
             select(Milestone)
             .where(Milestone.task_id == task_id, Milestone.status == "pending")
-            .order_by(Milestone.sequence_order.asc())
+            .order_by(Milestone.sequence_number.asc())
             .limit(1)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def assign_llm(
-        self, milestone_id: UUID, llm_model: str
-    ) -> Milestone | None:
-        """Assign LLM model to milestone.
+    async def increment_retry_count(self, milestone_id: UUID) -> int:
+        """Increment and return the retry count for a milestone.
 
         Args:
             milestone_id: Milestone UUID
-            llm_model: LLM model name
 
         Returns:
-            Updated milestone or None if not found
+            Updated retry count
         """
-        return await self.update(milestone_id, assigned_llm=llm_model)
+        milestone = await self.get_by_id(milestone_id)
+        if milestone is None:
+            return 0
 
-    async def record_worker_result(
+        milestone.retry_count += 1
+        await self.session.flush()
+        await self.session.refresh(milestone)
+        return milestone.retry_count
+
+    async def update_llm_usage(
         self,
         milestone_id: UUID,
-        worker_result: str,
-        tokens_used: int,
+        input_tokens: int,
+        output_tokens: int,
         cost: Decimal,
     ) -> Milestone | None:
-        """Record Worker agent output and usage.
+        """Update milestone LLM usage statistics.
 
         Args:
             milestone_id: Milestone UUID
-            worker_result: Worker agent output
-            tokens_used: Tokens consumed
+            input_tokens: Input tokens consumed
+            output_tokens: Output tokens consumed
             cost: Cost in USD
-
-        Returns:
-            Updated milestone or None if not found
-        """
-        return await self.update(
-            milestone_id,
-            worker_result=worker_result,
-            tokens_used=tokens_used,
-            cost=cost,
-            status="qa_pending",
-        )
-
-    async def record_qa_result(
-        self,
-        milestone_id: UUID,
-        qa_passed: bool,
-        qa_feedback: str | None = None,
-    ) -> Milestone | None:
-        """Record QA agent validation result.
-
-        Args:
-            milestone_id: Milestone UUID
-            qa_passed: Whether QA validation passed
-            qa_feedback: Optional QA feedback
 
         Returns:
             Updated milestone or None if not found
@@ -133,16 +113,9 @@ class MilestoneRepository(BaseRepository[Milestone]):
         if milestone is None:
             return None
 
-        milestone.qa_passed = qa_passed
-        milestone.qa_feedback = qa_feedback
-        milestone.qa_attempts += 1
-
-        if qa_passed:
-            milestone.status = "completed"
-        elif milestone.qa_attempts >= 3:
-            milestone.status = "failed"
-        else:
-            milestone.status = "retry"
+        milestone.input_tokens += input_tokens
+        milestone.output_tokens += output_tokens
+        milestone.cost_usd += cost
 
         await self.session.flush()
         await self.session.refresh(milestone)
@@ -160,7 +133,7 @@ class MilestoneRepository(BaseRepository[Milestone]):
         stmt = (
             select(Milestone)
             .where(Milestone.task_id == task_id, Milestone.status == "failed")
-            .order_by(Milestone.sequence_order.asc())
+            .order_by(Milestone.sequence_number.asc())
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

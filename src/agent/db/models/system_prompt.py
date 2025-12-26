@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
 if TYPE_CHECKING:
-    from .prompt_usage_history import PromptUsageHistory
+    from .generated_prompt import GeneratedPrompt
 
 
 class SystemPrompt(Base):
@@ -18,31 +18,27 @@ class SystemPrompt(Base):
 
     Attributes:
         id: Primary key (UUID)
-        user_id: External user identifier (optional for global prompts)
+        name: Prompt name/title
         agent_type: Agent type (conductor, meta_prompter, worker, qa, summarizer)
         version: Version number (incremental)
-        name: Prompt name/title
-        content: Prompt template content
+        template: Prompt template content (Jinja2 format)
         is_active: Whether this version is active
         created_at: Creation timestamp
     """
 
     __tablename__ = "system_prompts"
-    __table_args__ = (
-        UniqueConstraint("user_id", "agent_type", "version", name="uq_user_agent_version"),
-    )
+    __table_args__ = (UniqueConstraint("name", "version", name="uq_name_version"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    user_id: Mapped[str | None] = mapped_column(VARCHAR(255), index=True)
+    name: Mapped[str] = mapped_column(VARCHAR(255), index=True)
     agent_type: Mapped[str] = mapped_column(VARCHAR(20), index=True)
     version: Mapped[int] = mapped_column(INTEGER)
-    name: Mapped[str] = mapped_column(VARCHAR(255))
-    content: Mapped[str] = mapped_column(TEXT)
-    is_active: Mapped[bool] = mapped_column(BOOLEAN, default=False, index=True)
+    template: Mapped[str] = mapped_column(TEXT)
+    is_active: Mapped[bool] = mapped_column(BOOLEAN, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships
-    prompt_usage_history: Mapped[list["PromptUsageHistory"]] = relationship(
+    generated_prompts: Mapped[list["GeneratedPrompt"]] = relationship(
         back_populates="system_prompt", lazy="selectin"
     )
 
