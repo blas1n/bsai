@@ -1,6 +1,7 @@
 """Database repository layer."""
 
 from .base import BaseRepository
+from .custom_llm_model_repo import CustomLLMModelRepository
 from .generated_prompt_repo import GeneratedPromptRepository
 from .llm_usage_log_repo import LLMUsageLogRepository
 from .memory_snapshot_repo import MemorySnapshotRepository
@@ -18,6 +19,7 @@ __all__ = [
     "MilestoneRepository",
     "MemorySnapshotRepository",
     "LLMUsageLogRepository",
+    "CustomLLMModelRepository",
     "SystemPromptRepository",
     "GeneratedPromptRepository",
 ]
