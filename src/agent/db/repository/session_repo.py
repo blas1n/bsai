@@ -21,9 +21,7 @@ class SessionRepository(BaseRepository[Session]):
         """
         super().__init__(Session, session)
 
-    async def get_by_user_id(
-        self, user_id: str, limit: int = 10, offset: int = 0
-    ) -> list[Session]:
+    async def get_by_user_id(self, user_id: str, limit: int = 10, offset: int = 0) -> list[Session]:
         """Get sessions by user ID.
 
         Args:
@@ -44,9 +42,7 @@ class SessionRepository(BaseRepository[Session]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_active_sessions(
-        self, user_id: str | None = None
-    ) -> list[Session]:
+    async def get_active_sessions(self, user_id: str | None = None) -> list[Session]:
         """Get all active sessions, optionally filtered by user.
 
         Args:
@@ -63,29 +59,49 @@ class SessionRepository(BaseRepository[Session]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def update_cost(
-        self, session_id: UUID, tokens_used: int, cost: Decimal
+    async def update_tokens(
+        self, session_id: UUID, input_tokens: int, output_tokens: int
     ) -> Session | None:
-        """Increment session cost and token usage.
+        """Increment session token usage.
 
         Args:
             session_id: Session UUID
-            tokens_used: Number of tokens to add
-            cost: Cost to add (in USD)
+            input_tokens: Number of input tokens to add
+            output_tokens: Number of output tokens to add
 
         Returns:
             Updated session or None if not found
         """
-        session = await self.get_by_id(session_id)
-        if session is None:
+        session_obj = await self.get_by_id(session_id)
+        if session_obj is None:
             return None
 
-        session.total_tokens_used += tokens_used
-        session.total_cost += cost
+        session_obj.total_input_tokens += input_tokens
+        session_obj.total_output_tokens += output_tokens
 
         await self.session.flush()
-        await self.session.refresh(session)
-        return session
+        await self.session.refresh(session_obj)
+        return session_obj
+
+    async def update_cost(self, session_id: UUID, cost_increment: Decimal) -> Session | None:
+        """Increment session cost.
+
+        Args:
+            session_id: Session UUID
+            cost_increment: Cost to add (in USD)
+
+        Returns:
+            Updated session or None if not found
+        """
+        session_obj = await self.get_by_id(session_id)
+        if session_obj is None:
+            return None
+
+        session_obj.total_cost_usd += cost_increment
+
+        await self.session.flush()
+        await self.session.refresh(session_obj)
+        return session_obj
 
     async def get_total_cost_by_user(self, user_id: str) -> Decimal:
         """Calculate total cost across all user sessions.
@@ -96,9 +112,7 @@ class SessionRepository(BaseRepository[Session]):
         Returns:
             Total cost in USD
         """
-        stmt = select(func.sum(Session.total_cost)).where(
-            Session.user_id == user_id
-        )
+        stmt = select(func.sum(Session.total_cost_usd)).where(Session.user_id == user_id)
         result = await self.session.execute(stmt)
         total = result.scalar_one_or_none()
         return total if total is not None else Decimal("0.0")

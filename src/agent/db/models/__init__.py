@@ -1,6 +1,14 @@
 """Database models for BSAI agent system."""
 
 from .base import Base
+from .enums import (
+    AgentType,
+    MilestoneStatus,
+    SessionStatus,
+    SnapshotType,
+    TaskComplexity,
+    TaskStatus,
+)
 from .generated_prompt import GeneratedPrompt
 from .llm_usage_log import LLMUsageLog
 from .memory_snapshot import MemorySnapshot
@@ -13,6 +21,7 @@ from .user_settings import UserSettings
 
 __all__ = [
     "Base",
+    # Models
     "UserSettings",
     "Session",
     "Task",
@@ -22,4 +31,11 @@ __all__ = [
     "SystemPrompt",
     "GeneratedPrompt",
     "PromptUsageHistory",
+    # Enums
+    "SessionStatus",
+    "TaskStatus",
+    "MilestoneStatus",
+    "TaskComplexity",
+    "AgentType",
+    "SnapshotType",
 ]

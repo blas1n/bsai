@@ -53,17 +53,11 @@ class TaskRepository(BaseRepository[Task]):
         Returns:
             Task with milestones or None if not found
         """
-        stmt = (
-            select(Task)
-            .where(Task.id == task_id)
-            .options(selectinload(Task.milestones))
-        )
+        stmt = select(Task).where(Task.id == task_id).options(selectinload(Task.milestones))
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_pending_tasks(
-        self, session_id: UUID | None = None
-    ) -> list[Task]:
+    async def get_pending_tasks(self, session_id: UUID | None = None) -> list[Task]:
         """Get all pending tasks, optionally filtered by session.
 
         Args:
@@ -80,20 +74,19 @@ class TaskRepository(BaseRepository[Task]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def mark_subdivided(self, task_id: UUID) -> Task | None:
-        """Mark task as subdivided into milestones.
+    async def update_status(self, task_id: UUID, status: str) -> Task | None:
+        """Update task status.
 
         Args:
             task_id: Task UUID
+            status: New status value
 
         Returns:
             Updated task or None if not found
         """
-        return await self.update(task_id, is_subdivided=True)
+        return await self.update(task_id, status=status)
 
-    async def complete_task(
-        self, task_id: UUID, final_result: str
-    ) -> Task | None:
+    async def complete_task(self, task_id: UUID, final_result: str) -> Task | None:
         """Mark task as completed with final result.
 
         Args:
@@ -103,9 +96,7 @@ class TaskRepository(BaseRepository[Task]):
         Returns:
             Updated task or None if not found
         """
-        return await self.update(
-            task_id, status="completed", final_result=final_result
-        )
+        return await self.update(task_id, status="completed", final_result=final_result)
 
     async def fail_task(self, task_id: UUID, error_message: str) -> Task | None:
         """Mark task as failed with error message.
@@ -117,6 +108,4 @@ class TaskRepository(BaseRepository[Task]):
         Returns:
             Updated task or None if not found
         """
-        return await self.update(
-            task_id, status="failed", final_result=error_message
-        )
+        return await self.update(task_id, status="failed", final_result=error_message)

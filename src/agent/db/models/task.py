@@ -4,10 +4,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import BOOLEAN, TEXT, VARCHAR, ForeignKey, func
+from sqlalchemy import TEXT, VARCHAR, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
+from .enums import TaskStatus
 
 if TYPE_CHECKING:
     from .milestone import Milestone
@@ -21,7 +22,6 @@ class Task(Base):
         id: Primary key (UUID)
         session_id: Foreign key to sessions table
         original_request: User's original task description
-        is_subdivided: Whether task was broken into milestones
         status: Task status (pending, in_progress, completed, failed)
         final_result: Completed task output
         created_at: Creation timestamp
@@ -33,13 +33,10 @@ class Task(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     session_id: Mapped[UUID] = mapped_column(ForeignKey("sessions.id"), index=True)
     original_request: Mapped[str] = mapped_column(TEXT)
-    is_subdivided: Mapped[bool] = mapped_column(BOOLEAN, default=False)
-    status: Mapped[str] = mapped_column(VARCHAR(20), default="pending", index=True)
+    status: Mapped[str] = mapped_column(VARCHAR(20), default=TaskStatus.PENDING.value, index=True)
     final_result: Mapped[str | None] = mapped_column(TEXT)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
-    )
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
     # Relationships
     session: Mapped["Session"] = relationship(back_populates="tasks")
