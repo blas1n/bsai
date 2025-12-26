@@ -1,219 +1,221 @@
-# BSAI - Platform-oriented AI Agent Orchestrator
+# BSAI - LangGraph-based Multi-Agent LLM Orchestration System
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.0.20+-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**BSAI** is an enterprise-grade AI Agent orchestrator platform. It's not just a simple agent, but a **platform with built-in LLMOps capabilities**.
+**BSAI** is a production-ready multi-agent LLM orchestration system built with LangGraph. It automatically optimizes costs, validates outputs, and preserves context across sessions.
 
-## 🎯 Key Features
+## Key Features
 
-### 🤖 Multi-Interface Support
-- **REST API**: RESTful interface for web frontends
-- **WebSocket**: Real-time streaming responses
-- **MCP (Model Context Protocol)**: Direct access for LLMs like Claude
+### 1. Token Cost Optimization
+- **Automatic LLM Selection**: Choose the cheapest LLM based on task complexity
+- **5 Complexity Levels**: TRIVIAL, SIMPLE, MODERATE, COMPLEX, CONTEXT_HEAVY
+- **Real-time Cost Tracking**: Monitor token usage and costs per session
 
-### 🔄 Multi-Vendor LLM Integration
-Use multiple LLM vendors through a unified interface:
-- OpenAI (GPT-4, GPT-3.5)
-- Anthropic (Claude 3)
-- Google (Gemini)
-- Extensible for additional vendors
+### 2. Quality Assurance
+- **Independent QA Agent**: Validates all Worker outputs
+- **Automatic Retries**: Max 3 attempts with structured feedback
+- **Acceptance Criteria**: Task-specific validation rules
 
-### 📊 LLMOps Platform Features
-- **Centralized Prompt Store**: Git-style version control, rollback, change history
-- **Cost Tracking**: Real-time token-level cost monitoring
-- **Distributed Tracing**: Complete request tracing with OpenTelemetry
-- **Experimentation Platform**: A/B testing and prompt quality evaluation
-- **Security**: Automatic PII filtering, RBAC, audit logs
+### 3. Context Preservation
+- **Memory System**: Automatic context compression when capacity reached
+- **Session Snapshots**: Pause and resume sessions seamlessly
+- **Key Decision Tracking**: Extract and store critical information
 
-### 🏗️ Production-Ready Architecture
-- **100% Containerized**: Zero external dependencies, instant GitHub Codespaces execution
-- High-performance async/await
-- PostgreSQL + Redis
-- Prometheus metrics
-- Structured logging
-- TDD/DDD-based development
+### 4. Production-Ready Architecture
+- **100% Async**: FastAPI + SQLAlchemy async + asyncpg
+- **PostgreSQL + Redis**: Robust data and cache layer
+- **Docker Compose**: Single-command deployment
+- **Type-Safe**: Full type hints with mypy strict mode
 
-## 🚀 Quick Start
+## Architecture Overview
 
-### 🎯 Easiest Way: GitHub Codespaces (Recommended!)
+### 5 Specialized Agents
 
-**No installation required!**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      User Request                            │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Conductor Agent (Lightweight LLM)                          │
+│  - Break request into milestones                            │
+│  - Select optimal LLM per milestone                         │
+│  - Monitor context usage                                    │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Meta Prompter Agent (Medium LLM, if complexity >= MODERATE)│
+│  - Generate optimized prompts for Worker                    │
+│  - Apply task-type-specific strategies                      │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Worker Agent (Dynamic LLM based on Conductor's selection)  │
+│  - Execute actual task                                      │
+│  - Use generated prompt from Meta Prompter                  │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│  QA Agent (Medium LLM)                                      │
+│  - Validate Worker output                                   │
+│  - Provide structured feedback                              │
+│  - Decide: pass/fail/retry                                  │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Summarizer Agent (Medium LLM, when memory pressure)        │
+│  - Compress context to free memory                          │
+│  - Preserve key decisions and artifacts                     │
+└─────────────────────────────────────────────────────────────┘
+```
 
-1. [Create Codespace from this repository](https://github.com/yourusername/bsai/codespaces)
-2. Wait 3-5 minutes (automatic setup)
-3. In terminal: `uvicorn src.agent_platform.main:app --reload`
-4. Access automatically forwarded port 8000 in browser!
+### LangGraph Workflow
 
-Details: [GitHub Codespaces Guide](docs/deployment/codespaces.md)
+```python
+Entry → analyze_task → select_llm → [generate_prompt?] → execute_worker
+         → verify_qa → [retry/fail/next]
+         → check_context → [summarize?]
+         → advance → [next_milestone/complete]
+```
 
-### 💻 Local Development: Docker Compose
+### Database Schema (9 Tables)
 
-**Prerequisites**: Docker Desktop only
+1. **user_settings**: QA retries, preferred LLM, cost limits
+2. **sessions**: Session tracking with total tokens/cost
+3. **tasks**: User requests and final results
+4. **milestones**: Individual task steps with complexity
+5. **memory_snapshots**: Compressed context summaries
+6. **llm_usage_logs**: Detailed LLM call tracking
+7. **system_prompts**: Versioned agent prompts
+8. **generated_prompts**: Meta Prompter outputs
+9. **prompt_usage_history**: Prompt performance tracking
+
+## Quick Start
+
+### Prerequisites
+
+- Docker Desktop
+- Python 3.11+ (for local development)
+
+### 1. Clone Repository
 
 ```bash
-# 1. Clone & setup
 git clone https://github.com/yourusername/bsai.git
 cd bsai
+```
+
+### 2. Configure Environment
+
+```bash
 cp .env.example .env
-# Add your API keys to .env
-
-# 2. Start full stack (PostgreSQL + Redis + Dev environment)
-docker compose -f docker-compose.dev.yml up -d
-
-# 3. Access dev container
-docker compose exec app bash
-
-# 4. Run server
-uvicorn src.agent_platform.main:app --reload --host 0.0.0.0
+# Edit .env and add your API keys:
+# OPENAI_API_KEY=sk-...
+# ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-### 💎 VS Code Dev Containers (Recommended!)
-
-**Prerequisites**: VS Code + Docker Desktop + Dev Containers extension
+### 3. Start with Docker Compose
 
 ```bash
-# 1. Clone & open
-git clone https://github.com/yourusername/bsai.git
-code bsai
+# Start PostgreSQL and Redis
+docker-compose up -d
 
-# 2. In VS Code: F1 → "Dev Containers: Reopen in Container"
-# 3. Automatic build and all services start
-# 4. Start developing immediately!
+# Run database migrations
+alembic upgrade head
+
+# Start API server
+uvicorn src.agent.main:app --reload
 ```
 
-All setup is done automatically! 🎉
+API will be available at: http://localhost:8000
 
-API Documentation: [http://localhost:8000/api/docs](http://localhost:8000/api/docs)
+API Documentation: http://localhost:8000/docs
 
-## 📖 Documentation
+### 4. VS Code Dev Container (Recommended)
 
-### Core Documentation
-- [Installation Guide](docs/guides/installation.md) - Container-based installation
-- [GitHub Codespaces Guide](docs/deployment/codespaces.md) - How to use Codespaces
-- [Docker Guide](DOCKER_GUIDE.md) - **Two Dockerfiles explained**
-- [Containerization Strategy](CONTAINERIZATION.md) - 100% containerization details
-- [Architecture Overview](docs/architecture/overview.md) - System architecture
+**Prerequisites**: VS Code + Docker + Dev Containers extension
 
-### Full Documentation
-Full documentation: [https://bsai.readthedocs.io](https://bsai.readthedocs.io)
+1. Open project in VS Code
+2. Press `F1` → "Dev Containers: Reopen in Container"
+3. Wait for container build (automatic)
+4. All services start automatically
 
-Build docs locally:
-```bash
-pip install -e ".[docs]"
-mkdocs serve
-```
-
-## 🏛️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                   Interfaces Layer                       │
-│   REST API │ WebSocket │ MCP Server                     │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                    Core Layer                            │
-│  Orchestrator │ Planner │ Executor │ Memory │ Tools    │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                   LLM Abstraction                        │
-│   Registry │ Providers (OpenAI, Claude, Gemini, ...)   │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                  Platform Layer                          │
-│  Prompts │ Trace │ Cost │ Experiments │ Security        │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                Infrastructure Layer                      │
-│    PostgreSQL │ Redis │ OTLP │ Prometheus               │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Directory Structure
-
-```
-bsai/
-├── src/agent_platform/          # Main source code
-│   ├── core/                    # Agent core logic
-│   │   ├── llm/                # LLM abstraction layer
-│   │   ├── orchestrator/       # Task planning & execution
-│   │   ├── memory/             # Context management
-│   │   └── tools/              # Tool registry
-│   ├── platform/               # Platform features
-│   │   ├── prompt_store/       # Prompt versioning
-│   │   ├── trace/              # Distributed tracing
-│   │   ├── cost/               # Cost tracking
-│   │   ├── experiments/        # A/B testing
-│   │   └── security/           # Security & PII filtering
-│   ├── interfaces/             # External interfaces
-│   │   ├── api/               # FastAPI routers
-│   │   └── mcp/               # MCP server
-│   ├── infrastructure/         # Infrastructure layer
-│   │   ├── database/          # PostgreSQL
-│   │   ├── cache/             # Redis
-│   │   └── messaging/         # Event bus (future)
-│   └── domain/                # Domain models
-├── tests/                     # Tests
-│   ├── unit/                 # Unit tests
-│   ├── integration/          # Integration tests
-│   └── e2e/                  # E2E tests
-├── docs/                     # MkDocs documentation
-└── migrations/               # Alembic migrations
-```
-
-## 💡 Use Cases
-
-### 1. Customer Support Agent
-```python
-response = await agent.execute(
-    message="Customer is asking about refund policy",
-    tools=["knowledge_base", "ticket_system", "escalation"]
-)
-```
-
-### 2. Code Review Assistant
-```python
-response = await agent.execute(
-    message="Review this pull request",
-    context={"repo": "myorg/myrepo", "pr": 123},
-    tools=["git", "linter", "security_scanner"]
-)
-```
-
-### 3. Research Agent
-```python
-response = await agent.execute(
-    message="Research latest trends in quantum computing",
-    tools=["web_search", "paper_search", "summarization"]
-)
-```
-
-## 🔧 Technology Stack
+## Technology Stack
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
+| **Orchestration** | LangGraph | State machine workflow |
 | **Framework** | FastAPI | Async web framework |
-| **Database** | PostgreSQL | Primary datastore |
+| **Database** | PostgreSQL 16 | Primary datastore |
 | **Cache** | Redis | Session & caching |
-| **LLM SDK** | LiteLLM | Multi-provider abstraction |
-| **Tracing** | OpenTelemetry | Distributed tracing |
-| **Metrics** | Prometheus | Monitoring |
+| **LLM Client** | LiteLLM | Unified multi-provider interface |
+| **ORM** | SQLAlchemy 2.0 | Async database access |
+| **Migrations** | Alembic | Database schema versioning |
+| **Templates** | Jinja2 | Prompt template system |
+| **Token Counting** | tiktoken | Cost estimation |
+| **Retry Logic** | Tenacity | Exponential backoff |
 | **Logging** | Structlog | Structured JSON logs |
 | **Testing** | pytest | Test framework |
+| **Type Checking** | mypy | Static type analysis |
 | **Docs** | MkDocs Material | Documentation |
-| **Package Manager** | UV | Fast dependency management |
 
-## 🛠️ Development
+## Directory Structure
+
+```
+bsai/
+├── src/agent/                  # Main source code
+│   ├── db/                    # Database layer
+│   │   ├── base.py           # SQLAlchemy declarative base
+│   │   ├── session.py        # Async session factory
+│   │   ├── models/           # 9 SQLAlchemy models
+│   │   └── repository/       # Data access layer
+│   ├── llm/                  # LLM layer
+│   │   ├── client.py         # LiteLLM wrapper
+│   │   ├── router.py         # LLM selection logic
+│   │   ├── models.py         # Model definitions with pricing
+│   │   └── logger.py         # Usage logging
+│   ├── core/                 # Agent implementations
+│   │   ├── conductor.py
+│   │   ├── meta_prompter.py
+│   │   ├── worker.py
+│   │   ├── qa_agent.py
+│   │   └── summarizer.py
+│   ├── graph/                # LangGraph workflow
+│   │   ├── state.py          # AgentState TypedDict
+│   │   ├── nodes.py          # Graph node functions
+│   │   └── workflow.py       # StateGraph composition
+│   ├── memory/               # Memory management
+│   │   ├── context.py        # Context buffer
+│   │   ├── snapshot.py       # Snapshot manager
+│   │   └── compressor.py     # Context compression
+│   ├── prompts/              # Prompt system
+│   │   ├── loader.py         # Jinja2 template loader
+│   │   ├── version.py        # Prompt versioning
+│   │   └── templates/        # Agent prompt templates
+│   ├── api/                  # FastAPI layer
+│   │   ├── dependencies.py   # FastAPI dependencies
+│   │   └── routes/           # API endpoints
+│   ├── schemas/              # Pydantic models
+│   └── utils/                # Utilities
+│       ├── tokens.py         # Token counting
+│       └── logger.py         # Structured logging
+├── tests/                    # Tests
+│   ├── unit/                # Unit tests
+│   ├── integration/         # Integration tests
+│   └── e2e/                 # E2E tests
+├── docs/                    # MkDocs documentation
+├── migrations/              # Alembic migrations
+└── docker-compose.yml       # Docker services
+```
+
+## Development
 
 ### Setup Development Environment
 
 ```bash
-# Install development dependencies
+# Install dependencies
 pip install -e ".[dev]"
 
 # Install pre-commit hooks
@@ -225,203 +227,219 @@ pytest
 # Run with coverage
 pytest --cov=src --cov-report=html
 
+# Type check
+mypy src/
+
 # Lint
 ruff check src/
 black src/
-
-# Type check
-mypy src/
 ```
 
 ### Development Philosophy
 
-#### 1️⃣ TDD (Test-Driven Development)
-Write tests first for all features.
+#### 1. Type Safety First
+- Full type hints on all functions
+- mypy strict mode enabled
+- Type stubs for all dependencies
 
-```python
-# 1. Write test
-def test_prompt_versioning():
-    prompt = create_prompt(name="test", content="v1")
-    assert prompt.version == 1
+#### 2. Test-Driven Development
+- Write tests before implementation
+- 80%+ test coverage target
+- Mock LLM responses in tests
 
-# 2. Implement
-def create_prompt(name, content):
-    return Prompt(name=name, content=content, version=1)
+#### 3. Database-First Design
+- All state persisted to PostgreSQL
+- Async operations throughout
+- Repository pattern for data access
 
-# 3. Refactor
-```
+## API Usage
 
-#### 2️⃣ DDD (Documentation-Driven Development)
-Write design documents first, then implement.
-
-- Architecture: `docs/architecture/`
-- API Specs: `docs/api/`
-- Guides: `docs/guides/`
-
-#### 3️⃣ Clean Architecture
-- Dependency inversion
-- Separation of concerns
-- Testable components
-
-### Project Structure Principles
-
-```
-interfaces → core → platform → infrastructure
-     ↓        ↓        ↓
-  domain ← domain ← domain
-```
-
-## 📊 Observability
-
-### Metrics (Prometheus)
+### Create Task
 
 ```bash
-# Metrics endpoint
-curl http://localhost:8000/metrics
+curl -X POST http://localhost:8000/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "original_request": "Analyze this codebase and suggest improvements",
+    "session_id": "optional-session-id"
+  }'
 ```
 
-Key metrics:
-- `llm_calls_total` - Total LLM API calls
-- `llm_latency_seconds` - LLM call latency
-- `llm_tokens_used` - Token consumption
-- `llm_cost_total` - Total cost in USD
+### Get Task Status
 
-### Tracing (OpenTelemetry)
-
-All requests are automatically traced:
-
-```
-agent.execute (123ms)
-  ├─ planner.plan (45ms)
-  │   └─ llm.chat_completion (40ms)
-  ├─ executor.execute (65ms)
-  │   ├─ tool.web_search (30ms)
-  │   └─ llm.chat_completion (30ms)
-  └─ memory.store (3ms)
+```bash
+curl http://localhost:8000/api/v1/tasks/{task_id}
 ```
 
-### Logging (Structlog)
-
-Structured JSON logs:
-
-```json
-{
-  "event": "llm_call_completed",
-  "timestamp": "2025-10-05T12:34:56.789Z",
-  "trace_id": "a1b2c3d4...",
-  "provider": "openai",
-  "model": "gpt-4",
-  "tokens": 1234,
-  "cost": 0.0246,
-  "latency_ms": 850
-}
-```
-
-## 🔐 Security
-
-### Authentication
-- JWT-based authentication
-- API key support
-- OAuth2 integration (planned)
-
-### PII Protection
-Automatic detection and masking:
+### Stream Task Progress (WebSocket)
 
 ```python
-input: "My email is john@example.com"
-output: "My email is ***@***"
+import asyncio
+import websockets
+
+async def stream_task():
+    uri = "ws://localhost:8000/api/v1/tasks/{task_id}/stream"
+    async with websockets.connect(uri) as websocket:
+        async for message in websocket:
+            print(message)
+
+asyncio.run(stream_task())
 ```
 
-### Access Control
-- Role-based access control (RBAC)
-- Resource-level permissions
-- Audit logging
+### Pause Session
 
-## 🧪 Testing
+```bash
+curl -X POST http://localhost:8000/api/v1/sessions/{session_id}/pause
+```
+
+### Resume Session
+
+```bash
+curl -X POST http://localhost:8000/api/v1/sessions/{session_id}/resume
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# LLM API Keys
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_AI_API_KEY=...
+
+# Database
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/bsai
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+
+# Workflow Configuration
+DEFAULT_QA_MAX_RETRIES=3
+CONTEXT_WARNING_THRESHOLD=0.8
+SUMMARIZATION_THRESHOLD=0.85
+
+# Cost Limits
+DAILY_COST_LIMIT_USD=50.0
+
+# LiteLLM
+LITELLM_LOG_LEVEL=INFO
+LITELLM_DROP_PARAMS=true
+```
+
+## Cost Optimization Example
+
+```python
+# TRIVIAL task uses GPT-4o-mini ($0.00015/1k tokens)
+task1 = "What is 2+2?"
+
+# MODERATE task uses Claude 3.5 Sonnet ($0.003/1k tokens)
+task2 = "Analyze this 50-line Python function for bugs"
+
+# COMPLEX task uses GPT-4o ($0.005/1k tokens)
+task3 = "Design a microservices architecture for e-commerce"
+
+# System automatically selects optimal LLM for each milestone
+```
+
+## Testing
 
 ```bash
 # Run all tests
 pytest
 
 # Run specific test file
-pytest tests/unit/core/test_llm_base.py
+pytest tests/unit/llm/test_router.py
 
 # Run with coverage
 pytest --cov=src --cov-report=html
 
-# Run only fast tests
+# Run integration tests only
+pytest tests/integration/
+
+# Run fast tests only
 pytest -m "not slow"
 ```
 
-Test structure:
-- **Unit tests**: Test individual components
-- **Integration tests**: Test component interactions
-- **E2E tests**: Test full workflows
+## Documentation
 
-## 📈 Roadmap
+### Build Documentation Locally
 
-### Phase 1: MVP (Current)
-- [x] Project structure
-- [x] Core architecture design
-- [x] Database schema design
-- [x] FastAPI skeleton
-- [x] Basic LLM abstraction
-- [ ] OpenAI provider implementation
-- [ ] Basic orchestrator
-- [ ] Cost tracker
+```bash
+pip install -e ".[docs]"
+mkdocs serve
+# Open http://localhost:8001
+```
 
-### Phase 2: Platform Features
-- [ ] Full prompt versioning
-- [ ] Experiment framework
-- [ ] Advanced tracing
-- [ ] MCP server
-- [ ] PII filtering
+### Full Documentation
 
-### Phase 3: Production Ready
+- [Architecture Overview](docs/architecture/overview.md)
+- [Database Schema](docs/architecture/database_schema.md)
+- [API Reference](docs/api/rest.md)
+- [Development Guide](docs/guides/development.md)
+
+## Roadmap
+
+### Phase 1: Foundation (Current)
+- [x] Database schema (9 tables)
+- [x] Alembic migrations setup
+- [ ] All 9 SQLAlchemy models
+- [ ] Repository layer
+- [ ] LiteLLM client wrapper
+
+### Phase 2: Core Agents
+- [ ] Conductor Agent
+- [ ] Meta Prompter Agent
+- [ ] Worker Agent
+- [ ] QA Agent
+- [ ] Summarizer Agent
+
+### Phase 3: LangGraph Workflow
+- [ ] State definitions
+- [ ] Node functions
+- [ ] Workflow composition
+- [ ] Conditional routing
+
+### Phase 4: API & Memory
+- [ ] FastAPI endpoints
+- [ ] Memory system
+- [ ] WebSocket streaming
+- [ ] Session management
+
+### Phase 5: Production
+- [ ] Comprehensive tests
 - [ ] Performance optimization
 - [ ] Monitoring dashboard
-- [ ] Auto-scaling support
-- [ ] Load testing
-- [ ] Production deployment
+- [ ] Production deployment guide
 
-### Phase 4: Enterprise
-- [ ] Multi-tenancy
-- [ ] SSO integration
-- [ ] Advanced RBAC
-- [ ] Compliance features
-- [ ] SLA monitoring
-
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](docs/guides/contributing.md) for details.
-
-### Getting Started
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Write tests for your changes
 4. Implement your changes
-5. Run tests (`pytest`)
+5. Run tests and type checks
 6. Commit with conventional commits (`git commit -m "feat: add amazing feature"`)
-7. Push to your fork (`git push origin feature/amazing-feature`)
+7. Push to your fork
 8. Open a Pull Request
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-- Inspired by [Woowa Brothers' LLM Platform Architecture](https://techblog.woowahan.com/)
-- Built with [FastAPI](https://fastapi.tiangolo.com)
-- Powered by [OpenTelemetry](https://opentelemetry.io)
+- Built with [LangGraph](https://github.com/langchain-ai/langgraph)
+- Powered by [LiteLLM](https://github.com/BerriAI/litellm)
+- Inspired by production LLM orchestration systems
 
-## 📞 Contact & Support
+## Contact & Support
 
-- **Documentation**: [https://bsai.readthedocs.io](https://bsai.readthedocs.io)
 - **Issues**: [GitHub Issues](https://github.com/yourusername/bsai/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/yourusername/bsai/discussions)
 
 ---
 
-**Built with ❤️ for the future of AI Agent platforms**
+**Built for production-grade AI agent orchestration**

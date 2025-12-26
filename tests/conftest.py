@@ -2,8 +2,9 @@
 Pytest configuration and fixtures
 """
 
-import pytest
 import asyncio
+
+import pytest
 
 
 @pytest.fixture(scope="session")

@@ -1,177 +1,47 @@
-# BSAI - AI Agent Platform
+# BSAI - Multi-Agent LLM Orchestration System
 
-**Platform-oriented AI Agent Orchestrator with comprehensive LLMOps capabilities**
+Welcome to the BSAI documentation.
 
 ## Overview
 
-BSAI is an enterprise-grade AI agent platform that provides:
+BSAI is a production-ready multi-agent LLM orchestration system built with LangGraph. It provides:
 
-- **Multi-interface Support**: REST API, WebSocket streaming, and MCP (Model Context Protocol)
-- **Multi-vendor LLM Integration**: Unified interface for OpenAI, Anthropic, Google, and more
-- **Platform Features**: Prompt versioning, cost tracking, distributed tracing, A/B testing
-- **Production-ready**: Built with observability, security, and scalability in mind
+- **Token Cost Optimization**: Automatic LLM selection based on task complexity
+- **Quality Assurance**: Independent QA Agent validates all outputs
+- **Context Preservation**: Memory system maintains progress across sessions
 
-## Key Features
+## Quick Links
 
-### 🤖 Agent Orchestration
-- **Planning & Execution**: Intelligent task decomposition and execution
-- **Memory Management**: Short-term (session) and long-term (knowledge) memory
-- **Tool Integration**: Extensible tool registry for custom capabilities
+- [README](../README.md) - Project overview and quick start
+- [GitHub Repository](https://github.com/yourusername/bsai)
 
-### 🎯 Prompt Management
-- **Version Control**: Git-style versioning for all prompts
-- **Template System**: Jinja2-based dynamic prompt generation
-- **Deployment Tracking**: Environment-specific prompt deployment
+## Getting Started
 
-### 📊 Observability
-- **Distributed Tracing**: OpenTelemetry-based request tracking
-- **Cost Analytics**: Real-time token usage and cost monitoring
-- **Performance Metrics**: Prometheus metrics for all operations
-
-### 🔬 Experimentation Platform
-- **A/B Testing**: Compare prompt variants in production
-- **Evaluation Framework**: Automated prompt quality assessment
-- **Results Dashboard**: Visualize experiment outcomes
-
-### 🔒 Security & Compliance
-- **PII Detection**: Automatic sensitive data filtering
-- **Access Control**: Role-based authentication and authorization
-- **Audit Logging**: Complete activity tracking for compliance
+For installation and setup instructions, please refer to the [README](../README.md).
 
 ## Architecture
 
-```mermaid
-graph TB
-    subgraph "Interfaces"
-        REST[REST API]
-        WS[WebSocket]
-        MCP[MCP Server]
-    end
+The system consists of 5 specialized agents:
 
-    subgraph "Core Layer"
-        Orchestrator[Agent Orchestrator]
-        Planner[Task Planner]
-        Executor[Task Executor]
-        Memory[Memory Manager]
-        Tools[Tool Registry]
-    end
-
-    subgraph "LLM Abstraction"
-        Registry[LLM Registry]
-        OpenAI[OpenAI Provider]
-        Claude[Anthropic Provider]
-        Gemini[Google Provider]
-    end
-
-    subgraph "Platform Services"
-        Prompts[Prompt Store]
-        Trace[Trace Logger]
-        Cost[Cost Tracker]
-        Experiments[Experiment Runner]
-        Security[Security Layer]
-    end
-
-    subgraph "Infrastructure"
-        DB[(PostgreSQL)]
-        Cache[(Redis)]
-        Metrics[Prometheus]
-    end
-
-    REST --> Orchestrator
-    WS --> Orchestrator
-    MCP --> Orchestrator
-
-    Orchestrator --> Planner
-    Orchestrator --> Executor
-    Orchestrator --> Memory
-    Executor --> Tools
-
-    Planner --> Registry
-    Executor --> Registry
-    Registry --> OpenAI
-    Registry --> Claude
-    Registry --> Gemini
-
-    Orchestrator --> Prompts
-    Orchestrator --> Trace
-    Registry --> Cost
-    Orchestrator --> Experiments
-    Orchestrator --> Security
-
-    Prompts --> DB
-    Trace --> DB
-    Cost --> DB
-    Experiments --> DB
-    Memory --> Cache
-    Orchestrator --> Metrics
-```
-
-## Quick Start
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your API keys
-
-# Run database migrations
-alembic upgrade head
-
-# Start the server
-uvicorn src.agent_platform.main:app --reload
-```
-
-Visit [http://localhost:8000/api/docs](http://localhost:8000/api/docs) for interactive API documentation.
+1. **Conductor Agent** - Task analysis and LLM selection
+2. **Meta Prompter Agent** - Prompt optimization
+3. **Worker Agent** - Task execution
+4. **QA Agent** - Output validation
+5. **Summarizer Agent** - Context compression
 
 ## Technology Stack
 
-- **Framework**: FastAPI (async/await)
-- **Database**: PostgreSQL with asyncpg
-- **Cache**: Redis
-- **LLM SDKs**: OpenAI, Anthropic, Google AI
-- **Observability**: OpenTelemetry, Prometheus, Structlog
-- **Testing**: pytest with async support
-- **Documentation**: MkDocs Material
+- **LangGraph** - Workflow orchestration
+- **LiteLLM** - Multi-provider LLM client
+- **FastAPI** - Web framework
+- **PostgreSQL** - Database
+- **SQLAlchemy 2.0** - Async ORM
+- **Alembic** - Database migrations
 
-## Use Cases
+## Documentation Status
 
-### 1. Customer Support Agent
-Intelligent agent with access to knowledge base, ticket system, and escalation tools.
+This documentation is currently under development. More detailed guides will be added as the project progresses.
 
-### 2. Code Review Assistant
-Automated code review with context from repository, commit history, and style guides.
-
-### 3. Research Agent
-Multi-step research workflows with web search, document analysis, and synthesis.
-
-### 4. Data Analysis Pipeline
-Orchestrated data processing with LLM-powered insights and reporting.
-
-## Development Philosophy
-
-### TDD (Test-Driven Development)
-Every feature starts with tests. We maintain >90% code coverage.
-
-### DDD (Documentation-Driven Development)
-Architecture and API design are documented before implementation.
-
-### Platform-First Thinking
-Built for multi-tenancy, scalability, and operational excellence from day one.
-
-## Next Steps
-
-- [Installation Guide](guides/installation.md)
-- [Architecture Overview](architecture/overview.md)
-- [API Reference](api/rest.md)
-- [Contributing Guide](guides/contributing.md)
-
-## License
-
-[Your License Here]
-
-## Support
-
-- GitHub Issues: [Report bugs or request features](https://github.com/yourusername/bsai/issues)
-- Documentation: [Full documentation](https://bsai.readthedocs.io)
+For the most up-to-date information, please refer to:
+- [Implementation Plan](../.claude/plans/swift-plotting-finch.md)
+- [Project README](../README.md)
