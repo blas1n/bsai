@@ -1,6 +1,7 @@
 """Database models for BSAI agent system."""
 
 from .base import Base
+from .custom_llm_model import CustomLLMModel
 from .enums import (
     AgentType,
     MilestoneStatus,
@@ -28,6 +29,7 @@ __all__ = [
     "Milestone",
     "MemorySnapshot",
     "LLMUsageLog",
+    "CustomLLMModel",
     "SystemPrompt",
     "GeneratedPrompt",
     "PromptUsageHistory",
