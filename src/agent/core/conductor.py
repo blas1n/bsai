@@ -13,11 +13,12 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.container import get_container
 from agent.db.models.enums import TaskComplexity
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
-from agent.prompts import ConductorPrompts, PromptManager
+from agent.prompts import ConductorPrompts
 
 logger = structlog.get_logger()
 
@@ -34,7 +35,6 @@ class ConductorAgent:
         llm_client: LiteLLMClient,
         router: LLMRouter,
         session: AsyncSession,
-        prompt_manager: PromptManager | None = None,
     ) -> None:
         """Initialize Conductor agent.
 
@@ -42,14 +42,13 @@ class ConductorAgent:
             llm_client: LLM client for API calls
             router: Router for model selection
             session: Database session
-            prompt_manager: Optional prompt manager (defaults to new instance)
         """
         self.llm_client = llm_client
         self.router = router
         self.session = session
         self.task_repo = TaskRepository(session)
         self.milestone_repo = MilestoneRepository(session)
-        self.prompt_manager = prompt_manager or PromptManager()
+        self.prompt_manager = get_container().prompt_manager
 
     async def analyze_and_plan(
         self,

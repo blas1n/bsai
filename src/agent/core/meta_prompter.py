@@ -13,10 +13,11 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.container import get_container
 from agent.db.models.enums import TaskComplexity
 from agent.db.repository.generated_prompt_repo import GeneratedPromptRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
-from agent.prompts import MetaPrompterPrompts, PromptManager
+from agent.prompts import MetaPrompterPrompts
 
 logger = structlog.get_logger()
 
@@ -33,7 +34,6 @@ class MetaPrompterAgent:
         llm_client: LiteLLMClient,
         router: LLMRouter,
         session: AsyncSession,
-        prompt_manager: PromptManager | None = None,
     ) -> None:
         """Initialize Meta Prompter agent.
 
@@ -41,13 +41,12 @@ class MetaPrompterAgent:
             llm_client: LLM client for API calls
             router: Router for model selection
             session: Database session
-            prompt_manager: Optional prompt manager (defaults to new instance)
         """
         self.llm_client = llm_client
         self.router = router
         self.session = session
         self.prompt_repo = GeneratedPromptRepository(session)
-        self.prompt_manager = prompt_manager or PromptManager()
+        self.prompt_manager = get_container().prompt_manager
 
     async def generate_prompt(
         self,
