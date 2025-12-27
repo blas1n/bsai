@@ -59,16 +59,12 @@
   },
   // Forward ports for all services
   "forwardPorts": [
-    8000, // FastAPI
-    5432  // PostgreSQL
+    8000 // FastAPI
   ],
   "portsAttributes": {
     "8000": {
       "label": "FastAPI",
-      "onAutoForward": "notify"
-    },
-    "5432": {
-      "label": "PostgreSQL"
+      "onAutoForward": "openBrowser"
     }
   },
   // Features

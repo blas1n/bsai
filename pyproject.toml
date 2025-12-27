@@ -40,6 +40,9 @@ dependencies = [
     # Utilities
     "structlog>=24.1.0",
     "tenacity>=8.2.3",
+
+    # Auth
+    "fastapi-keycloak>=1.1.0",
 ]
 
 [project.optional-dependencies]
