@@ -8,6 +8,8 @@ from decimal import Decimal
 import tiktoken
 from tiktoken import Encoding
 
+from agent.db.models.enums import TaskComplexity
+
 from .models import FALLBACK_MODEL_NAME, LLMModel
 from .registry import ModelRegistry
 
@@ -41,13 +43,13 @@ class LLMRouter:
 
     def select_model(
         self,
-        complexity: str,
+        complexity: TaskComplexity,
         preferred_model: str | None = None,
     ) -> LLMModel:
         """Select optimal LLM based on complexity.
 
         Args:
-            complexity: Task complexity level (TaskComplexity enum name)
+            complexity: Task complexity level (TaskComplexity enum)
             preferred_model: Optional user-preferred model name override
 
         Returns:
@@ -61,7 +63,7 @@ class LLMRouter:
             model_name = preferred_model
         else:
             # Use complexity mapping or fallback
-            model_name = self.complexity_mapping.get(complexity, FALLBACK_MODEL_NAME)
+            model_name = self.complexity_mapping.get(complexity.name, FALLBACK_MODEL_NAME)
 
         # Load from registry
         model = self.registry.get(model_name)

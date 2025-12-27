@@ -1,0 +1,18 @@
+# Worker Agent Prompts
+#
+# Mako template variables:
+# - previous_output: Previous attempt output
+# - qa_feedback: Feedback from QA Agent
+# - original_prompt: Original execution prompt
+
+retry_prompt: |
+  PREVIOUS ATTEMPT:
+  ${previous_output}
+
+  QA FEEDBACK:
+  ${qa_feedback}
+
+  ORIGINAL TASK:
+  ${original_prompt}
+
+  Please revise your response based on the QA feedback above. Address all issues mentioned and ensure the output meets the acceptance criteria.
