@@ -389,21 +389,23 @@ mkdocs serve
 - [x] Dynamic model pricing with LiteLLM API
 - [x] Custom model support (fine-tuned, self-hosted)
 
-### Phase 2: Core Agents (Current)
-- [ ] Conductor Agent
-- [ ] Meta Prompter Agent
-- [ ] Worker Agent
-- [ ] QA Agent
-- [ ] Summarizer Agent
+### Phase 2: Core Agents ✅
+- [x] Prompt system (Jinja2 templates + PromptManager)
+- [x] Conductor Agent (task analysis, milestone planning, LLM selection)
+- [x] Meta Prompter Agent (prompt optimization for complex tasks)
+- [x] Worker Agent (task execution with retry support)
+- [x] QA Agent (output validation with structured feedback)
+- [x] Summarizer Agent (context compression)
 
-### Phase 3: LangGraph Workflow
-- [ ] State definitions
-- [ ] Node functions
-- [ ] Workflow composition
-- [ ] Conditional routing
-- [ ] 앱 레벨 싱글톤 DI 전환: PromptManager, ModelRegistry, LiteLLMClient, LLMRouter
+### Phase 3: LangGraph Workflow ✅
+- [x] AgentState TypedDict with MilestoneData
+- [x] 8 node functions (analyze, select_llm, generate_prompt, execute, verify, check_context, summarize, advance)
+- [x] Conditional edge routing with StrEnum (QARoute, PromptRoute, CompressionRoute, AdvanceRoute)
+- [x] StateGraph composition with workflow.py
+- [x] AgentContainer singleton DI (PromptManager, LiteLLMClient, ModelRegistry, LLMRouter)
+- [x] WorkflowRunner with auto-initialization
 
-### Phase 4: API & Memory
+### Phase 4: API & Memory (Current)
 - [ ] FastAPI endpoints
 - [ ] Memory system
 - [ ] WebSocket streaming
