@@ -1,7 +1,7 @@
 """Tests for QAAgent."""
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -62,19 +62,23 @@ def qa_agent(
     mock_session: AsyncMock,
 ) -> QAAgent:
     """Create QAAgent with mocked dependencies."""
-    agent = QAAgent(
-        llm_client=mock_llm_client,
-        router=mock_router,
-        session=mock_session,
-        max_retries=3,
-        prompt_manager=mock_prompt_manager,
-    )
-    # Mock the milestone_repo and usage_logger that get created internally
-    agent.milestone_repo = MagicMock()
-    milestone_mock = MagicMock()
-    agent.milestone_repo.get_by_id = AsyncMock(return_value=milestone_mock)
-    agent.milestone_repo.update = AsyncMock()
-    return agent
+    with patch("agent.core.qa_agent.get_container") as mock_get_container:
+        mock_container = MagicMock()
+        mock_container.prompt_manager = mock_prompt_manager
+        mock_get_container.return_value = mock_container
+
+        agent = QAAgent(
+            llm_client=mock_llm_client,
+            router=mock_router,
+            session=mock_session,
+            max_retries=3,
+        )
+        # Mock the milestone_repo and usage_logger that get created internally
+        agent.milestone_repo = MagicMock()
+        milestone_mock = MagicMock()
+        agent.milestone_repo.get_by_id = AsyncMock(return_value=milestone_mock)
+        agent.milestone_repo.update = AsyncMock()
+        return agent
 
 
 class TestQAAgent:

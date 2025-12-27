@@ -11,7 +11,10 @@ from agent.llm.registry import ModelRegistry
 @pytest.fixture
 def mock_session() -> AsyncMock:
     """Create mock database session."""
-    return AsyncMock()
+    session = AsyncMock()
+    # session.add() is synchronous, not async
+    session.add = MagicMock()
+    return session
 
 
 @pytest.fixture

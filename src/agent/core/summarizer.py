@@ -13,10 +13,11 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.container import get_container
 from agent.db.models.enums import SnapshotType, TaskComplexity
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
-from agent.prompts import PromptManager, SummarizerPrompts
+from agent.prompts import SummarizerPrompts
 
 logger = structlog.get_logger()
 
@@ -34,7 +35,6 @@ class SummarizerAgent:
         router: LLMRouter,
         session: AsyncSession,
         compression_threshold: float = 0.85,
-        prompt_manager: PromptManager | None = None,
     ) -> None:
         """Initialize Summarizer agent.
 
@@ -43,14 +43,13 @@ class SummarizerAgent:
             router: Router for model selection
             session: Database session
             compression_threshold: Context usage ratio to trigger compression (0.0-1.0)
-            prompt_manager: Optional prompt manager (defaults to new instance)
         """
         self.llm_client = llm_client
         self.router = router
         self.session = session
         self.compression_threshold = compression_threshold
         self.snapshot_repo = MemorySnapshotRepository(session)
-        self.prompt_manager = prompt_manager or PromptManager()
+        self.prompt_manager = get_container().prompt_manager
 
     async def compress_context(
         self,

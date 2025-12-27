@@ -1,7 +1,7 @@
 """Tests for MetaPrompterAgent."""
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -67,16 +67,20 @@ def meta_prompter(
     mock_session: AsyncMock,
 ) -> MetaPrompterAgent:
     """Create MetaPrompterAgent with mocked dependencies."""
-    agent = MetaPrompterAgent(
-        llm_client=mock_llm_client,
-        router=mock_router,
-        session=mock_session,
-        prompt_manager=mock_prompt_manager,
-    )
-    # Mock the prompt_repo that gets created internally
-    agent.prompt_repo = MagicMock()
-    agent.prompt_repo.create = AsyncMock()
-    return agent
+    with patch("agent.core.meta_prompter.get_container") as mock_get_container:
+        mock_container = MagicMock()
+        mock_container.prompt_manager = mock_prompt_manager
+        mock_get_container.return_value = mock_container
+
+        agent = MetaPrompterAgent(
+            llm_client=mock_llm_client,
+            router=mock_router,
+            session=mock_session,
+        )
+        # Mock the prompt_repo that gets created internally
+        agent.prompt_repo = MagicMock()
+        agent.prompt_repo.create = AsyncMock()
+        return agent
 
 
 class TestMetaPrompterAgent:

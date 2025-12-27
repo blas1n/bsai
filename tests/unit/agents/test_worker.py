@@ -1,7 +1,7 @@
 """Tests for WorkerAgent."""
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -60,20 +60,24 @@ def worker(
     mock_session: AsyncMock,
 ) -> WorkerAgent:
     """Create WorkerAgent with mocked dependencies."""
-    agent = WorkerAgent(
-        llm_client=mock_llm_client,
-        router=mock_router,
-        session=mock_session,
-        prompt_manager=mock_prompt_manager,
-    )
-    # Mock the usage_logger and milestone_repo that get created internally
+    with patch("agent.core.worker.get_container") as mock_get_container:
+        mock_container = MagicMock()
+        mock_container.prompt_manager = mock_prompt_manager
+        mock_get_container.return_value = mock_container
 
-    # Mock milestone_repo
-    agent.milestone_repo = MagicMock()
-    mock_milestone = MagicMock()
-    agent.milestone_repo.get_by_id = AsyncMock(return_value=mock_milestone)
-    agent.milestone_repo.update = AsyncMock()
-    return agent
+        agent = WorkerAgent(
+            llm_client=mock_llm_client,
+            router=mock_router,
+            session=mock_session,
+        )
+        # Mock the usage_logger and milestone_repo that get created internally
+
+        # Mock milestone_repo
+        agent.milestone_repo = MagicMock()
+        mock_milestone = MagicMock()
+        agent.milestone_repo.get_by_id = AsyncMock(return_value=mock_milestone)
+        agent.milestone_repo.update = AsyncMock()
+        return agent
 
 
 class TestWorkerAgent:

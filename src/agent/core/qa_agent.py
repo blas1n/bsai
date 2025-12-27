@@ -14,10 +14,11 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.container import get_container
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
-from agent.prompts import PromptManager, QAAgentPrompts
+from agent.prompts import QAAgentPrompts
 
 logger = structlog.get_logger()
 
@@ -43,7 +44,6 @@ class QAAgent:
         router: LLMRouter,
         session: AsyncSession,
         max_retries: int = 3,
-        prompt_manager: PromptManager | None = None,
     ) -> None:
         """Initialize QA agent.
 
@@ -52,14 +52,13 @@ class QAAgent:
             router: Router for model selection
             session: Database session
             max_retries: Maximum retry attempts allowed
-            prompt_manager: Optional prompt manager (defaults to new instance)
         """
         self.llm_client = llm_client
         self.router = router
         self.session = session
         self.max_retries = max_retries
         self.milestone_repo = MilestoneRepository(session)
-        self.prompt_manager = prompt_manager or PromptManager()
+        self.prompt_manager = get_container().prompt_manager
 
     async def validate_output(
         self,
