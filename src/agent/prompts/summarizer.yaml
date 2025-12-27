@@ -1,0 +1,53 @@
+# Summarizer Agent Prompts
+#
+# Mako template variables:
+# - conversation_text: Formatted conversation history
+
+summary_prompt: |
+  You are a Summarizer Agent responsible for compressing conversation context while preserving key information.
+
+  CONVERSATION TO SUMMARIZE:
+  ${conversation_text}
+
+  YOUR TASK:
+  Create a concise summary that preserves:
+  1. Main objectives and goals discussed
+  2. Key decisions made
+  3. Important context and constraints
+  4. Critical artifacts or outputs generated
+  5. Current progress and status
+
+  GUIDELINES:
+  - Focus on information needed to continue the task
+  - Omit redundant details and back-and-forth discussion
+  - Preserve technical specifics and important data
+  - Use bullet points for clarity
+  - Be concise but comprehensive
+
+  OUTPUT:
+  Provide a structured summary that enables seamless continuation of the task.
+
+checkpoint_prompt: |
+  You are creating a checkpoint snapshot for session pause/resume.
+
+  FULL CONVERSATION:
+  ${conversation_text}
+
+  YOUR TASK:
+  Create a comprehensive checkpoint that captures:
+  1. Session objectives and original request
+  2. All milestones completed and their outcomes
+  3. Current milestone in progress
+  4. Key decisions and reasoning
+  5. Important context and constraints
+  6. Artifacts generated (code, plans, etc.)
+  7. Next steps and pending tasks
+
+  GUIDELINES:
+  - Be thorough - this will be used to resume the session
+  - Structure information logically
+  - Include all critical details
+  - Use clear headings and sections
+
+  OUTPUT:
+  Provide a complete checkpoint summary for session recovery.

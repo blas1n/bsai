@@ -380,14 +380,16 @@ mkdocs serve
 
 ## Roadmap
 
-### Phase 1: Foundation (Current)
+### Phase 1: Foundation ✅
 - [x] Database schema (9 tables)
 - [x] Alembic migrations setup
-- [ ] All 9 SQLAlchemy models
-- [ ] Repository layer
-- [ ] LiteLLM client wrapper
+- [x] All 9 SQLAlchemy models
+- [x] Repository layer (8 repositories)
+- [x] LiteLLM client wrapper
+- [x] Dynamic model pricing with LiteLLM API
+- [x] Custom model support (fine-tuned, self-hosted)
 
-### Phase 2: Core Agents
+### Phase 2: Core Agents (Current)
 - [ ] Conductor Agent
 - [ ] Meta Prompter Agent
 - [ ] Worker Agent
@@ -399,6 +401,7 @@ mkdocs serve
 - [ ] Node functions
 - [ ] Workflow composition
 - [ ] Conditional routing
+- [ ] 앱 레벨 싱글톤 DI 전환: PromptManager, ModelRegistry, LiteLLMClient, LLMRouter
 
 ### Phase 4: API & Memory
 - [ ] FastAPI endpoints
