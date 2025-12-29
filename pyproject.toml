@@ -67,6 +67,7 @@ dev = [
     # Type Stubs
     "types-redis>=4.6.0",
     "types-requests>=2.31.0",
+    "types-jwcrypto>=1.0.0",
     "sqlalchemy[mypy]>=2.0.25",
 ]
 docs = [
@@ -142,3 +143,10 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = [
+    "fastapi_keycloak_middleware",
+    "langgraph.graph.graph",
+]
+ignore_missing_imports = true

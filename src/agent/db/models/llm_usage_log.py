@@ -36,9 +36,7 @@ class LLMUsageLog(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     session_id: Mapped[UUID] = mapped_column(ForeignKey("sessions.id"), index=True)
-    milestone_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("milestones.id"), index=True
-    )
+    milestone_id: Mapped[UUID | None] = mapped_column(ForeignKey("milestones.id"), index=True)
     agent_type: Mapped[str] = mapped_column(VARCHAR(20), index=True)
     llm_provider: Mapped[str] = mapped_column(VARCHAR(50), index=True)
     llm_model: Mapped[str] = mapped_column(VARCHAR(100), index=True)
@@ -50,9 +48,7 @@ class LLMUsageLog(Base):
 
     # Relationships
     session: Mapped["Session"] = relationship(back_populates="llm_usage_logs")
-    milestone: Mapped["Milestone | None"] = relationship(
-        back_populates="llm_usage_logs"
-    )
+    milestone: Mapped["Milestone | None"] = relationship(back_populates="llm_usage_logs")
 
     def __repr__(self) -> str:
         return f"<LLMUsageLog(id={self.id}, model={self.llm_model}, cost={self.cost})>"
