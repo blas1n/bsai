@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from agent.cache.redis_client import close_redis, init_redis
 
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     )
 
     # Register middleware (order matters - first added = last executed)
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(RequestIDMiddleware)
 
