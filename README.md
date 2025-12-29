@@ -1,5 +1,7 @@
 # BSAI - LangGraph-based Multi-Agent LLM Orchestration System
 
+[![CI](https://github.com/blas1n/bsai/actions/workflows/ci.yml/badge.svg)](https://github.com/blas1n/bsai/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/blas1n/bsai/branch/main/graph/badge.svg)](https://codecov.io/gh/blas1n/bsai)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.0.20+-orange.svg)](https://github.com/langchain-ai/langgraph)
