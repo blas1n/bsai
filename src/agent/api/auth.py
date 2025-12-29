@@ -1,6 +1,6 @@
-"""Keycloak authentication using fastapi-keycloak.
+"""Keycloak authentication using fastapi-keycloak-middleware.
 
-Provides simplified authentication leveraging fastapi-keycloak library.
+Provides authentication via middleware that validates JWTs and extracts user info.
 Keycloak is only used at the API layer for JWT validation.
 LangGraph nodes receive user_id after authentication, no direct Keycloak access.
 """
@@ -8,157 +8,99 @@ LangGraph nodes receive user_id after authentication, no direct Keycloak access.
 from __future__ import annotations
 
 import asyncio
-from functools import lru_cache
-from typing import TYPE_CHECKING, Annotated
+import json
+from typing import Any
 
+import httpx
 import structlog
-from fastapi import Depends, HTTPException, Security, WebSocket
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi_keycloak import FastAPIKeycloak, OIDCUser
+from fastapi import HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi_keycloak_middleware import KeycloakConfiguration, get_user
+from jwcrypto import jwt
+from jwcrypto.jwk import JWKSet
 
 from .config import get_auth_settings
 
-if TYPE_CHECKING:
-    pass
-
 logger = structlog.get_logger()
 
-# HTTP Bearer security scheme
-security = HTTPBearer(auto_error=True)
 
+async def user_mapper(userinfo: dict[str, Any]) -> str:
+    """Extract user_id (sub claim) from token.
 
-@lru_cache(maxsize=1)
-def _create_keycloak() -> FastAPIKeycloak:
-    """Create Keycloak instance (cached singleton).
+    Args:
+        userinfo: Token claims dictionary
 
     Returns:
-        FastAPIKeycloak instance
+        User ID string (sub claim)
+    """
+    return userinfo.get("sub", "")
+
+
+def get_keycloak_config() -> KeycloakConfiguration:
+    """Get Keycloak middleware configuration.
+
+    Returns:
+        KeycloakConfiguration for middleware setup
     """
     settings = get_auth_settings()
-    return FastAPIKeycloak(
-        server_url=settings.keycloak_url,
-        client_id=settings.keycloak_client_id,
-        client_secret=settings.keycloak_client_secret or "",
-        admin_client_secret=settings.keycloak_admin_secret or "",
+    return KeycloakConfiguration(
+        url=settings.keycloak_url,
         realm=settings.keycloak_realm,
-        callback_uri=settings.callback_uri,
+        client_id=settings.keycloak_client_id,
+        client_secret=settings.keycloak_client_secret,
+        claims=["sub"],
+        reject_on_missing_claim=False,
     )
 
 
-def get_keycloak() -> FastAPIKeycloak:
-    """FastAPI dependency for Keycloak instance.
+async def get_current_user_id(request: Request) -> str:
+    """Get current authenticated user's ID from request.
 
-    Returns:
-        FastAPIKeycloak instance
-    """
-    return _create_keycloak()
-
-
-# Type alias for Keycloak dependency
-KeycloakIDP = Annotated[FastAPIKeycloak, Depends(get_keycloak)]
-
-
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Security(security),
-    idp: KeycloakIDP = None,  # type: ignore[assignment]
-) -> OIDCUser:
-    """Get current authenticated user.
+    The middleware adds user_id to request.scope["user"].
 
     Args:
-        credentials: Bearer token from Authorization header
-        idp: Keycloak instance from DI
-
-    Returns:
-        OIDCUser with user info and roles
-
-    Raises:
-        HTTPException: If token is invalid
-    """
-    try:
-        return idp.decode_token(credentials.credentials)
-    except Exception as e:
-        logger.warning("token_decode_failed", error=str(e))
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token",
-        ) from e
-
-
-def get_current_user_id(
-    user: OIDCUser = Depends(get_current_user),
-) -> str:
-    """Get current user's ID (sub claim).
-
-    Args:
-        user: Current user
+        request: FastAPI request object
 
     Returns:
         User ID string
+
+    Raises:
+        HTTPException: If user is not authenticated
     """
-    return user.sub
+    user_id = await get_user(request)
+    if user_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated",
+        )
+    return user_id
 
 
-def require_role(role: str):
-    """Create dependency that requires a specific role.
-
-    Args:
-        role: Required role name
-
-    Returns:
-        Dependency function
-    """
-
-    def role_checker(
-        user: OIDCUser = Depends(get_current_user),
-    ) -> OIDCUser:
-        if role not in user.roles:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Role '{role}' required",
-            )
-        return user
-
-    return role_checker
-
-
-def require_any_role(*roles: str):
-    """Create dependency that requires any of the specified roles.
-
-    Args:
-        roles: Role names (any one is sufficient)
-
-    Returns:
-        Dependency function
-    """
-
-    def role_checker(
-        user: OIDCUser = Depends(get_current_user),
-    ) -> OIDCUser:
-        if not any(role in user.roles for role in roles):
-            raise HTTPException(
-                status_code=403,
-                detail=f"One of roles {roles} required",
-            )
-        return user
-
-    return role_checker
-
-
-async def authenticate_websocket(token: str) -> OIDCUser:
+async def authenticate_websocket(token: str) -> str:
     """Authenticate WebSocket with token.
 
     Args:
         token: JWT token string
 
     Returns:
-        OIDCUser from token
+        User ID from token
 
     Raises:
         HTTPException: If token is invalid
     """
-    idp = get_keycloak()
     try:
-        return idp.decode_token(token)
+        settings = get_auth_settings()
+
+        async with httpx.AsyncClient() as client:
+            jwks_url = f"{settings.keycloak_url}/realms/{settings.keycloak_realm}/protocol/openid-connect/certs"
+            response = await client.get(jwks_url)
+            jwks = JWKSet.from_json(response.text)
+
+        decoded = jwt.JWT(key=jwks, jwt=token)
+        claims = decoded.claims
+        if isinstance(claims, str):
+            claims = json.loads(claims)
+
+        return claims.get("sub", "")
     except Exception as e:
         logger.warning("ws_token_invalid", error=str(e))
         raise HTTPException(
@@ -170,7 +112,7 @@ async def authenticate_websocket(token: str) -> OIDCUser:
 async def authenticate_websocket_connection(
     websocket: WebSocket,
     token: str | None = None,
-) -> OIDCUser:
+) -> str:
     """Authenticate WebSocket connection.
 
     Supports two authentication methods:
@@ -182,13 +124,11 @@ async def authenticate_websocket_connection(
         token: Optional token from query parameter
 
     Returns:
-        OIDCUser from token
+        User ID from token
 
     Raises:
         WebSocketDisconnect: If authentication fails
     """
-    from fastapi import WebSocketDisconnect
-
     if token is None:
         await websocket.accept()
         try:

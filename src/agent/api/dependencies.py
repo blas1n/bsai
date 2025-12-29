@@ -4,13 +4,12 @@ from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends
-from fastapi_keycloak import OIDCUser
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.cache import RedisClient, SessionCache, get_redis
 from agent.db.session import get_db_session
 
-from .auth import get_current_user, get_current_user_id
+from .auth import get_current_user_id
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -40,5 +39,4 @@ def get_cache(
 # Type aliases for cleaner route signatures
 DBSession = Annotated[AsyncSession, Depends(get_db)]
 Cache = Annotated[SessionCache, Depends(get_cache)]
-CurrentUser = Annotated[OIDCUser, Depends(get_current_user)]
 CurrentUserId = Annotated[str, Depends(get_current_user_id)]

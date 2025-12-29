@@ -7,9 +7,11 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi_keycloak_middleware import setup_keycloak_middleware
 
 from agent.cache.redis_client import close_redis, init_redis
 
+from .auth import get_keycloak_config, user_mapper
 from .config import get_api_settings
 from .handlers import register_exception_handlers
 from .middleware import LoggingMiddleware, RequestIDMiddleware
@@ -78,6 +80,20 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(RequestIDMiddleware)
+
+    # Keycloak authentication middleware
+    setup_keycloak_middleware(
+        app,
+        keycloak_configuration=get_keycloak_config(),
+        user_mapper=user_mapper,
+        exclude_patterns=[
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+            "/health",
+            "/ready",
+        ],
+    )
 
     # CORS
     if settings.cors_origins:

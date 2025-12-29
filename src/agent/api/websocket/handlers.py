@@ -58,8 +58,7 @@ class WebSocketHandler:
         user_id = None
         if token:
             try:
-                payload = await authenticate_websocket(token)
-                user_id = payload.sub
+                user_id = await authenticate_websocket(token)
             except Exception as e:
                 logger.warning("ws_auth_failed", error=str(e))
                 await websocket.close(code=4001, reason="Authentication failed")
@@ -147,8 +146,8 @@ class WebSocketHandler:
             return
 
         try:
-            payload = await authenticate_websocket(token)
-            connection.user_id = payload.sub
+            user_id = await authenticate_websocket(token)
+            connection.user_id = user_id
             connection.authenticated = True
 
             await self._send_auth_success(connection)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -10,10 +9,10 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from fastapi_keycloak import OIDCUser
 from httpx import ASGITransport, AsyncClient
 
-from agent.api.dependencies import get_current_user, get_db
+from agent.api.auth import get_current_user_id
+from agent.api.dependencies import get_db
 from agent.cache import SessionCache
 
 if TYPE_CHECKING:
@@ -102,26 +101,10 @@ def test_user_id() -> str:
 
 
 @pytest.fixture
-def test_user(test_user_id: str) -> OIDCUser:
-    """Test OIDC user from Keycloak."""
-    now = int(datetime.utcnow().timestamp())
-    return OIDCUser(
-        sub=test_user_id,
-        email="test@example.com",
-        email_verified=True,
-        name="Test User",
-        preferred_username="testuser",
-        realm_access={"roles": ["user"]},
-        iat=now,
-        exp=now + 3600,
-    )
-
-
-@pytest.fixture
 def app(
     mock_db: AsyncMock,
     mock_cache: SessionCache,
-    test_user: OIDCUser,
+    test_user_id: str,
 ) -> FastAPI:
     """Create test FastAPI app with mocked dependencies."""
     from agent.api.main import create_app
@@ -131,11 +114,11 @@ def app(
     async def override_get_db() -> AsyncGenerator[AsyncMock, None]:
         yield mock_db
 
-    async def override_get_current_user() -> OIDCUser:
-        return test_user
+    async def override_get_current_user_id() -> str:
+        return test_user_id
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_current_user_id] = override_get_current_user_id
 
     return app
 

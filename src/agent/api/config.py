@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AuthSettings(BaseSettings):
-    """Keycloak authentication settings for fastapi-keycloak."""
+    """Keycloak authentication settings for fastapi-keycloak-middleware."""
 
     keycloak_url: str = Field(
         default="http://localhost:8080",
@@ -26,15 +26,7 @@ class AuthSettings(BaseSettings):
     )
     keycloak_client_secret: str | None = Field(
         default=None,
-        description="Keycloak client secret (for confidential clients)",
-    )
-    keycloak_admin_secret: str | None = Field(
-        default=None,
-        description="Keycloak admin client secret (for user management)",
-    )
-    callback_uri: str = Field(
-        default="http://localhost:8000/callback",
-        description="OAuth callback URI",
+        description="Keycloak client secret (for introspection endpoint)",
     )
 
     model_config = SettingsConfigDict(
