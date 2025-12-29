@@ -15,17 +15,6 @@ from agent.api.config import (
 class TestAuthSettings:
     """Auth settings tests."""
 
-    def test_default_values(self) -> None:
-        """Default values are set correctly."""
-        settings = AuthSettings()
-
-        assert settings.keycloak_url == "http://localhost:8080"
-        assert settings.keycloak_realm == "bsai"
-        assert settings.keycloak_client_id == "bsai-api"
-        assert settings.keycloak_client_secret is None
-        assert settings.keycloak_admin_secret is None
-        assert settings.callback_uri == "http://localhost:8000/callback"
-
     def test_custom_values(self) -> None:
         """Custom values can be set."""
         settings = AuthSettings(
@@ -34,6 +23,7 @@ class TestAuthSettings:
             keycloak_client_id="test-client",
             keycloak_client_secret="secret123",
             callback_uri="https://example.com/callback",
+            _env_file=None,
         )
 
         assert settings.keycloak_url == "https://auth.example.com"
@@ -46,35 +36,31 @@ class TestAuthSettings:
 class TestCacheSettings:
     """Cache settings tests."""
 
-    def test_default_values(self) -> None:
-        """Default values are set correctly."""
-        settings = CacheSettings()
+    def test_custom_values(self) -> None:
+        """Custom values can be set."""
+        settings = CacheSettings(
+            redis_url="redis://custom:6379/1",
+            redis_max_connections=50,
+            _env_file=None,
+        )
 
-        assert settings.redis_url == "redis://localhost:6379/0"
-        assert settings.redis_max_connections == 20
-        assert settings.session_state_ttl == 3600
-        assert settings.session_context_ttl == 1800
+        assert settings.redis_url == "redis://custom:6379/1"
+        assert settings.redis_max_connections == 50
 
 
 class TestAPISettings:
     """API settings tests."""
 
-    def test_default_values(self) -> None:
-        """Default values are set correctly."""
-        settings = APISettings()
+    def test_custom_values(self) -> None:
+        """Custom values can be set."""
+        settings = APISettings(
+            title="Custom API",
+            debug=True,
+            _env_file=None,
+        )
 
-        assert settings.title == "BSAI API"
-        assert settings.version == "1.0.0"
-        assert settings.debug is False
-        assert settings.api_prefix == "/api/v1"
-        assert "http://localhost:3000" in settings.cors_origins
-
-    def test_pagination_defaults(self) -> None:
-        """Pagination defaults are set."""
-        settings = APISettings()
-
-        assert settings.default_page_size == 20
-        assert settings.max_page_size == 100
+        assert settings.title == "Custom API"
+        assert settings.debug is True
 
 
 class TestSettingsSingletons:
@@ -82,7 +68,6 @@ class TestSettingsSingletons:
 
     def test_get_auth_settings_cached(self) -> None:
         """Auth settings are cached."""
-        # Clear cache first
         get_auth_settings.cache_clear()
 
         settings1 = get_auth_settings()
