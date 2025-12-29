@@ -22,7 +22,6 @@ class TestAuthSettings:
             keycloak_realm="test-realm",
             keycloak_client_id="test-client",
             keycloak_client_secret="secret123",
-            callback_uri="https://example.com/callback",
             _env_file=None,
         )
 
@@ -30,7 +29,6 @@ class TestAuthSettings:
         assert settings.keycloak_realm == "test-realm"
         assert settings.keycloak_client_id == "test-client"
         assert settings.keycloak_client_secret == "secret123"
-        assert settings.callback_uri == "https://example.com/callback"
 
 
 class TestCacheSettings:

@@ -32,7 +32,7 @@ async def user_mapper(userinfo: dict[str, Any]) -> str:
     Returns:
         User ID string (sub claim)
     """
-    return userinfo.get("sub", "")
+    return str(userinfo.get("sub", ""))
 
 
 def get_keycloak_config() -> KeycloakConfiguration:
@@ -72,7 +72,7 @@ async def get_current_user_id(request: Request) -> str:
             status_code=401,
             detail="Not authenticated",
         )
-    return user_id
+    return str(user_id)
 
 
 async def authenticate_websocket(token: str) -> str:
@@ -100,7 +100,7 @@ async def authenticate_websocket(token: str) -> str:
         if isinstance(claims, str):
             claims = json.loads(claims)
 
-        return claims.get("sub", "")
+        return str(claims.get("sub", ""))
     except Exception as e:
         logger.warning("ws_token_invalid", error=str(e))
         raise HTTPException(

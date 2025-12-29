@@ -28,6 +28,10 @@ class AuthSettings(BaseSettings):
         default=None,
         description="Keycloak client secret (for introspection endpoint)",
     )
+    auth_enabled: bool = Field(
+        default=True,
+        description="Enable Keycloak authentication. Set to False for testing.",
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="AUTH_",

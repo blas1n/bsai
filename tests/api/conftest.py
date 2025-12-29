@@ -105,9 +105,15 @@ def app(
     mock_db: AsyncMock,
     mock_cache: SessionCache,
     test_user_id: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> FastAPI:
     """Create test FastAPI app with mocked dependencies."""
+    from agent.api.config import get_auth_settings
     from agent.api.main import create_app
+
+    # Disable Keycloak auth for tests
+    get_auth_settings.cache_clear()
+    monkeypatch.setenv("AUTH_AUTH_ENABLED", "false")
 
     app = create_app()
 

@@ -12,7 +12,7 @@ from fastapi_keycloak_middleware import setup_keycloak_middleware
 from agent.cache.redis_client import close_redis, init_redis
 
 from .auth import get_keycloak_config, user_mapper
-from .config import get_api_settings
+from .config import get_api_settings, get_auth_settings
 from .handlers import register_exception_handlers
 from .middleware import LoggingMiddleware, RequestIDMiddleware
 from .routers import (
@@ -82,18 +82,20 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestIDMiddleware)
 
     # Keycloak authentication middleware
-    setup_keycloak_middleware(
-        app,
-        keycloak_configuration=get_keycloak_config(),
-        user_mapper=user_mapper,
-        exclude_patterns=[
-            "/docs",
-            "/redoc",
-            "/openapi.json",
-            "/health",
-            "/ready",
-        ],
-    )
+    auth_settings = get_auth_settings()
+    if auth_settings.auth_enabled:
+        setup_keycloak_middleware(
+            app,
+            keycloak_configuration=get_keycloak_config(),
+            user_mapper=user_mapper,
+            exclude_patterns=[
+                "/docs",
+                "/redoc",
+                "/openapi.json",
+                "/health",
+                "/ready",
+            ],
+        )
 
     # CORS
     if settings.cors_origins:
