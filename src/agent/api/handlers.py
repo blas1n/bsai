@@ -42,11 +42,18 @@ def register_exception_handlers(app: FastAPI) -> None:
             detail=exc.detail,
         )
 
+        # exc.detail is a dict from HTTPException, get the detail string
+        detail_str = None
+        if isinstance(exc.detail, dict):
+            detail_str = exc.detail.get("detail")
+        elif isinstance(exc.detail, str):
+            detail_str = exc.detail
+
         return JSONResponse(
             status_code=exc.status_code,
             content=ErrorResponse(
                 error=exc.message,
-                detail=exc.detail,
+                detail=detail_str,
                 code=exc.code,
                 request_id=request_id,
             ).model_dump(),
