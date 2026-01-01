@@ -3,6 +3,10 @@
   "enabled": true,
   "displayName": "BSAI",
   "displayNameHtml": "<strong>BSAI</strong>",
+  "loginTheme": "bsai",
+  "accountTheme": "keycloak.v2",
+  "adminTheme": "keycloak.v2",
+  "emailTheme": "keycloak",
   "registrationAllowed": false,
   "registrationEmailAsUsername": false,
   "rememberMe": true,
@@ -97,23 +101,24 @@
       "description": "Frontend web application",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
-      "publicClient": true,
+      "secret": "bsai-web-secret-change-in-production",
+      "publicClient": false,
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
       "redirectUris": [
-        "http://localhost:3000/*",
-        "http://localhost:5173/*"
+        "http://localhost:13000/*",
+        "http://localhost:3000/*"
       ],
       "webOrigins": [
-        "http://localhost:3000",
-        "http://localhost:5173"
+        "http://localhost:13000",
+        "http://localhost:3000"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:5173/*"
+        "post.logout.redirect.uris": "http://localhost:13000/*##http://localhost:3000/*"
       },
       "fullScopeAllowed": true,
       "defaultClientScopes": [
