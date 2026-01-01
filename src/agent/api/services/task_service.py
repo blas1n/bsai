@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -18,6 +18,9 @@ from agent.db.repository.session_repo import SessionRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.db.session import get_db_session
 from agent.graph.workflow import WorkflowRunner
+
+if TYPE_CHECKING:
+    from agent.graph.state import AgentState
 
 from ..exceptions import AccessDeniedError, InvalidStateError, NotFoundError
 from ..schemas import (
@@ -116,26 +119,16 @@ class TaskService:
             session_id=str(session_id),
         )
 
-        # Start execution in background if streaming enabled
-        if request.stream and self.ws_manager:
-            asyncio.create_task(
-                self._execute_task_with_streaming(
-                    session_id=session_id,
-                    task_id=task.id,
-                    original_request=request.original_request,
-                    max_context_tokens=request.max_context_tokens,
-                )
+        # Start execution in background
+        asyncio.create_task(
+            self._execute_task(
+                session_id=session_id,
+                task_id=task.id,
+                original_request=request.original_request,
+                max_context_tokens=request.max_context_tokens,
+                stream=request.stream and self.ws_manager is not None,
             )
-        else:
-            # Non-streaming execution
-            asyncio.create_task(
-                self._execute_task(
-                    session_id=session_id,
-                    task_id=task.id,
-                    original_request=request.original_request,
-                    max_context_tokens=request.max_context_tokens,
-                )
-            )
+        )
 
         return TaskResponse.model_validate(task)
 
@@ -340,62 +333,22 @@ class TaskService:
         task_id: UUID,
         original_request: str,
         max_context_tokens: int,
+        stream: bool = False,
     ) -> None:
-        """Execute task without streaming.
+        """Execute task with optional WebSocket streaming.
 
         Args:
             session_id: Session ID
             task_id: Task ID
             original_request: User's request
             max_context_tokens: Max context size
+            stream: Whether to stream updates via WebSocket
         """
-        async for db_session in get_db_session():
-            try:
-                runner = WorkflowRunner(db_session)
-                await runner.initialize()
-
-                await runner.run(
-                    session_id=session_id,
-                    task_id=task_id,
-                    original_request=original_request,
-                    max_context_tokens=max_context_tokens,
-                )
-
-            except Exception as e:
-                logger.exception(
-                    "task_execution_failed",
-                    task_id=str(task_id),
-                    error=str(e),
-                )
-                # Update task status
-                task_repo = TaskRepository(db_session)
-                await task_repo.update(
-                    task_id,
-                    status=TaskStatus.FAILED.value,
-                    final_result=str(e),
-                )
-                await db_session.commit()
-
-    async def _execute_task_with_streaming(
-        self,
-        session_id: UUID,
-        task_id: UUID,
-        original_request: str,
-        max_context_tokens: int,
-    ) -> None:
-        """Execute task with WebSocket streaming.
-
-        Args:
-            session_id: Session ID
-            task_id: Task ID
-            original_request: User's request
-            max_context_tokens: Max context size
-        """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
 
         try:
-            # Notify task started
-            if self.ws_manager:
+            # Notify task started (streaming only)
+            if stream and self.ws_manager:
                 await self.ws_manager.broadcast_to_session(
                     session_id,
                     WSMessage(
@@ -410,7 +363,11 @@ class TaskService:
                 )
 
             async for db_session in get_db_session():
-                runner = WorkflowRunner(db_session)
+                # Pass ws_manager only when streaming
+                runner = WorkflowRunner(
+                    db_session,
+                    ws_manager=self.ws_manager if stream else None,
+                )
                 await runner.initialize()
 
                 # Execute workflow
@@ -422,19 +379,91 @@ class TaskService:
                 )
 
                 # Calculate duration
-                duration = (datetime.utcnow() - start_time).total_seconds()
+                duration = (datetime.now(UTC) - start_time).total_seconds()
 
-                # Notify completion
-                if self.ws_manager:
+                # Get actual token counts and cost from state
+                total_input_tokens = final_state.get("total_input_tokens", 0)
+                total_output_tokens = final_state.get("total_output_tokens", 0)
+                total_tokens = total_input_tokens + total_output_tokens
+                total_cost = Decimal(final_state.get("total_cost_usd", "0"))
+
+                # Check if task failed (e.g., max retries exceeded)
+                task_status = final_state.get("task_status")
+                task_failed = task_status == TaskStatus.FAILED
+
+                if task_failed:
+                    await self._handle_task_failure(
+                        db_session=db_session,
+                        session_id=session_id,
+                        task_id=task_id,
+                        final_state=final_state,
+                        total_input_tokens=total_input_tokens,
+                        total_output_tokens=total_output_tokens,
+                        total_cost=total_cost,
+                        stream=stream,
+                    )
+                    return
+
+                # Get final result from Responder agent
+                # Falls back to last milestone output if responder didn't run
+                final_result = final_state.get("final_response", "")
+                if not final_result:
+                    # Fallback to last milestone's worker output
+                    milestones = final_state.get("milestones", [])
+                    if milestones:
+                        last_milestone = milestones[-1]
+                        final_result = last_milestone.get("worker_output", "")
+
+                logger.info(
+                    "task_completed_tokens",
+                    task_id=str(task_id),
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    total_cost=str(total_cost),
+                )
+
+                # Update task status
+                task_repo = TaskRepository(db_session)
+                await task_repo.update(
+                    task_id,
+                    status=TaskStatus.COMPLETED.value,
+                    final_result=final_result,
+                )
+
+                # Update session totals
+                session_repo = SessionRepository(db_session)
+                session = await session_repo.get_by_id(session_id)
+                if session:
+                    new_input_tokens = session.total_input_tokens + total_input_tokens
+                    new_output_tokens = session.total_output_tokens + total_output_tokens
+                    new_cost = session.total_cost_usd + total_cost
+                    await session_repo.update(
+                        session_id,
+                        total_input_tokens=new_input_tokens,
+                        total_output_tokens=new_output_tokens,
+                        total_cost_usd=new_cost,
+                    )
+                    logger.info(
+                        "session_totals_updated",
+                        session_id=str(session_id),
+                        new_input_tokens=new_input_tokens,
+                        new_output_tokens=new_output_tokens,
+                        new_cost=str(new_cost),
+                    )
+
+                await db_session.commit()
+
+                # Notify completion after commit (streaming only)
+                if stream and self.ws_manager:
                     await self.ws_manager.broadcast_to_session(
                         session_id,
                         WSMessage(
                             type=WSMessageType.TASK_COMPLETED,
                             payload=TaskCompletedPayload(
                                 task_id=task_id,
-                                final_result=str(final_state.get("current_output") or ""),
-                                total_tokens=int(final_state.get("current_context_tokens") or 0),
-                                total_cost_usd=Decimal("0"),
+                                final_result=final_result or "Task completed",
+                                total_tokens=total_tokens,
+                                total_cost_usd=total_cost,
                                 duration_seconds=duration,
                             ).model_dump(),
                         ),
@@ -447,8 +476,8 @@ class TaskService:
                 error=str(e),
             )
 
-            # Notify failure
-            if self.ws_manager:
+            # Notify failure (streaming only)
+            if stream and self.ws_manager:
                 await self.ws_manager.broadcast_to_session(
                     session_id,
                     WSMessage(
@@ -470,3 +499,73 @@ class TaskService:
                     final_result=str(e),
                 )
                 await db_session.commit()
+
+    async def _handle_task_failure(
+        self,
+        db_session: AsyncSession,
+        session_id: UUID,
+        task_id: UUID,
+        final_state: AgentState,
+        total_input_tokens: int,
+        total_output_tokens: int,
+        total_cost: Decimal,
+        stream: bool,
+    ) -> None:
+        """Handle task failure: update DB and notify via WebSocket.
+
+        Args:
+            db_session: Database session
+            session_id: Session ID
+            task_id: Task ID
+            final_state: Final workflow state
+            total_input_tokens: Total input tokens used
+            total_output_tokens: Total output tokens used
+            total_cost: Total cost in USD
+            stream: Whether to send WebSocket notifications
+        """
+        error_message = final_state.get("error", "Task failed after maximum retry attempts")
+
+        logger.warning(
+            "task_failed",
+            task_id=str(task_id),
+            error=error_message,
+        )
+
+        # Update task status
+        task_repo = TaskRepository(db_session)
+        await task_repo.update(
+            task_id,
+            status=TaskStatus.FAILED.value,
+            final_result=error_message,
+        )
+
+        # Update session totals even on failure
+        session_repo = SessionRepository(db_session)
+        session = await session_repo.get_by_id(session_id)
+        if session:
+            new_input_tokens = session.total_input_tokens + total_input_tokens
+            new_output_tokens = session.total_output_tokens + total_output_tokens
+            new_cost = session.total_cost_usd + total_cost
+            await session_repo.update(
+                session_id,
+                total_input_tokens=new_input_tokens,
+                total_output_tokens=new_output_tokens,
+                total_cost_usd=new_cost,
+            )
+
+        await db_session.commit()
+
+        # Notify failure (streaming only)
+        if stream and self.ws_manager:
+            current_idx = final_state.get("current_milestone_index", 0)
+            await self.ws_manager.broadcast_to_session(
+                session_id,
+                WSMessage(
+                    type=WSMessageType.TASK_FAILED,
+                    payload=TaskFailedPayload(
+                        task_id=task_id,
+                        error=error_message or "Unknown error",
+                        failed_milestone=current_idx + 1,
+                    ).model_dump(),
+                ),
+            )

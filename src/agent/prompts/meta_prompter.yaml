@@ -4,7 +4,7 @@
 # - milestone_description: What the Worker needs to accomplish
 # - complexity: Complexity level (TRIVIAL, SIMPLE, MODERATE, COMPLEX, CONTEXT_HEAVY)
 # - acceptance_criteria: Success criteria
-# - context: Optional additional context (can be None/empty)
+# - additional_context: Optional additional context (can be None/empty)
 # - strategy: Prompt engineering strategy description
 
 meta_prompt: |
@@ -17,10 +17,10 @@ meta_prompt: |
 
   ACCEPTANCE CRITERIA:
   ${acceptance_criteria}
-  % if context:
+  % if additional_context:
 
   ADDITIONAL CONTEXT:
-  ${context}
+  ${additional_context}
   % endif
 
   YOUR TASK:
@@ -29,13 +29,19 @@ meta_prompt: |
   PROMPT ENGINEERING STRATEGY (${complexity}):
   ${strategy}
 
-  OUTPUT:
+  OUTPUT FORMAT GUIDELINES:
+  - For user-facing responses: Use PLAIN TEXT format (no markdown headers, no code blocks unless specifically requested)
+  - For code generation: Use appropriate code formatting
+  - Response should be concise and directly answer the user's need
+  - Do NOT include internal reasoning, chain-of-thought, or meta-commentary in the final output
+
   Write a well-structured prompt that:
   1. Clearly states the objective
   2. Provides necessary context and constraints
-  3. Specifies the expected output format
+  3. Specifies the expected output format (plain text for explanations, code blocks only for actual code)
   4. Includes the acceptance criteria
   5. Is optimized for ${complexity} complexity tasks
+  6. Instructs the Worker to respond in the SAME LANGUAGE as the original user request
 
   Return ONLY the generated prompt (no meta-commentary).
 

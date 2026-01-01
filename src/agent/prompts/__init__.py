@@ -4,6 +4,7 @@ from .keys import (
     ConductorPrompts,
     MetaPrompterPrompts,
     QAAgentPrompts,
+    ResponderPrompts,
     SummarizerPrompts,
     WorkerPrompts,
 )
@@ -16,4 +17,5 @@ __all__ = [
     "WorkerPrompts",
     "QAAgentPrompts",
     "SummarizerPrompts",
+    "ResponderPrompts",
 ]

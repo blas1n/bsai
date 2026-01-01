@@ -1,5 +1,6 @@
 """Database models for BSAI agent system."""
 
+from .artifact import Artifact
 from .base import Base
 from .custom_llm_model import CustomLLMModel
 from .enums import (
@@ -23,6 +24,7 @@ from .user_settings import UserSettings
 __all__ = [
     "Base",
     # Models
+    "Artifact",
     "UserSettings",
     "Session",
     "Task",

@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agent.api.auth import get_current_user_id
-from agent.api.dependencies import get_cache, get_db
+from agent.api.dependencies import get_cache, get_db, get_ws_manager
 from agent.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
 from agent.api.handlers import register_exception_handlers
 from agent.api.routers.tasks import router
@@ -37,7 +37,10 @@ def app() -> FastAPI:
     async def mock_get_db():
         yield MagicMock()
 
-    async def mock_get_cache(redis=None):
+    def mock_get_cache():
+        return MagicMock()
+
+    def mock_get_ws_manager():
         return MagicMock()
 
     async def mock_get_user_id():
@@ -45,6 +48,7 @@ def app() -> FastAPI:
 
     app.dependency_overrides[get_db] = mock_get_db
     app.dependency_overrides[get_cache] = mock_get_cache
+    app.dependency_overrides[get_ws_manager] = mock_get_ws_manager
     app.dependency_overrides[get_current_user_id] = mock_get_user_id
 
     return app
@@ -74,10 +78,10 @@ class TestCreateTask:
             final_result=None,
         )
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_and_execute_task = AsyncMock(return_value=mock_response)
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.post(
                 f"/api/v1/sessions/{session_id}/tasks",
@@ -103,10 +107,10 @@ class TestCreateTask:
             final_result=None,
         )
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_and_execute_task = AsyncMock(return_value=mock_response)
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.post(
                 f"/api/v1/sessions/{session_id}/tasks",
@@ -119,12 +123,12 @@ class TestCreateTask:
         """Returns 404 when session not found."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_and_execute_task = AsyncMock(
                 side_effect=NotFoundError("Session", session_id)
             )
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.post(
                 f"/api/v1/sessions/{session_id}/tasks",
@@ -137,7 +141,7 @@ class TestCreateTask:
         """Returns 400 when session is not active."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_and_execute_task = AsyncMock(
                 side_effect=InvalidStateError(
@@ -146,7 +150,7 @@ class TestCreateTask:
                     action="create tasks in",
                 )
             )
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.post(
                 f"/api/v1/sessions/{session_id}/tasks",
@@ -183,10 +187,10 @@ class TestListTasks:
             has_more=False,
         )
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_tasks = AsyncMock(return_value=mock_response)
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.get(f"/api/v1/sessions/{session_id}/tasks")
 
@@ -198,14 +202,14 @@ class TestListTasks:
         """Filters tasks by status."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_tasks = AsyncMock(
                 return_value=PaginatedResponse(
                     items=[], total=0, limit=20, offset=0, has_more=False
                 )
             )
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.get(f"/api/v1/sessions/{session_id}/tasks?status=in_progress")
 
@@ -215,14 +219,14 @@ class TestListTasks:
         """Supports pagination parameters."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_tasks = AsyncMock(
                 return_value=PaginatedResponse(
                     items=[], total=0, limit=10, offset=5, has_more=False
                 )
             )
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.get(f"/api/v1/sessions/{session_id}/tasks?limit=10&offset=5")
 
@@ -249,10 +253,10 @@ class TestGetTask:
             progress=1.0,
         )
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_task = AsyncMock(return_value=mock_response)
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}")
 
@@ -265,10 +269,10 @@ class TestGetTask:
         session_id = uuid4()
         task_id = uuid4()
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_task = AsyncMock(side_effect=NotFoundError("Task", task_id))
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}")
 
@@ -293,10 +297,10 @@ class TestCancelTask:
             final_result="Task cancelled by user",
         )
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.cancel_task = AsyncMock(return_value=mock_response)
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.put(f"/api/v1/sessions/{session_id}/tasks/{task_id}/cancel")
 
@@ -308,7 +312,7 @@ class TestCancelTask:
         session_id = uuid4()
         task_id = uuid4()
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.cancel_task = AsyncMock(
                 side_effect=InvalidStateError(
@@ -317,7 +321,7 @@ class TestCancelTask:
                     action="cancelled",
                 )
             )
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.put(f"/api/v1/sessions/{session_id}/tasks/{task_id}/cancel")
 
@@ -328,10 +332,10 @@ class TestCancelTask:
         session_id = uuid4()
         task_id = uuid4()
 
-        with patch("agent.api.routers.tasks.get_task_service") as mock_get_service:
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.cancel_task = AsyncMock(side_effect=AccessDeniedError("Task", task_id))
-            mock_get_service.return_value = mock_service
+            mock_service_class.return_value = mock_service
 
             response = client.put(f"/api/v1/sessions/{session_id}/tasks/{task_id}/cancel")
 

@@ -13,7 +13,7 @@ BSAI is a production-ready multi-agent LLM orchestration system built with LangG
 ## Quick Links
 
 - [README](../README.md) - Project overview and quick start
-- [GitHub Repository](https://github.com/yourusername/bsai)
+- [GitHub Repository](https://github.com/blas1n/bsai)
 
 ## Getting Started
 
@@ -21,13 +21,15 @@ For installation and setup instructions, please refer to the [README](../README.
 
 ## Architecture
 
-The system consists of 5 specialized agents:
+The system consists of 7 specialized agents:
 
 1. **Conductor Agent** - Task analysis and LLM selection
 2. **Meta Prompter Agent** - Prompt optimization
 3. **Worker Agent** - Task execution
 4. **QA Agent** - Output validation
-5. **Summarizer Agent** - Context compression
+5. **Artifact Extractor Agent** - Code block and artifact extraction
+6. **Responder Agent** - Localized response generation (75+ languages)
+7. **Summarizer Agent** - Context compression
 
 ## Technology Stack
 
@@ -37,11 +39,10 @@ The system consists of 5 specialized agents:
 - **PostgreSQL** - Database
 - **SQLAlchemy 2.0** - Async ORM
 - **Alembic** - Database migrations
+- **lingua-py** - Language detection (75+ languages)
 
-## Documentation Status
-
-This documentation is currently under development. More detailed guides will be added as the project progresses.
+## Documentation
 
 For the most up-to-date information, please refer to:
-- [Implementation Plan](../.claude/plans/swift-plotting-finch.md)
 - [Project README](../README.md)
+- [Development Guide](../src/agent/CLAUDE.md)

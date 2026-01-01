@@ -58,8 +58,13 @@ def should_use_meta_prompter(state: AgentState) -> PromptRoute:
         PromptRoute.GENERATE if MetaPrompter should run,
         PromptRoute.SKIP to go directly to Worker
     """
-    idx = state["current_milestone_index"]
-    milestone = state["milestones"][idx]
+    milestones = state.get("milestones")
+    idx = state.get("current_milestone_index")
+
+    if milestones is None or idx is None:
+        return PromptRoute.SKIP
+
+    milestone = milestones[idx]
     complexity = milestone["complexity"]
 
     # Skip for trivial/simple tasks
@@ -75,7 +80,10 @@ def route_qa_decision(state: AgentState) -> QARoute:
     Handles three scenarios:
     1. PASS - Move to next milestone
     2. RETRY - Go back to Worker (if under retry limit)
-    3. FAIL - Explicit fail or max retries exceeded
+    3. FAIL - Max retries exceeded, end workflow
+
+    Note: FAIL is only set by qa_agent.py when max retries are exceeded.
+    The QA prompt only offers PASS/RETRY to prevent premature failure.
 
     Args:
         state: Current workflow state
@@ -88,10 +96,11 @@ def route_qa_decision(state: AgentState) -> QARoute:
 
     if decision == "pass":
         return QARoute.NEXT
+    elif decision == "fail":
+        return QARoute.FAIL
     elif decision == "retry" and retry_count < MAX_RETRIES:
         return QARoute.RETRY
     else:
-        # Either explicit fail or max retries exceeded
         return QARoute.FAIL
 
 

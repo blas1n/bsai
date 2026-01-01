@@ -15,6 +15,27 @@ analysis_prompt: |
   2. Assess the complexity level (TRIVIAL, SIMPLE, MODERATE, COMPLEX, or CONTEXT_HEAVY)
   3. Define acceptance criteria for completion
 
+  CRITICAL - WORKER CAPABILITIES:
+  The Worker agent can ONLY generate text output (code, documents, explanations).
+  The Worker CANNOT:
+  - Deploy applications or create live URLs
+  - Execute code, run servers, or create files
+  - Access external systems or databases
+  - Perform any real-world actions
+
+  Therefore, milestones must be TEXT GENERATION tasks only:
+  ✓ "Write complete HTML/CSS/JS code for a web game"
+  ✓ "Create deployment documentation"
+  ✓ "Generate configuration files"
+  ✗ "Deploy the application" (Worker cannot do this)
+  ✗ "Provide a live URL" (Worker cannot do this)
+  ✗ "Run tests and show results" (Worker cannot do this)
+
+  If user asks for deployment/URL:
+  - Create milestone for "complete, runnable code"
+  - Include "deployment instructions" in the same or separate milestone
+  - Do NOT create a "deploy" milestone
+
   COMPLEXITY GUIDELINES:
   - TRIVIAL: Simple facts, basic calculations (< 100 tokens)
   - SIMPLE: Straightforward tasks with clear steps (< 500 tokens)
@@ -38,3 +59,8 @@ analysis_prompt: |
   - Each milestone should be independently executable
   - Order milestones logically
   - Return ONLY valid JSON, no additional text
+  - Use the MINIMUM number of milestones needed (prefer fewer, larger milestones)
+  - For simple requests, use just 1-2 milestones
+  - Maximum 5 milestones for complex tasks
+  - The final milestone should produce a user-facing response in the SAME LANGUAGE as the original request
+  - Internal/intermediate milestones can use any language, but the final output MUST match the user's language

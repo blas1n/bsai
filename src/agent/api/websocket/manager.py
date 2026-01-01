@@ -227,6 +227,11 @@ class ConnectionManager:
             connection_ids = self._session_connections.get(session_id, set()).copy()
 
         if not connection_ids:
+            logger.warning(
+                "ws_broadcast_no_connections",
+                session_id=str(session_id),
+                message_type=message.type,
+            )
             return 0
 
         sent_count = 0

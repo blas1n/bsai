@@ -1,5 +1,6 @@
 """API routers for endpoint organization."""
 
+from .artifacts import router as artifacts_router
 from .health import router as health_router
 from .milestones import router as milestones_router
 from .sessions import router as sessions_router
@@ -8,6 +9,7 @@ from .tasks import router as tasks_router
 from .websocket import router as websocket_router
 
 __all__ = [
+    "artifacts_router",
     "health_router",
     "sessions_router",
     "tasks_router",

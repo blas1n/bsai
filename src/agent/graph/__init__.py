@@ -33,8 +33,6 @@ Example:
     ...     print(result["task_status"])
 """
 
-from agent.container import AgentContainer, get_container, reset_container
-
 from .state import AgentState, MilestoneData
 from .workflow import WorkflowRunner, build_workflow, compile_workflow
 
@@ -46,8 +44,4 @@ __all__ = [
     "build_workflow",
     "compile_workflow",
     "WorkflowRunner",
-    # Container
-    "AgentContainer",
-    "get_container",
-    "reset_container",
 ]

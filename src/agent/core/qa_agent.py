@@ -14,21 +14,25 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.container import get_container
-from agent.db.models.enums import MilestoneStatus, TaskComplexity
+from agent.api.config import get_agent_settings
+from agent.db.models.enums import TaskComplexity
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
-from agent.prompts import QAAgentPrompts
+from agent.prompts import PromptManager, QAAgentPrompts
 
 logger = structlog.get_logger()
 
 
 class QADecision(str, Enum):
-    """QA validation decision."""
+    """QA validation decision.
+
+    Note: FAIL is only set by the system when max retries are exceeded.
+    The QA prompt only offers PASS/RETRY options to prevent premature failure.
+    """
 
     PASS = "pass"
     RETRY = "retry"
-    FAIL = "fail"
+    FAIL = "fail"  # Only set by system when max retries exceeded
 
 
 class QAAgent:
@@ -42,6 +46,7 @@ class QAAgent:
         self,
         llm_client: LiteLLMClient,
         router: LLMRouter,
+        prompt_manager: PromptManager,
         session: AsyncSession,
         max_retries: int = 3,
     ) -> None:
@@ -50,15 +55,16 @@ class QAAgent:
         Args:
             llm_client: LLM client for API calls
             router: Router for model selection
+            prompt_manager: Prompt manager for template rendering
             session: Database session
             max_retries: Maximum retry attempts allowed
         """
         self.llm_client = llm_client
         self.router = router
+        self.prompt_manager = prompt_manager
         self.session = session
         self.max_retries = max_retries
         self.milestone_repo = MilestoneRepository(session)
-        self.prompt_manager = get_container().prompt_manager
 
     async def validate_output(
         self,
@@ -106,10 +112,11 @@ class QAAgent:
         messages = [ChatMessage(role="user", content=validation_prompt)]
 
         # Call LLM
+        settings = get_agent_settings()
         request = LLMRequest(
             model=model.name,
             messages=messages,
-            temperature=0.2,  # Low temperature for consistent validation
+            temperature=settings.qa_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
         )
@@ -217,9 +224,19 @@ class QAAgent:
 
         # Parse decision
         decision_str = data["decision"].upper()
-        try:
-            decision = QADecision(decision_str.lower())
-        except ValueError:
+
+        # Map decision string to enum (FAIL is treated as RETRY)
+        if decision_str == "PASS":
+            decision = QADecision.PASS
+        elif decision_str in ("RETRY", "FAIL"):
+            # FAIL from LLM is treated as RETRY - let the system handle max retries
+            if decision_str == "FAIL":
+                logger.info(
+                    "qa_fail_converted_to_retry",
+                    original_decision=decision_str,
+                )
+            decision = QADecision.RETRY
+        else:
             # Fallback to RETRY if invalid
             logger.warning(
                 "invalid_qa_decision",
@@ -228,13 +245,12 @@ class QAAgent:
             )
             decision = QADecision.RETRY
 
-        # Check retry limit
+        # Check retry limit - if max retries reached, mark as FAIL
         if decision == QADecision.RETRY and attempt_number >= self.max_retries:
             logger.warning(
                 "max_retries_exceeded",
                 attempt=attempt_number,
                 max_retries=self.max_retries,
-                changing_to="FAIL",
             )
             decision = QADecision.FAIL
 
@@ -274,23 +290,15 @@ class QAAgent:
         if not milestone:
             return
 
-        status_map = {
-            QADecision.PASS: MilestoneStatus.PASSED,
-            QADecision.RETRY: MilestoneStatus.IN_PROGRESS,
-            QADecision.FAIL: MilestoneStatus.FAILED,
-        }
-
-        new_status = status_map[decision]
-
         await self.milestone_repo.update(
             milestone_id,
-            status=new_status,
+            status=decision.value,
         )
 
         logger.debug(
             "milestone_status_updated",
             milestone_id=str(milestone_id),
-            status=new_status.value,
+            status=decision.value,
         )
 
     async def should_retry(

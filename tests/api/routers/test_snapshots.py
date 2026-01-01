@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -61,7 +61,7 @@ def create_mock_snapshot(session_id):
         compressed_context="Compressed context data",
         key_decisions={"key": "value"},
         token_count=500,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -204,7 +204,7 @@ class TestGetSnapshot:
             compressed_context="Detailed context",
             key_decisions={"decision": "made"},
             token_count=1000,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
         )
 
         with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:

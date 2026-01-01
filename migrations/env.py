@@ -33,10 +33,113 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 target_metadata = Base.metadata
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+# Tables to ignore during autogenerate (e.g., Keycloak tables in shared DB)
+# These tables are managed by other systems and should not be touched by Alembic
+IGNORE_TABLES = {
+    # Keycloak tables
+    "admin_event_entity",
+    "associated_policy",
+    "authentication_execution",
+    "authentication_flow",
+    "authenticator_config",
+    "authenticator_config_entry",
+    "broker_link",
+    "client",
+    "client_attributes",
+    "client_auth_flow_bindings",
+    "client_initial_access",
+    "client_node_registrations",
+    "client_scope",
+    "client_scope_attributes",
+    "client_scope_client",
+    "client_scope_role_mapping",
+    "client_session",
+    "client_session_auth_status",
+    "client_session_note",
+    "client_session_prot_mapper",
+    "client_session_role",
+    "client_user_session_note",
+    "component",
+    "component_config",
+    "composite_role",
+    "credential",
+    "databasechangelog",
+    "databasechangeloglock",
+    "default_client_scope",
+    "event_entity",
+    "fed_user_attribute",
+    "fed_user_consent",
+    "fed_user_consent_cl_scope",
+    "fed_user_credential",
+    "fed_user_group_membership",
+    "fed_user_required_action",
+    "fed_user_role_mapping",
+    "federated_identity",
+    "federated_user",
+    "group_attribute",
+    "group_role_mapping",
+    "identity_provider",
+    "identity_provider_config",
+    "identity_provider_mapper",
+    "idp_mapper_config",
+    "keycloak_group",
+    "keycloak_role",
+    "migration_model",
+    "offline_client_session",
+    "offline_user_session",
+    "policy_config",
+    "protocol_mapper",
+    "protocol_mapper_config",
+    "realm",
+    "realm_attribute",
+    "realm_default_groups",
+    "realm_enabled_event_types",
+    "realm_events_listeners",
+    "realm_localizations",
+    "realm_required_credential",
+    "realm_smtp_config",
+    "realm_supported_locales",
+    "redirect_uris",
+    "required_action_config",
+    "required_action_provider",
+    "resource_attribute",
+    "resource_policy",
+    "resource_scope",
+    "resource_server",
+    "resource_server_perm_ticket",
+    "resource_server_policy",
+    "resource_server_resource",
+    "resource_server_scope",
+    "resource_uris",
+    "role_attribute",
+    "scope_mapping",
+    "scope_policy",
+    "user_attribute",
+    "user_consent",
+    "user_consent_client_scope",
+    "user_entity",
+    "user_federation_config",
+    "user_federation_mapper",
+    "user_federation_mapper_config",
+    "user_federation_provider",
+    "user_group_membership",
+    "user_required_action",
+    "user_role_mapping",
+    "user_session",
+    "user_session_note",
+    "username_login_failure",
+    "web_origins",
+}
+
+
+def include_object(object, name, type_, reflected, compare_to):
+    """Filter objects for autogenerate.
+
+    Returns False for objects that should be ignored.
+    """
+    if type_ == "table" and name in IGNORE_TABLES:
+        return False
+    return True
 
 
 def run_migrations_offline() -> None:
@@ -57,6 +160,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -65,7 +169,11 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations with the given connection."""
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=include_object,
+    )
 
     with context.begin_transaction():
         context.run_migrations()

@@ -15,7 +15,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
 RUN apt-get update && \
     for i in 1 2 3; do \
     apt-get install -y --no-install-recommends \
-    git procps sudo curl zsh gh postgresql-client \
+    build-essential git procps sudo curl zsh gh postgresql-client \
     iptables ipset iproute2 dnsutils vim locales nodejs npm \
     && break || { echo "Retry $i..."; sleep 5; apt-get update; }; \
     done && \

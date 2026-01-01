@@ -4,36 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, WebSocket
 
-from ..dependencies import get_cache
 from ..websocket import ConnectionManager, WebSocketHandler
 
 router = APIRouter(tags=["websocket"])
 
-# Global connection manager instance
-_manager: ConnectionManager | None = None
 
-
-def get_ws_manager() -> ConnectionManager:
-    """Get or create the WebSocket connection manager.
-
-    Returns:
-        ConnectionManager singleton
-    """
-    global _manager
-    if _manager is None:
-        cache = get_cache()
-        _manager = ConnectionManager(cache=cache)
-    return _manager
-
-
-def set_ws_manager(manager: ConnectionManager) -> None:
-    """Set the WebSocket connection manager (for testing).
-
-    Args:
-        manager: Manager instance to use
-    """
-    global _manager
-    _manager = manager
+def _get_manager(websocket: WebSocket) -> ConnectionManager:
+    """Get the WebSocket connection manager from app state."""
+    return websocket.app.state.ws_manager
 
 
 @router.websocket("/ws")
@@ -77,7 +55,7 @@ async def websocket_endpoint(
         token: Optional JWT token for authentication
         session_id: Optional session ID to auto-subscribe
     """
-    manager = get_ws_manager()
+    manager = _get_manager(websocket)
     handler = WebSocketHandler(manager=manager, cache=manager.cache)
 
     await handler.handle_connection(
@@ -102,7 +80,7 @@ async def websocket_session_endpoint(
         session_id: Session ID to subscribe to
         token: Optional JWT token for authentication
     """
-    manager = get_ws_manager()
+    manager = _get_manager(websocket)
     handler = WebSocketHandler(manager=manager, cache=manager.cache)
 
     await handler.handle_connection(

@@ -1,6 +1,7 @@
 """Request schemas for API endpoints."""
 
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -11,6 +12,21 @@ class SessionCreate(BaseModel):
     metadata: dict[str, Any] | None = Field(
         default=None,
         description="Optional session metadata",
+    )
+
+
+class BulkSessionAction(BaseModel):
+    """Request schema for bulk session operations."""
+
+    session_ids: list[UUID] = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="List of session IDs to operate on",
+    )
+    action: Literal["pause", "complete", "delete"] = Field(
+        ...,
+        description="Action to perform on the sessions",
     )
 
 

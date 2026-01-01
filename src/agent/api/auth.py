@@ -13,12 +13,13 @@ from typing import Any
 
 import httpx
 import structlog
-from fastapi import HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Request, WebSocket, WebSocketDisconnect
 from fastapi_keycloak_middleware import KeycloakConfiguration, get_user
 from jwcrypto import jwt
 from jwcrypto.jwk import JWKSet
 
 from .config import get_auth_settings
+from .exceptions import AuthenticationError
 
 logger = structlog.get_logger()
 
@@ -64,14 +65,11 @@ async def get_current_user_id(request: Request) -> str:
         User ID string
 
     Raises:
-        HTTPException: If user is not authenticated
+        AuthenticationError: If user is not authenticated
     """
     user_id = await get_user(request)
     if user_id is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Not authenticated",
-        )
+        raise AuthenticationError()
     return str(user_id)
 
 
@@ -85,7 +83,7 @@ async def authenticate_websocket(token: str) -> str:
         User ID from token
 
     Raises:
-        HTTPException: If token is invalid
+        AuthenticationError: If token is invalid
     """
     try:
         settings = get_auth_settings()
@@ -103,10 +101,7 @@ async def authenticate_websocket(token: str) -> str:
         return str(claims.get("sub", ""))
     except Exception as e:
         logger.warning("ws_token_invalid", error=str(e))
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token",
-        ) from e
+        raise AuthenticationError(message="Invalid token") from e
 
 
 async def authenticate_websocket_connection(
@@ -149,6 +144,6 @@ async def authenticate_websocket_connection(
 
     try:
         return await authenticate_websocket(token)
-    except HTTPException as e:
-        await websocket.close(code=4003, reason=str(e.detail))
+    except AuthenticationError as e:
+        await websocket.close(code=4003, reason=e.message)
         raise WebSocketDisconnect(code=4003) from e

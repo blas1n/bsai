@@ -19,6 +19,7 @@ class MetaPrompterPrompts(str, Enum):
 class WorkerPrompts(str, Enum):
     """Prompt keys for Worker agent."""
 
+    SYSTEM_PROMPT = "system_prompt"
     RETRY_PROMPT = "retry_prompt"
 
 
@@ -34,3 +35,10 @@ class SummarizerPrompts(str, Enum):
 
     SUMMARY_PROMPT = "summary_prompt"
     CHECKPOINT_PROMPT = "checkpoint_prompt"
+
+
+class ResponderPrompts(str, Enum):
+    """Prompt keys for Responder agent."""
+
+    SYSTEM_PROMPT = "system_prompt"
+    GENERATE_RESPONSE = "generate_response"

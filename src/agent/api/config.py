@@ -1,12 +1,24 @@
 """API configuration settings.
 
 Provides settings for authentication, caching, and API behavior.
+Note: Environment variables are loaded via load_dotenv() in main.py
 """
 
 from functools import lru_cache
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class DatabaseSettings(BaseSettings):
+    """Database connection settings."""
+
+    database_url: str = Field(
+        default="postgresql+asyncpg://postgres:postgres@localhost:5432/bsai",
+        description="PostgreSQL connection URL (must use asyncpg driver)",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
 
 class AuthSettings(BaseSettings):
@@ -33,11 +45,7 @@ class AuthSettings(BaseSettings):
         description="Enable Keycloak authentication. Set to False for testing.",
     )
 
-    model_config = SettingsConfigDict(
-        env_prefix="AUTH_",
-        env_file=".env",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_prefix="AUTH_", extra="ignore")
 
 
 class CacheSettings(BaseSettings):
@@ -58,11 +66,7 @@ class CacheSettings(BaseSettings):
     task_progress_ttl: int = Field(default=900, description="Task progress TTL")
     user_sessions_ttl: int = Field(default=600, description="User sessions TTL")
 
-    model_config = SettingsConfigDict(
-        env_prefix="CACHE_",
-        env_file=".env",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_prefix="CACHE_", extra="ignore")
 
 
 class APISettings(BaseSettings):
@@ -83,7 +87,7 @@ class APISettings(BaseSettings):
     debug: bool = Field(default=False, description="Enable debug mode")
     api_prefix: str = Field(default="/api/v1", description="API route prefix")
     cors_origins: list[str] = Field(
-        default=["http://localhost:3000"],
+        default=["http://localhost:3000", "http://localhost:13000"],
         description="Allowed CORS origins",
     )
 
@@ -97,11 +101,13 @@ class APISettings(BaseSettings):
         description="Maximum request body size",
     )
 
-    model_config = SettingsConfigDict(
-        env_prefix="API_",
-        env_file=".env",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_prefix="API_", extra="ignore")
+
+
+@lru_cache
+def get_database_settings() -> DatabaseSettings:
+    """Get cached database settings."""
+    return DatabaseSettings()
 
 
 @lru_cache
@@ -116,7 +122,55 @@ def get_cache_settings() -> CacheSettings:
     return CacheSettings()
 
 
+class AgentSettings(BaseSettings):
+    """Agent-specific settings for consistency control.
+
+    Lower temperature values produce more consistent, deterministic outputs.
+    Higher values produce more creative but variable outputs.
+    """
+
+    # Temperature settings (0.0-2.0, lower = more consistent)
+    conductor_temperature: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=2.0,
+        description="Conductor agent temperature for task analysis",
+    )
+    meta_prompter_temperature: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=2.0,
+        description="Meta Prompter temperature for prompt generation",
+    )
+    worker_temperature: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=2.0,
+        description="Worker agent temperature for task execution",
+    )
+    qa_temperature: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=2.0,
+        description="QA agent temperature for validation decisions",
+    )
+    summarizer_temperature: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=2.0,
+        description="Summarizer temperature for context compression",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="AGENT_", extra="ignore")
+
+
 @lru_cache
 def get_api_settings() -> APISettings:
     """Get cached API settings."""
     return APISettings()
+
+
+@lru_cache
+def get_agent_settings() -> AgentSettings:
+    """Get cached agent settings."""
+    return AgentSettings()

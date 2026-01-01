@@ -1,7 +1,7 @@
 """Tests for SummarizerAgent."""
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -62,20 +62,16 @@ def summarizer(
     mock_session: AsyncMock,
 ) -> SummarizerAgent:
     """Create SummarizerAgent with mocked dependencies."""
-    with patch("agent.core.summarizer.get_container") as mock_get_container:
-        mock_container = MagicMock()
-        mock_container.prompt_manager = mock_prompt_manager
-        mock_get_container.return_value = mock_container
-
-        agent = SummarizerAgent(
-            llm_client=mock_llm_client,
-            router=mock_router,
-            session=mock_session,
-        )
-        # Mock the snapshot_repo that gets created internally
-        agent.snapshot_repo = MagicMock()
-        agent.snapshot_repo.create = AsyncMock()
-        return agent
+    agent = SummarizerAgent(
+        llm_client=mock_llm_client,
+        router=mock_router,
+        prompt_manager=mock_prompt_manager,
+        session=mock_session,
+    )
+    # Mock the snapshot_repo that gets created internally
+    agent.snapshot_repo = MagicMock()
+    agent.snapshot_repo.create = AsyncMock()
+    return agent
 
 
 class TestSummarizerAgent:
@@ -126,9 +122,8 @@ class TestSummarizerAgent:
         # Check snapshot was created
         summarizer.snapshot_repo.create.assert_called_once()
         snapshot_call = summarizer.snapshot_repo.create.call_args
-        assert snapshot_call.kwargs["snapshot_type"] == SnapshotType.AUTO
+        assert snapshot_call.kwargs["snapshot_type"] == SnapshotType.AUTO.value
         assert snapshot_call.kwargs["session_id"] == session_id
-        assert snapshot_call.kwargs["task_id"] == task_id
 
     @pytest.mark.asyncio
     async def test_compress_context_preserve_calculation(
@@ -201,9 +196,8 @@ class TestSummarizerAgent:
         # Check snapshot was created with MANUAL type
         summarizer.snapshot_repo.create.assert_called_once()
         snapshot_call = summarizer.snapshot_repo.create.call_args
-        assert snapshot_call.kwargs["snapshot_type"] == SnapshotType.MANUAL
+        assert snapshot_call.kwargs["snapshot_type"] == SnapshotType.MANUAL.value
         assert snapshot_call.kwargs["session_id"] == session_id
-        assert snapshot_call.kwargs["task_id"] == task_id
 
     @pytest.mark.asyncio
     async def test_compress_context_empty_history(

@@ -4,17 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.container import reset_container
 from agent.graph.nodes import Node
 from agent.graph.workflow import WorkflowRunner, build_workflow, compile_workflow
-
-
-@pytest.fixture(autouse=True)
-def reset_singleton() -> None:
-    """Reset container singleton before each test."""
-    reset_container()
-    yield
-    reset_container()
 
 
 @pytest.fixture
@@ -68,56 +59,15 @@ class TestWorkflowRunner:
         runner = WorkflowRunner(mock_session)
 
         assert runner.session is mock_session
-        assert runner._compiled is None
+        assert runner.ws_manager is None
 
-    @pytest.mark.asyncio
-    async def test_initialize_creates_graph(self, mock_session: AsyncMock) -> None:
-        """Test that initialize creates the compiled graph."""
-        with (
-            patch("agent.graph.workflow.get_container") as mock_get_container,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-        ):
-            mock_container = MagicMock()
-            mock_container.is_initialized = False
-            mock_container.initialize = AsyncMock()
-            mock_get_container.return_value = mock_container
+    def test_initialization_with_ws_manager(self, mock_session: AsyncMock) -> None:
+        """Test WorkflowRunner initialization with WebSocket manager."""
+        mock_ws_manager = MagicMock()
+        runner = WorkflowRunner(mock_session, ws_manager=mock_ws_manager)
 
-            mock_compiled = MagicMock()
-            mock_compile.return_value = mock_compiled
-
-            runner = WorkflowRunner(mock_session)
-            await runner.initialize()
-
-            mock_container.initialize.assert_called_once_with(mock_session)
-            mock_compile.assert_called_once_with(mock_session)
-            assert runner._compiled is mock_compiled
-
-    def test_graph_before_init_raises(self, mock_session: AsyncMock) -> None:
-        """Test accessing graph before initialize raises."""
-        runner = WorkflowRunner(mock_session)
-
-        with pytest.raises(RuntimeError, match="not initialized"):
-            _ = runner.graph
-
-    @pytest.mark.asyncio
-    async def test_graph_after_init_works(self, mock_session: AsyncMock) -> None:
-        """Test accessing graph after initialize works."""
-        with (
-            patch("agent.graph.workflow.get_container") as mock_get_container,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-        ):
-            mock_container = MagicMock()
-            mock_container.is_initialized = False
-            mock_container.initialize = AsyncMock()
-            mock_get_container.return_value = mock_container
-
-            mock_compiled = MagicMock()
-            mock_compile.return_value = mock_compiled
-
-            runner = WorkflowRunner(mock_session)
-            await runner.initialize()
-
-            assert runner.graph is mock_compiled
+        assert runner.session is mock_session
+        assert runner.ws_manager is mock_ws_manager
 
     @pytest.mark.asyncio
     async def test_run_calls_ainvoke(self, mock_session: AsyncMock) -> None:
@@ -127,12 +77,13 @@ class TestWorkflowRunner:
         from agent.db.models.enums import TaskStatus
 
         with (
-            patch("agent.graph.workflow.get_container") as mock_get_container,
+            patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
         ):
+            # Setup mock container from lifespan context manager
             mock_container = MagicMock()
-            mock_container.is_initialized = True
-            mock_get_container.return_value = mock_container
+            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
+            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_compiled = MagicMock()
             mock_compiled.ainvoke = AsyncMock(
@@ -144,7 +95,6 @@ class TestWorkflowRunner:
             mock_compile.return_value = mock_compiled
 
             runner = WorkflowRunner(mock_session)
-            await runner.initialize()
 
             session_id = str(uuid4())
             task_id = str(uuid4())
@@ -166,12 +116,12 @@ class TestWorkflowRunner:
         from agent.db.models.enums import TaskStatus
 
         with (
-            patch("agent.graph.workflow.get_container") as mock_get_container,
+            patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
         ):
             mock_container = MagicMock()
-            mock_container.is_initialized = True
-            mock_get_container.return_value = mock_container
+            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
+            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_compiled = MagicMock()
             mock_compiled.ainvoke = AsyncMock(
@@ -182,7 +132,6 @@ class TestWorkflowRunner:
             mock_compile.return_value = mock_compiled
 
             runner = WorkflowRunner(mock_session)
-            await runner.initialize()
 
             session_id = uuid4()
             task_id = uuid4()
@@ -199,43 +148,6 @@ class TestWorkflowRunner:
             assert isinstance(call_args["task_id"], UUID)
 
     @pytest.mark.asyncio
-    async def test_run_auto_initializes(self, mock_session: AsyncMock) -> None:
-        """Test that run auto-initializes if needed."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
-        with (
-            patch("agent.graph.workflow.get_container") as mock_get_container,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-        ):
-            mock_container = MagicMock()
-            mock_container.is_initialized = False
-            mock_container.initialize = AsyncMock()
-            mock_get_container.return_value = mock_container
-
-            mock_compiled = MagicMock()
-            mock_compiled.ainvoke = AsyncMock(
-                return_value={
-                    "task_status": TaskStatus.COMPLETED,
-                }
-            )
-            mock_compile.return_value = mock_compiled
-
-            runner = WorkflowRunner(mock_session)
-
-            # Don't call initialize manually
-            result = await runner.run(
-                session_id=str(uuid4()),
-                task_id=str(uuid4()),
-                original_request="Test request",
-            )
-
-            # Should have auto-initialized
-            mock_container.initialize.assert_called_once()
-            assert result["task_status"] == TaskStatus.COMPLETED
-
-    @pytest.mark.asyncio
     async def test_run_with_custom_max_tokens(self, mock_session: AsyncMock) -> None:
         """Test that run accepts custom max_context_tokens."""
         from uuid import uuid4
@@ -243,12 +155,12 @@ class TestWorkflowRunner:
         from agent.db.models.enums import TaskStatus
 
         with (
-            patch("agent.graph.workflow.get_container") as mock_get_container,
+            patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
         ):
             mock_container = MagicMock()
-            mock_container.is_initialized = True
-            mock_get_container.return_value = mock_container
+            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
+            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_compiled = MagicMock()
             mock_compiled.ainvoke = AsyncMock(
@@ -259,7 +171,6 @@ class TestWorkflowRunner:
             mock_compile.return_value = mock_compiled
 
             runner = WorkflowRunner(mock_session)
-            await runner.initialize()
 
             await runner.run(
                 session_id=str(uuid4()),
@@ -270,3 +181,74 @@ class TestWorkflowRunner:
 
             call_args = mock_compiled.ainvoke.call_args[0][0]
             assert call_args["max_context_tokens"] == 50000
+
+    @pytest.mark.asyncio
+    async def test_run_passes_container_in_config(self, mock_session: AsyncMock) -> None:
+        """Test that run passes container in config to ainvoke."""
+        from uuid import uuid4
+
+        from agent.db.models.enums import TaskStatus
+
+        with (
+            patch("agent.graph.workflow.lifespan") as mock_lifespan,
+            patch("agent.graph.workflow.compile_workflow") as mock_compile,
+        ):
+            mock_container = MagicMock()
+            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
+            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            mock_compiled = MagicMock()
+            mock_compiled.ainvoke = AsyncMock(
+                return_value={
+                    "task_status": TaskStatus.COMPLETED,
+                }
+            )
+            mock_compile.return_value = mock_compiled
+
+            mock_ws_manager = MagicMock()
+            runner = WorkflowRunner(mock_session, ws_manager=mock_ws_manager)
+
+            await runner.run(
+                session_id=str(uuid4()),
+                task_id=str(uuid4()),
+                original_request="Test request",
+            )
+
+            # Check config was passed correctly
+            call_config = mock_compiled.ainvoke.call_args[1]["config"]
+            assert call_config["configurable"]["container"] is mock_container
+            assert call_config["configurable"]["ws_manager"] is mock_ws_manager
+
+    @pytest.mark.asyncio
+    async def test_run_uses_lifespan_context(self, mock_session: AsyncMock) -> None:
+        """Test that run uses lifespan context manager."""
+        from uuid import uuid4
+
+        from agent.db.models.enums import TaskStatus
+
+        with (
+            patch("agent.graph.workflow.lifespan") as mock_lifespan,
+            patch("agent.graph.workflow.compile_workflow") as mock_compile,
+        ):
+            mock_container = MagicMock()
+            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
+            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            mock_compiled = MagicMock()
+            mock_compiled.ainvoke = AsyncMock(
+                return_value={
+                    "task_status": TaskStatus.COMPLETED,
+                }
+            )
+            mock_compile.return_value = mock_compiled
+
+            runner = WorkflowRunner(mock_session)
+
+            await runner.run(
+                session_id=str(uuid4()),
+                task_id=str(uuid4()),
+                original_request="Test request",
+            )
+
+            # Verify lifespan was called with session
+            mock_lifespan.assert_called_once_with(mock_session)

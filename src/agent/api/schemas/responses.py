@@ -1,5 +1,7 @@
 """Response schemas for API endpoints."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Generic, TypeVar
@@ -24,6 +26,7 @@ class SessionResponse(BaseModel):
     id: UUID
     user_id: str | None = None
     status: SessionStatus
+    title: str | None = None
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     total_cost_usd: Decimal = Decimal("0")
@@ -55,6 +58,7 @@ class MilestoneResponse(BaseModel):
     task_id: UUID
     sequence_number: int
     title: str
+    description: str = ""
     complexity: TaskComplexity
     status: MilestoneStatus
     selected_llm: str | None = None
@@ -64,7 +68,9 @@ class MilestoneResponse(BaseModel):
     cost_usd: Decimal = Decimal("0")
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True, ser_json_bytes="base64", ser_json_timedelta="float"
+    )
 
 
 class MilestoneDetailResponse(MilestoneResponse):
@@ -116,6 +122,23 @@ class PaginatedResponse(BaseModel, Generic[T]):
     limit: int = Field(description="Items per page")
     offset: int = Field(description="Number of items skipped")
     has_more: bool = Field(description="Whether more items exist")
+
+
+class ArtifactResponse(BaseModel):
+    """Response schema for artifact data."""
+
+    id: UUID
+    task_id: UUID
+    milestone_id: UUID | None = None
+    artifact_type: str = Field(description="Type of artifact (code, file, document)")
+    filename: str
+    language: str | None = None
+    content: str
+    path: str | None = Field(default=None, description="Path within project structure")
+    sequence_number: int = 0
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ErrorResponse(BaseModel):

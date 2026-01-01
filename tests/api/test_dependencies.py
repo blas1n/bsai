@@ -68,24 +68,31 @@ class TestGetCache:
         """get_cache returns SessionCache instance."""
         mock_redis = MagicMock()
 
-        with patch("agent.api.dependencies.SessionCache") as mock_cache_class:
+        with (
+            patch("agent.api.dependencies.get_redis", return_value=mock_redis),
+            patch("agent.api.dependencies.SessionCache") as mock_cache_class,
+        ):
             mock_cache_instance = MagicMock()
             mock_cache_class.return_value = mock_cache_instance
 
-            result = get_cache(mock_redis)
+            result = get_cache()
 
             mock_cache_class.assert_called_once_with(mock_redis)
             assert result is mock_cache_instance
 
-    def test_uses_provided_redis_client(self) -> None:
-        """get_cache uses the provided Redis client."""
+    def test_uses_get_redis_for_client(self) -> None:
+        """get_cache uses get_redis() internally."""
         mock_redis = MagicMock()
-        mock_redis.client = "test-client"
 
-        with patch("agent.api.dependencies.SessionCache") as mock_cache_class:
-            get_cache(mock_redis)
+        with (
+            patch("agent.api.dependencies.get_redis", return_value=mock_redis) as mock_get_redis,
+            patch("agent.api.dependencies.SessionCache") as mock_cache_class,
+        ):
+            get_cache()
 
-            # Verify Redis client was passed
+            # Verify get_redis was called
+            mock_get_redis.assert_called_once()
+            # Verify Redis client was passed to SessionCache
             mock_cache_class.assert_called_once_with(mock_redis)
 
 

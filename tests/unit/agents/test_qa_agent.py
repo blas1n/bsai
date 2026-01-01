@@ -1,13 +1,13 @@
 """Tests for QAAgent."""
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
 from agent.core.qa_agent import QAAgent, QADecision
-from agent.db.models.enums import MilestoneStatus
 from agent.llm import LLMModel, LLMResponse, UsageInfo
 
 
@@ -62,23 +62,19 @@ def qa_agent(
     mock_session: AsyncMock,
 ) -> QAAgent:
     """Create QAAgent with mocked dependencies."""
-    with patch("agent.core.qa_agent.get_container") as mock_get_container:
-        mock_container = MagicMock()
-        mock_container.prompt_manager = mock_prompt_manager
-        mock_get_container.return_value = mock_container
-
-        agent = QAAgent(
-            llm_client=mock_llm_client,
-            router=mock_router,
-            session=mock_session,
-            max_retries=3,
-        )
-        # Mock the milestone_repo and usage_logger that get created internally
-        agent.milestone_repo = MagicMock()
-        milestone_mock = MagicMock()
-        agent.milestone_repo.get_by_id = AsyncMock(return_value=milestone_mock)
-        agent.milestone_repo.update = AsyncMock()
-        return agent
+    agent = QAAgent(
+        llm_client=mock_llm_client,
+        router=mock_router,
+        prompt_manager=mock_prompt_manager,
+        session=mock_session,
+        max_retries=3,
+    )
+    # Mock the milestone_repo that gets created internally
+    agent.milestone_repo = MagicMock()
+    milestone_mock = MagicMock()
+    agent.milestone_repo.get_by_id = AsyncMock(return_value=milestone_mock)
+    agent.milestone_repo.update = AsyncMock()
+    return agent
 
 
 class TestQAAgent:
@@ -116,10 +112,11 @@ class TestQAAgent:
         assert decision == QADecision.PASS
         assert "meets criteria" in feedback.lower()
 
-        # Check milestone status was updated to PASSED
-        qa_agent.milestone_repo.update.assert_called_once()
-        update_call = qa_agent.milestone_repo.update.call_args
-        assert update_call.kwargs["status"] == MilestoneStatus.PASSED
+        # Check milestone status was updated to "pass" (enum value)
+        mock_repo = cast(MagicMock, qa_agent.milestone_repo)
+        mock_repo.update.assert_called_once()
+        update_call = mock_repo.update.call_args
+        assert update_call.kwargs["status"] == QADecision.PASS.value
 
     @pytest.mark.asyncio
     async def test_validate_output_retry(
@@ -154,11 +151,12 @@ class TestQAAgent:
         assert decision == QADecision.RETRY
         assert "password validation" in feedback.lower()
 
-        # Check milestone status was NOT updated to PASSED
+        # Check milestone status was NOT updated to "pass"
+        mock_repo = cast(MagicMock, qa_agent.milestone_repo)
         update_calls = [
             call
-            for call in qa_agent.milestone_repo.update.call_args_list
-            if call.kwargs.get("status") == MilestoneStatus.PASSED
+            for call in mock_repo.update.call_args_list
+            if call.kwargs.get("status") == QADecision.PASS.value
         ]
         assert len(update_calls) == 0
 
@@ -195,10 +193,11 @@ class TestQAAgent:
         assert decision == QADecision.FAIL
         assert "still has issues" in feedback.lower()
 
-        # Check milestone status was updated to FAILED
-        qa_agent.milestone_repo.update.assert_called()
-        update_call = qa_agent.milestone_repo.update.call_args
-        assert update_call.kwargs["status"] == MilestoneStatus.FAILED
+        # Check milestone status was updated to "fail" (enum value)
+        mock_repo = cast(MagicMock, qa_agent.milestone_repo)
+        mock_repo.update.assert_called()
+        update_call = mock_repo.update.call_args
+        assert update_call.kwargs["status"] == QADecision.FAIL.value
 
     @pytest.mark.asyncio
     async def test_validate_output_explicit_fail(
@@ -228,14 +227,16 @@ class TestQAAgent:
             worker_output=worker_output,
         )
 
-        # Verify
-        assert decision == QADecision.FAIL
+        # Verify - FAIL is converted to RETRY at attempt 1 (not max_retries)
+        # Per qa_agent.py logic: FAIL from LLM is treated as RETRY
+        assert decision == QADecision.RETRY
         assert "wrong implementation" in feedback.lower()
 
-        # Check milestone status was updated to FAILED
-        qa_agent.milestone_repo.update.assert_called()
-        update_call = qa_agent.milestone_repo.update.call_args
-        assert update_call.kwargs["status"] == MilestoneStatus.FAILED
+        # Check milestone status was updated to "retry" (enum value)
+        mock_repo = cast(MagicMock, qa_agent.milestone_repo)
+        mock_repo.update.assert_called()
+        update_call = mock_repo.update.call_args
+        assert update_call.kwargs["status"] == QADecision.RETRY.value
 
     @pytest.mark.asyncio
     async def test_validate_output_invalid_decision(

@@ -102,9 +102,6 @@ class TaskFailedPayload(BaseModel):
     failed_milestone: int | None = None
 
 
-# Milestone Event Payloads
-
-
 class MilestoneProgressPayload(BaseModel):
     """Payload for milestone progress events."""
 
@@ -114,9 +111,7 @@ class MilestoneProgressPayload(BaseModel):
     status: MilestoneStatus
     agent: str
     message: str
-
-
-# LLM Streaming Payloads
+    details: dict[str, Any] = Field(default_factory=dict)  # Additional agent-specific details
 
 
 class LLMChunkPayload(BaseModel):

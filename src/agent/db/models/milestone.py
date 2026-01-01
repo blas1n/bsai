@@ -12,6 +12,7 @@ from .base import Base
 from .enums import MilestoneStatus
 
 if TYPE_CHECKING:
+    from .artifact import Artifact
     from .generated_prompt import GeneratedPrompt
     from .llm_usage_log import LLMUsageLog
     from .task import Task
@@ -25,7 +26,9 @@ class Milestone(Base):
         task_id: Foreign key to tasks table
         sequence_number: Order within task (1, 2, 3...)
         title: Brief milestone title
+        description: Detailed milestone description
         complexity: Task complexity level (trivial, simple, moderate, complex, context_heavy)
+        acceptance_criteria: Criteria for milestone completion
         selected_llm: LLM model selected by Conductor
         status: Milestone status (pending, in_progress, passed, failed)
         worker_output: Worker agent output
@@ -43,9 +46,11 @@ class Milestone(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id"), index=True)
     sequence_number: Mapped[int] = mapped_column(INTEGER)
-    title: Mapped[str] = mapped_column(VARCHAR(255))
+    title: Mapped[str] = mapped_column(VARCHAR(255), default="")
+    description: Mapped[str] = mapped_column(TEXT, default="")
     complexity: Mapped[str] = mapped_column(VARCHAR(20), index=True)
-    selected_llm: Mapped[str] = mapped_column(VARCHAR(100))
+    acceptance_criteria: Mapped[str] = mapped_column(TEXT, default="")
+    selected_llm: Mapped[str] = mapped_column(VARCHAR(100), default="")
     status: Mapped[str] = mapped_column(
         VARCHAR(20), default=MilestoneStatus.PENDING.value, index=True
     )
@@ -61,9 +66,12 @@ class Milestone(Base):
     # Relationships
     task: Mapped["Task"] = relationship(back_populates="milestones")
     llm_usage_logs: Mapped[list["LLMUsageLog"]] = relationship(
-        back_populates="milestone", lazy="selectin"
+        back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
     )
     generated_prompts: Mapped[list["GeneratedPrompt"]] = relationship(
+        back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
+    )
+    artifacts: Mapped[list["Artifact"]] = relationship(
         back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
     )
 

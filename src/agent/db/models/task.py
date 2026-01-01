@@ -11,6 +11,7 @@ from .base import Base
 from .enums import TaskStatus
 
 if TYPE_CHECKING:
+    from .artifact import Artifact
     from .milestone import Milestone
     from .session import Session
 
@@ -41,6 +42,9 @@ class Task(Base):
     # Relationships
     session: Mapped["Session"] = relationship(back_populates="tasks")
     milestones: Mapped[list["Milestone"]] = relationship(
+        back_populates="task", lazy="selectin", cascade="all, delete-orphan"
+    )
+    artifacts: Mapped[list["Artifact"]] = relationship(
         back_populates="task", lazy="selectin", cascade="all, delete-orphan"
     )
 

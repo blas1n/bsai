@@ -6,15 +6,12 @@ Provides connection pooling and lifecycle management for Redis.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import redis.asyncio as redis
 import structlog
 
 from agent.api.config import get_cache_settings
-
-if TYPE_CHECKING:
-    pass
 
 logger = structlog.get_logger()
 

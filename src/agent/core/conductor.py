@@ -13,12 +13,12 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.container import get_container
+from agent.api.config import get_agent_settings
 from agent.db.models.enums import TaskComplexity
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
-from agent.prompts import ConductorPrompts
+from agent.prompts import ConductorPrompts, PromptManager
 
 logger = structlog.get_logger()
 
@@ -34,6 +34,7 @@ class ConductorAgent:
         self,
         llm_client: LiteLLMClient,
         router: LLMRouter,
+        prompt_manager: PromptManager,
         session: AsyncSession,
     ) -> None:
         """Initialize Conductor agent.
@@ -41,14 +42,15 @@ class ConductorAgent:
         Args:
             llm_client: LLM client for API calls
             router: Router for model selection
+            prompt_manager: Prompt manager for template rendering
             session: Database session
         """
         self.llm_client = llm_client
         self.router = router
+        self.prompt_manager = prompt_manager
         self.session = session
         self.task_repo = TaskRepository(session)
         self.milestone_repo = MilestoneRepository(session)
-        self.prompt_manager = get_container().prompt_manager
 
     async def analyze_and_plan(
         self,
@@ -84,10 +86,11 @@ class ConductorAgent:
         messages = [ChatMessage(role="user", content=prompt)]
 
         # Call LLM
+        settings = get_agent_settings()
         request = LLMRequest(
             model=model.name,
             messages=messages,
-            temperature=0.3,  # Low temperature for consistent planning
+            temperature=settings.conductor_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
         )
@@ -204,8 +207,9 @@ class ConductorAgent:
 
             await self.milestone_repo.create(
                 task_id=task_id,
+                title=str(milestone.get("title", f"Milestone {sequence}")),
                 description=str(milestone["description"]),
-                complexity=complexity_value,
+                complexity=complexity_value.value,
                 sequence_number=sequence,
                 acceptance_criteria=str(milestone["acceptance_criteria"]),
             )

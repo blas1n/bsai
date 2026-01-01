@@ -7,17 +7,16 @@ The Worker is responsible for:
 4. Tracking execution metadata
 """
 
-from collections.abc import AsyncIterator
 from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.container import get_container
+from agent.api.config import get_agent_settings
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMResponse, LLMRouter
-from agent.prompts import WorkerPrompts
+from agent.prompts import PromptManager, WorkerPrompts
 
 logger = structlog.get_logger()
 
@@ -33,6 +32,7 @@ class WorkerAgent:
         self,
         llm_client: LiteLLMClient,
         router: LLMRouter,
+        prompt_manager: PromptManager,
         session: AsyncSession,
     ) -> None:
         """Initialize Worker agent.
@@ -40,13 +40,14 @@ class WorkerAgent:
         Args:
             llm_client: LLM client for API calls
             router: Router for model selection
+            prompt_manager: Prompt manager for template rendering
             session: Database session
         """
         self.llm_client = llm_client
         self.router = router
+        self.prompt_manager = prompt_manager
         self.session = session
         self.milestone_repo = MilestoneRepository(session)
-        self.prompt_manager = get_container().prompt_manager
 
     async def execute_milestone(
         self,
@@ -83,7 +84,7 @@ class WorkerAgent:
         if milestone:
             await self.milestone_repo.update(
                 milestone_id,
-                status=MilestoneStatus.IN_PROGRESS,
+                status=MilestoneStatus.IN_PROGRESS.value,
             )
 
         # Select model based on complexity
@@ -92,15 +93,22 @@ class WorkerAgent:
             preferred_model=preferred_model,
         )
 
-        # Build messages list
-        messages = context_messages or []
+        # Get system prompt for output format guidelines
+        system_prompt = self.prompt_manager.get_data("worker", WorkerPrompts.SYSTEM_PROMPT)
+
+        # Build messages list with system prompt
+        messages = []
+        messages.append(ChatMessage(role="system", content=system_prompt))
+        if context_messages:
+            messages.extend(context_messages)
         messages.append(ChatMessage(role="user", content=prompt))
 
         # Execute task
+        settings = get_agent_settings()
         request = LLMRequest(
             model=model.name,
             messages=messages,
-            temperature=0.7,  # Standard temperature for balanced creativity
+            temperature=settings.worker_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
         )
@@ -124,81 +132,6 @@ class WorkerAgent:
         )
 
         return response
-
-    async def execute_with_streaming(
-        self,
-        milestone_id: UUID,
-        prompt: str,
-        complexity: TaskComplexity,
-        preferred_model: str | None = None,
-        context_messages: list[ChatMessage] | None = None,
-    ) -> AsyncIterator[str]:
-        """Execute milestone with streaming response.
-
-        Args:
-            milestone_id: Milestone ID being executed
-            prompt: Execution prompt
-            complexity: Milestone complexity level
-            preferred_model: Optional user-preferred model override
-            context_messages: Optional conversation history
-
-        Yields:
-            Text chunks from streaming response
-
-        Raises:
-            ValueError: If model selection fails or model doesn't support streaming
-        """
-        logger.info(
-            "worker_streaming_start",
-            milestone_id=str(milestone_id),
-            complexity=complexity.name,
-        )
-
-        # Update milestone status
-        milestone = await self.milestone_repo.get_by_id(milestone_id)
-        if milestone:
-            await self.milestone_repo.update(
-                milestone_id,
-                status=MilestoneStatus.IN_PROGRESS,
-            )
-
-        # Select model
-        model = self.router.select_model(
-            complexity=complexity,
-            preferred_model=preferred_model,
-        )
-
-        if not model.supports_streaming:
-            raise ValueError(
-                f"Model '{model.name}' does not support streaming. "
-                "Use execute_milestone() instead."
-            )
-
-        # Build messages
-        messages = context_messages or []
-        messages.append(ChatMessage(role="user", content=prompt))
-
-        # Stream execution
-        request = LLMRequest(
-            model=model.name,
-            messages=messages,
-            temperature=0.7,
-            stream=True,
-            api_base=model.api_base,
-            api_key=model.api_key,
-        )
-
-        chunk_count = 0
-        async for chunk in self.llm_client.stream_completion(request):
-            chunk_count += 1
-            yield chunk
-
-        logger.info(
-            "worker_streaming_complete",
-            milestone_id=str(milestone_id),
-            model=model.name,
-            chunks=chunk_count,
-        )
 
     async def retry_with_feedback(
         self,

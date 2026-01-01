@@ -78,6 +78,9 @@ uv.lock
 *.seed
 *.pid.lock
 
+# Keycloak dev users (security - never commit to production)
+infra/keycloak/bsai-dev-users.json
+
 # Temporary files
 tmp/
 temp/
@@ -104,3 +107,16 @@ dmypy.json
 
 # Ruff
 .ruff_cache/
+
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+.npm/
+*.tsbuildinfo
+next-env.d.ts
+
+# Web build
+web/.next/
+web/node_modules/
+web/out/

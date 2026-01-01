@@ -15,6 +15,7 @@ from agent.api.auth import (
     get_keycloak_config,
     user_mapper,
 )
+from agent.api.exceptions import AuthenticationError
 
 if TYPE_CHECKING:
     pass
@@ -238,7 +239,7 @@ class TestAuthenticateWebsocketConnection:
             "agent.api.auth.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
-            mock_auth.side_effect = HTTPException(status_code=401, detail="Invalid token")
+            mock_auth.side_effect = AuthenticationError(message="Invalid token")
 
             with pytest.raises(WebSocketDisconnect) as exc_info:
                 await authenticate_websocket_connection(

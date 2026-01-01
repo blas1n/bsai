@@ -7,17 +7,16 @@ The Summarizer is responsible for:
 4. Maintaining session continuity
 """
 
-from datetime import datetime
 from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.container import get_container
+from agent.api.config import get_agent_settings
 from agent.db.models.enums import SnapshotType, TaskComplexity
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
-from agent.prompts import SummarizerPrompts
+from agent.prompts import PromptManager, SummarizerPrompts
 
 logger = structlog.get_logger()
 
@@ -33,6 +32,7 @@ class SummarizerAgent:
         self,
         llm_client: LiteLLMClient,
         router: LLMRouter,
+        prompt_manager: PromptManager,
         session: AsyncSession,
         compression_threshold: float = 0.85,
     ) -> None:
@@ -41,15 +41,16 @@ class SummarizerAgent:
         Args:
             llm_client: LLM client for API calls
             router: Router for model selection
+            prompt_manager: Prompt manager for template rendering
             session: Database session
             compression_threshold: Context usage ratio to trigger compression (0.0-1.0)
         """
         self.llm_client = llm_client
         self.router = router
+        self.prompt_manager = prompt_manager
         self.session = session
         self.compression_threshold = compression_threshold
         self.snapshot_repo = MemorySnapshotRepository(session)
-        self.prompt_manager = get_container().prompt_manager
 
     async def compress_context(
         self,
@@ -101,10 +102,11 @@ class SummarizerAgent:
         model = self.router.select_model(TaskComplexity.MODERATE)
         summary_prompt = self._build_summary_prompt(messages_to_compress)
 
+        settings = get_agent_settings()
         request = LLMRequest(
             model=model.name,
             messages=[ChatMessage(role="user", content=summary_prompt)],
-            temperature=0.3,  # Low temperature for factual summarization
+            temperature=settings.summarizer_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
         )
@@ -115,7 +117,6 @@ class SummarizerAgent:
         # Persist snapshot
         await self._persist_snapshot(
             session_id=session_id,
-            task_id=task_id,
             summary=summary,
             compressed_message_count=len(messages_to_compress),
             preserved_message_count=preserve_count,
@@ -161,10 +162,11 @@ class SummarizerAgent:
         model = self.router.select_model(TaskComplexity.MODERATE)
         summary_prompt = self._build_checkpoint_prompt(conversation_history)
 
+        settings = get_agent_settings()
         request = LLMRequest(
             model=model.name,
             messages=[ChatMessage(role="user", content=summary_prompt)],
-            temperature=0.3,
+            temperature=settings.summarizer_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
         )
@@ -175,7 +177,6 @@ class SummarizerAgent:
         # Persist snapshot with manual type
         await self._persist_snapshot(
             session_id=session_id,
-            task_id=task_id,
             summary=summary,
             compressed_message_count=len(conversation_history),
             preserved_message_count=0,
@@ -278,7 +279,6 @@ class SummarizerAgent:
     async def _persist_snapshot(
         self,
         session_id: UUID,
-        task_id: UUID,
         summary: str,
         compressed_message_count: int,
         preserved_message_count: int,
@@ -288,24 +288,25 @@ class SummarizerAgent:
 
         Args:
             session_id: Session ID
-            task_id: Task ID
             summary: Compressed summary
             compressed_message_count: Number of messages compressed
             preserved_message_count: Number of messages preserved
             snapshot_type: Type of snapshot
         """
+        token_count = self.router.estimate_tokens(summary)
+
         await self.snapshot_repo.create(
             session_id=session_id,
-            task_id=task_id,
-            snapshot_type=snapshot_type,
-            compressed_content=summary,
-            created_at=datetime.utcnow(),
+            snapshot_type=snapshot_type.value,
+            compressed_context=summary,
+            token_count=token_count,
         )
 
         logger.debug(
             "snapshot_persisted",
             session_id=str(session_id),
             type=snapshot_type.value,
+            token_count=token_count,
             compressed_count=compressed_message_count,
             preserved_count=preserved_message_count,
         )

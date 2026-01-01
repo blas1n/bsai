@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -15,6 +15,7 @@ from agent.api.schemas import (
     WSMessage,
     WSMessageType,
 )
+from agent.db.models.enums import SessionStatus
 
 
 class TestSessionSchemas:
@@ -33,11 +34,11 @@ class TestSessionSchemas:
 
     def test_session_response_validation(self) -> None:
         """SessionResponse validates correctly."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         response = SessionResponse(
             id=uuid4(),
             user_id="user-123",
-            status="active",
+            status=SessionStatus.ACTIVE,
             created_at=now,
             updated_at=now,
         )

@@ -1,7 +1,7 @@
 """add_custom_llm_models_table
 
 Revision ID: 20251226_0930
-Revises: 20251226_0810
+Revises: 202512260810
 Create Date: 2025-12-26 09:30:00.000000
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "20251226_0930"
-down_revision: str | None = "20251226_0810"
+down_revision: str | None = "202512260810"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

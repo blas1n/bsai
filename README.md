@@ -34,7 +34,7 @@
 
 ## Architecture Overview
 
-### 5 Specialized Agents
+### 7 Specialized Agents
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -68,6 +68,18 @@
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
+│  Artifact Extractor Agent (Lightweight LLM)                 │
+│  - Extract code blocks and structured artifacts             │
+│  - Classify artifact types (code, config, etc.)             │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Responder Agent (Lightweight LLM)                          │
+│  - Detect user's language (75+ languages via lingua-py)    │
+│  - Generate localized, user-friendly response               │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
 │  Summarizer Agent (Medium LLM, when memory pressure)        │
 │  - Compress context to free memory                          │
 │  - Preserve key decisions and artifacts                     │
@@ -83,7 +95,7 @@ Entry → analyze_task → select_llm → [generate_prompt?] → execute_worker
          → advance → [next_milestone/complete]
 ```
 
-### Database Schema (9 Tables)
+### Database Schema (11 Tables)
 
 1. **user_settings**: QA retries, preferred LLM, cost limits
 2. **sessions**: Session tracking with total tokens/cost
@@ -94,6 +106,8 @@ Entry → analyze_task → select_llm → [generate_prompt?] → execute_worker
 7. **system_prompts**: Versioned agent prompts
 8. **generated_prompts**: Meta Prompter outputs
 9. **prompt_usage_history**: Prompt performance tracking
+10. **artifacts**: Extracted code blocks and structured outputs
+11. **custom_llm_models**: User-defined LLM configurations
 
 ## Quick Start
 
@@ -157,6 +171,7 @@ API Documentation: http://localhost:8000/docs
 | **Migrations** | Alembic | Database schema versioning |
 | **Templates** | Jinja2 | Prompt template system |
 | **Token Counting** | tiktoken | Cost estimation |
+| **Language Detection** | lingua-py | 75+ language detection |
 | **Retry Logic** | Tenacity | Exponential backoff |
 | **Logging** | Structlog | Structured JSON logs |
 | **Testing** | pytest | Test framework |
@@ -171,7 +186,7 @@ bsai/
 │   ├── db/                    # Database layer
 │   │   ├── base.py           # SQLAlchemy declarative base
 │   │   ├── session.py        # Async session factory
-│   │   ├── models/           # 9 SQLAlchemy models
+│   │   ├── models/           # 11 SQLAlchemy models
 │   │   └── repository/       # Data access layer
 │   ├── llm/                  # LLM layer
 │   │   ├── client.py         # LiteLLM wrapper
@@ -183,26 +198,25 @@ bsai/
 │   │   ├── meta_prompter.py
 │   │   ├── worker.py
 │   │   ├── qa_agent.py
-│   │   └── summarizer.py
+│   │   ├── summarizer.py
+│   │   ├── artifact_extractor.py
+│   │   └── responder.py
 │   ├── graph/                # LangGraph workflow
 │   │   ├── state.py          # AgentState TypedDict
 │   │   ├── nodes.py          # Graph node functions
 │   │   └── workflow.py       # StateGraph composition
-│   ├── memory/               # Memory management
-│   │   ├── context.py        # Context buffer
-│   │   ├── snapshot.py       # Snapshot manager
-│   │   └── compressor.py     # Context compression
+│   ├── cache/                # Redis cache layer
+│   │   └── redis_client.py   # Redis client wrapper
+│   ├── container/            # Dependency injection
+│   │   └── container.py      # AgentContainer singleton
 │   ├── prompts/              # Prompt system
 │   │   ├── loader.py         # Jinja2 template loader
 │   │   ├── version.py        # Prompt versioning
 │   │   └── templates/        # Agent prompt templates
 │   ├── api/                  # FastAPI layer
 │   │   ├── dependencies.py   # FastAPI dependencies
-│   │   └── routes/           # API endpoints
-│   ├── schemas/              # Pydantic models
-│   └── utils/                # Utilities
-│       ├── tokens.py         # Token counting
-│       └── logger.py         # Structured logging
+│   │   └── routers/          # API endpoints
+│   └── schemas/              # Pydantic models
 ├── tests/                    # Tests
 │   ├── unit/                # Unit tests
 │   ├── integration/         # Integration tests

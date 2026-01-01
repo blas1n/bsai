@@ -7,17 +7,16 @@ The Meta Prompter is responsible for:
 4. Persisting prompts for tracking and reuse
 """
 
-from datetime import datetime
 from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.container import get_container
+from agent.api.config import get_agent_settings
 from agent.db.models.enums import TaskComplexity
 from agent.db.repository.generated_prompt_repo import GeneratedPromptRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
-from agent.prompts import MetaPrompterPrompts
+from agent.prompts import MetaPrompterPrompts, PromptManager
 
 logger = structlog.get_logger()
 
@@ -33,6 +32,7 @@ class MetaPrompterAgent:
         self,
         llm_client: LiteLLMClient,
         router: LLMRouter,
+        prompt_manager: PromptManager,
         session: AsyncSession,
     ) -> None:
         """Initialize Meta Prompter agent.
@@ -40,13 +40,14 @@ class MetaPrompterAgent:
         Args:
             llm_client: LLM client for API calls
             router: Router for model selection
+            prompt_manager: Prompt manager for template rendering
             session: Database session
         """
         self.llm_client = llm_client
         self.router = router
+        self.prompt_manager = prompt_manager
         self.session = session
         self.prompt_repo = GeneratedPromptRepository(session)
-        self.prompt_manager = get_container().prompt_manager
 
     async def generate_prompt(
         self,
@@ -90,10 +91,11 @@ class MetaPrompterAgent:
         messages = [ChatMessage(role="user", content=meta_prompt)]
 
         # Call LLM
+        settings = get_agent_settings()
         request = LLMRequest(
             model=model.name,
             messages=messages,
-            temperature=0.5,  # Moderate temperature for creative but structured output
+            temperature=settings.meta_prompter_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
         )
@@ -147,7 +149,7 @@ class MetaPrompterAgent:
             milestone_description=milestone_description,
             complexity=complexity.name,
             acceptance_criteria=acceptance_criteria,
-            context=context or "",
+            additional_context=context or "",
             strategy=strategy.strip(),
         )
 
@@ -189,11 +191,10 @@ class MetaPrompterAgent:
         """
         await self.prompt_repo.create(
             milestone_id=milestone_id,
-            generated_prompt=generated_prompt,
+            generated_content=generated_prompt,
             strategy_used=strategy_used,
             model_used=model_used,
             token_count=token_count,
-            generated_at=datetime.utcnow(),
         )
 
         logger.debug(

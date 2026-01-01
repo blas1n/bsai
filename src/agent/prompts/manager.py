@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-import yaml  # type: ignore[import-untyped]
+import yaml
 from mako.template import Template  # type: ignore[import-untyped]
 
 logger = structlog.get_logger()

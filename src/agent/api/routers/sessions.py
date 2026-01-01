@@ -1,13 +1,17 @@
 """Session management endpoints."""
 
+from typing import Any
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, status
+from pydantic import BaseModel
 
 from agent.db.models.enums import SessionStatus
 
 from ..dependencies import Cache, CurrentUserId, DBSession
 from ..schemas import (
+    BulkSessionAction,
     PaginatedResponse,
     SessionCreate,
     SessionDetailResponse,
@@ -16,6 +20,14 @@ from ..schemas import (
 from ..services import SessionService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+logger = structlog.get_logger()
+
+
+class BulkActionResult(BaseModel):
+    """Response for bulk actions."""
+
+    success: list[str]
+    failed: list[dict[str, Any]]
 
 
 @router.post(
@@ -81,6 +93,61 @@ async def list_sessions(
         limit=min(limit, 100),
         offset=offset,
     )
+
+
+@router.post(
+    "/bulk",
+    response_model=BulkActionResult,
+    summary="Bulk session actions",
+)
+async def bulk_session_action(
+    request: BulkSessionAction,
+    db: DBSession,
+    cache: Cache,
+    user_id: CurrentUserId,
+) -> BulkActionResult:
+    """Perform bulk actions on multiple sessions.
+
+    Supports pause, complete, and delete actions.
+
+    Args:
+        request: Bulk action request with session IDs and action
+        db: Database session
+        cache: Session cache
+        user_id: Current user ID
+
+    Returns:
+        Result with success and failed session IDs
+    """
+    service = SessionService(db, cache)
+    success: list[str] = []
+    failed: list[dict[str, Any]] = []
+
+    logger.info(
+        "bulk_action_started", action=request.action, session_count=len(request.session_ids)
+    )
+
+    for session_id in request.session_ids:
+        try:
+            if request.action == "pause":
+                await service.pause_session(session_id, user_id)
+            elif request.action == "complete":
+                await service.complete_session(session_id, user_id)
+            elif request.action == "delete":
+                await service.delete_session(session_id, user_id)
+            success.append(str(session_id))
+            logger.info("bulk_action_success", action=request.action, session_id=str(session_id))
+        except Exception as e:
+            failed.append({"session_id": str(session_id), "error": str(e)})
+            logger.error(
+                "bulk_action_failed",
+                action=request.action,
+                session_id=str(session_id),
+                error=str(e),
+            )
+
+    logger.info("bulk_action_completed", success_count=len(success), failed_count=len(failed))
+    return BulkActionResult(success=success, failed=failed)
 
 
 @router.get(

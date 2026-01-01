@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -59,8 +59,9 @@ class TestCreateSession:
         mock_session.id = session_id
         mock_session.user_id = user_id
         mock_session.status = SessionStatus.ACTIVE.value
-        mock_session.created_at = datetime.utcnow()
-        mock_session.updated_at = datetime.utcnow()
+        mock_session.title = None
+        mock_session.created_at = datetime.now(UTC)
+        mock_session.updated_at = datetime.now(UTC)
         mock_session.total_input_tokens = 0
         mock_session.total_output_tokens = 0
         mock_session.total_cost_usd = 0
@@ -97,8 +98,9 @@ class TestGetSession:
         mock_session.id = session_id
         mock_session.user_id = user_id
         mock_session.status = SessionStatus.ACTIVE.value
-        mock_session.created_at = datetime.utcnow()
-        mock_session.updated_at = datetime.utcnow()
+        mock_session.title = None
+        mock_session.created_at = datetime.now(UTC)
+        mock_session.updated_at = datetime.now(UTC)
         mock_session.total_input_tokens = 50
         mock_session.total_output_tokens = 50
         mock_session.total_cost_usd = 0.01
@@ -182,8 +184,9 @@ class TestListSessions:
                 id=uuid4(),
                 user_id=user_id,
                 status=SessionStatus.ACTIVE.value,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                title=None,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 total_input_tokens=0,
                 total_output_tokens=0,
                 total_cost_usd=0,
@@ -192,12 +195,20 @@ class TestListSessions:
             for _ in range(3)
         ]
 
-        with patch.object(
-            session_service.session_repo,
-            "get_by_user_id",
-            new_callable=AsyncMock,
-        ) as mock_get:
+        with (
+            patch.object(
+                session_service.session_repo,
+                "get_by_user_id",
+                new_callable=AsyncMock,
+            ) as mock_get,
+            patch.object(
+                session_service.task_repo,
+                "get_by_session_id",
+                new_callable=AsyncMock,
+            ) as mock_tasks,
+        ):
             mock_get.return_value = mock_sessions
+            mock_tasks.return_value = []  # No tasks for sessions
 
             result = await session_service.list_sessions(user_id, limit=10)
 
@@ -227,8 +238,9 @@ class TestPauseSession:
         mock_updated.id = session_id
         mock_updated.user_id = user_id
         mock_updated.status = SessionStatus.PAUSED.value
-        mock_updated.created_at = datetime.utcnow()
-        mock_updated.updated_at = datetime.utcnow()
+        mock_updated.title = None
+        mock_updated.created_at = datetime.now(UTC)
+        mock_updated.updated_at = datetime.now(UTC)
         mock_updated.total_input_tokens = 0
         mock_updated.total_output_tokens = 0
         mock_updated.total_cost_usd = 0
@@ -301,8 +313,9 @@ class TestResumeSession:
         mock_updated.id = session_id
         mock_updated.user_id = user_id
         mock_updated.status = SessionStatus.ACTIVE.value
-        mock_updated.created_at = datetime.utcnow()
-        mock_updated.updated_at = datetime.utcnow()
+        mock_updated.title = None
+        mock_updated.created_at = datetime.now(UTC)
+        mock_updated.updated_at = datetime.now(UTC)
         mock_updated.total_input_tokens = 0
         mock_updated.total_output_tokens = 0
         mock_updated.total_cost_usd = 0
@@ -380,8 +393,9 @@ class TestCompleteSession:
         mock_completed.id = session_id
         mock_completed.user_id = user_id
         mock_completed.status = SessionStatus.COMPLETED.value
-        mock_completed.created_at = datetime.utcnow()
-        mock_completed.updated_at = datetime.utcnow()
+        mock_completed.title = None
+        mock_completed.created_at = datetime.now(UTC)
+        mock_completed.updated_at = datetime.now(UTC)
         mock_completed.total_input_tokens = 0
         mock_completed.total_output_tokens = 0
         mock_completed.total_cost_usd = 0
@@ -444,11 +458,12 @@ class TestDeleteSession:
             mock_delete.assert_called_once_with(session_id)
 
     @pytest.mark.asyncio
-    async def test_raises_invalid_state_for_active_session(
+    async def test_deletes_active_session(
         self,
         session_service: SessionService,
+        mock_cache: MagicMock,
     ) -> None:
-        """Raises InvalidStateError when trying to delete active session."""
+        """Deletes an active session (users can delete sessions in any state)."""
         session_id = uuid4()
         user_id = "user-123"
 
@@ -457,12 +472,23 @@ class TestDeleteSession:
         mock_session.user_id = user_id
         mock_session.status = SessionStatus.ACTIVE.value
 
-        with patch.object(
-            session_service.session_repo,
-            "get_by_id",
-            new_callable=AsyncMock,
-        ) as mock_get:
+        with (
+            patch.object(
+                session_service.session_repo,
+                "get_by_id",
+                new_callable=AsyncMock,
+            ) as mock_get,
+            patch.object(
+                session_service.session_repo,
+                "delete",
+                new_callable=AsyncMock,
+            ) as mock_delete,
+        ):
             mock_get.return_value = mock_session
+            mock_delete.return_value = True
 
-            with pytest.raises(InvalidStateError):
-                await session_service.delete_session(session_id, user_id)
+            # Should not raise - users can delete sessions regardless of status
+            await session_service.delete_session(session_id, user_id)
+
+            mock_delete.assert_called_once_with(session_id)
+            mock_cache.invalidate_session_state.assert_called_once()

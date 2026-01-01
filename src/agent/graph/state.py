@@ -4,7 +4,7 @@ Immutable state structure for multi-agent orchestration.
 All updates should return new dicts, not mutate existing state.
 """
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from uuid import UUID
 
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
@@ -29,14 +29,15 @@ class MilestoneData(TypedDict):
     retry_count: int
 
 
-class AgentState(TypedDict, total=False):
+class AgentState(TypedDict):
     """Immutable state for LangGraph workflow.
 
     All updates should return new dicts, not mutate existing state.
-    Using total=False allows partial updates from node functions.
+    Required fields are always present, NotRequired fields may be omitted
+    in partial updates from node functions.
 
     State Categories:
-    1. Session Context - Identifies the workflow execution
+    1. Session Context - Identifies the workflow execution (Required)
     2. Task Status - Overall task progress
     3. Milestones - List of work items with individual progress
     4. Current Processing - Active milestone state
@@ -51,32 +52,40 @@ class AgentState(TypedDict, total=False):
     original_request: str
 
     # Task status
-    task_status: TaskStatus
+    task_status: NotRequired[TaskStatus]
 
     # Milestones (list of MilestoneData)
-    milestones: list[MilestoneData]
-    current_milestone_index: int
+    milestones: NotRequired[list[MilestoneData]]
+    current_milestone_index: NotRequired[int]
 
     # Current milestone processing state
-    current_prompt: str | None
-    current_output: str | None
-    current_qa_decision: str | None  # "pass", "retry", "fail"
-    current_qa_feedback: str | None
-    retry_count: int
+    current_prompt: NotRequired[str | None]
+    current_output: NotRequired[str | None]
+    current_qa_decision: NotRequired[str | None]  # "pass", "retry", "fail"
+    current_qa_feedback: NotRequired[str | None]
+    retry_count: NotRequired[int]
 
     # Context management
-    context_messages: list[ChatMessage]
-    context_summary: str | None
-    current_context_tokens: int
-    max_context_tokens: int
+    context_messages: NotRequired[list[ChatMessage]]
+    context_summary: NotRequired[str | None]
+    current_context_tokens: NotRequired[int]
+    max_context_tokens: NotRequired[int]
+
+    # Token and cost tracking
+    total_input_tokens: NotRequired[int]
+    total_output_tokens: NotRequired[int]
+    total_cost_usd: NotRequired[str]  # Stored as string for JSON serialization
 
     # Memory state
-    needs_compression: bool
+    needs_compression: NotRequired[bool]
 
     # Error tracking
-    error: str | None
-    error_node: str | None
+    error: NotRequired[str | None]
+    error_node: NotRequired[str | None]
 
     # Workflow control
-    should_continue: bool
-    workflow_complete: bool
+    should_continue: NotRequired[bool]
+    workflow_complete: NotRequired[bool]
+
+    # Final response (from Responder agent)
+    final_response: NotRequired[str | None]

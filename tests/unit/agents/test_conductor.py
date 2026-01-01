@@ -1,7 +1,7 @@
 """Tests for ConductorAgent."""
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -60,20 +60,16 @@ def conductor(
     mock_session: AsyncMock,
 ) -> ConductorAgent:
     """Create ConductorAgent with mocked dependencies."""
-    with patch("agent.core.conductor.get_container") as mock_get_container:
-        mock_container = MagicMock()
-        mock_container.prompt_manager = mock_prompt_manager
-        mock_get_container.return_value = mock_container
-
-        agent = ConductorAgent(
-            llm_client=mock_llm_client,
-            router=mock_router,
-            session=mock_session,
-        )
-        # Mock the milestone_repo that gets created internally
-        agent.milestone_repo = MagicMock()
-        agent.milestone_repo.create = AsyncMock()
-        return agent
+    agent = ConductorAgent(
+        llm_client=mock_llm_client,
+        router=mock_router,
+        prompt_manager=mock_prompt_manager,
+        session=mock_session,
+    )
+    # Mock the milestone_repo that gets created internally
+    agent.milestone_repo = MagicMock()
+    agent.milestone_repo.create = AsyncMock()
+    return agent
 
 
 class TestConductorAgent:

@@ -1,19 +1,19 @@
 """LangGraph StateGraph composition and compilation.
 
 Builds and compiles the multi-agent workflow graph that orchestrates
-the 5 specialized agents for task execution.
+the 6 specialized agents for task execution.
 """
 
 from __future__ import annotations
 
-from functools import partial
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import structlog
 from langgraph.graph import END, StateGraph
 
-from agent.container import get_container
+from agent.container import lifespan
 from agent.db.models.enums import TaskStatus
 
 from .edges import (
@@ -33,6 +33,7 @@ from .nodes import (
     check_context_node,
     execute_worker_node,
     generate_prompt_node,
+    generate_response_node,
     select_llm_node,
     summarize_node,
     verify_qa_node,
@@ -43,26 +44,35 @@ if TYPE_CHECKING:
     from langgraph.graph.graph import CompiledGraph
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from agent.api.websocket.manager import ConnectionManager
+
 logger = structlog.get_logger()
 
 
 def _create_node_with_session(
-    node_func: Any,
+    node_func: Callable[..., Any],
     session: AsyncSession,
-) -> Any:
+) -> Callable[..., Any]:
     """Create a node function with session bound.
 
-    LangGraph nodes receive only state, so we need to bind
-    the session as a partial argument.
+    LangGraph nodes receive (state, config), so we wrap the original
+    node function to inject the session as the third argument.
 
     Args:
         node_func: The node function to wrap
         session: Database session to bind
 
     Returns:
-        Partial function with session bound
+        Wrapped async function compatible with LangGraph
     """
-    return partial(node_func, session=session)
+    from langchain_core.runnables import RunnableConfig
+
+    async def wrapper(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
+        return await node_func(state, config, session)
+
+    # Preserve the original function name for debugging
+    wrapper.__name__ = node_func.__name__
+    return wrapper
 
 
 def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
@@ -72,7 +82,8 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         Entry -> analyze_task -> select_llm -> [generate_prompt?] -> execute_worker
              -> verify_qa -> [retry/fail/next]
              -> check_context -> [summarize?]
-             -> advance -> [next_milestone/complete]
+             -> advance -> [next_milestone/generate_response/complete]
+             -> generate_response -> END
 
     Args:
         session: Database session for node operations
@@ -93,6 +104,7 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         Node.CHECK_CONTEXT: check_context_node,
         Node.SUMMARIZE: summarize_node,
         Node.ADVANCE: advance_node,
+        Node.GENERATE_RESPONSE: generate_response_node,
     }
 
     # Add all nodes with session bound
@@ -122,12 +134,14 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     graph.add_edge(Node.EXECUTE_WORKER, Node.VERIFY_QA)
 
     # Conditional edges from verify_qa based on QA decision
+    # NOTE: RETRY also goes to ADVANCE first to increment retry_count
+    # then ADVANCE routes back to EXECUTE_WORKER via RETRY_MILESTONE
     graph.add_conditional_edges(
         Node.VERIFY_QA,
         route_qa_decision,
         {
             QARoute.NEXT: Node.CHECK_CONTEXT,
-            QARoute.RETRY: Node.EXECUTE_WORKER,
+            QARoute.RETRY: Node.ADVANCE,
             QARoute.FAIL: Node.ADVANCE,
         },
     )
@@ -151,10 +165,12 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         route_advance,
         {
             AdvanceRoute.NEXT_MILESTONE: Node.SELECT_LLM,
-            AdvanceRoute.COMPLETE: END,
+            AdvanceRoute.COMPLETE: Node.GENERATE_RESPONSE,
             AdvanceRoute.RETRY_MILESTONE: Node.EXECUTE_WORKER,
         },
     )
+
+    graph.add_edge(Node.GENERATE_RESPONSE, END)
 
     logger.info("workflow_graph_built")
 
@@ -194,39 +210,19 @@ class WorkflowRunner:
     for executing workflows.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        ws_manager: ConnectionManager | None = None,
+    ) -> None:
         """Initialize workflow runner.
 
         Args:
             session: Database session for the workflow
+            ws_manager: Optional WebSocket manager for real-time updates
         """
         self.session = session
-        self._compiled: CompiledGraph | None = None
-
-    async def initialize(self) -> None:
-        """Initialize the container and compile the workflow.
-
-        Must be called before run().
-        """
-        container = get_container()
-        if not container.is_initialized:
-            await container.initialize(self.session)
-
-        self._compiled = compile_workflow(self.session)
-
-    @property
-    def graph(self) -> CompiledGraph:
-        """Get the compiled graph.
-
-        Returns:
-            Compiled LangGraph workflow
-
-        Raises:
-            RuntimeError: If initialize() not called
-        """
-        if self._compiled is None:
-            raise RuntimeError("WorkflowRunner not initialized. Call initialize() first.")
-        return self._compiled
+        self.ws_manager = ws_manager
 
     async def run(
         self,
@@ -245,13 +241,7 @@ class WorkflowRunner:
 
         Returns:
             Final workflow state
-
-        Raises:
-            RuntimeError: If initialize() not called
         """
-        if self._compiled is None:
-            await self.initialize()
-
         # Ensure UUIDs
         if isinstance(session_id, str):
             session_id = UUID(session_id)
@@ -270,6 +260,9 @@ class WorkflowRunner:
             "context_messages": [],
             "current_context_tokens": 0,
             "max_context_tokens": max_context_tokens,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_cost_usd": "0",
             "needs_compression": False,
             "workflow_complete": False,
             "should_continue": True,
@@ -281,8 +274,19 @@ class WorkflowRunner:
             task_id=str(task_id),
         )
 
-        # Run workflow
-        final_state: AgentState = await self.graph.ainvoke(initial_state)
+        async with lifespan(self.session) as container:
+            compiled = compile_workflow(self.session)
+
+            final_state: AgentState = await compiled.ainvoke(
+                initial_state,
+                config={
+                    "recursion_limit": 100,
+                    "configurable": {
+                        "ws_manager": self.ws_manager,
+                        "container": container,
+                    },
+                },
+            )
 
         logger.info(
             "workflow_finished",

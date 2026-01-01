@@ -2,90 +2,40 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from agent.api.routers.websocket import (
-    get_ws_manager,
-    set_ws_manager,
-)
+import pytest
+from fastapi import FastAPI
 
-if TYPE_CHECKING:
-    from agent.api.websocket.manager import ConnectionManager
+from agent.api.routers.websocket import _get_manager
 
 
-def clear_ws_manager() -> None:
-    """Clear the WebSocket manager for test cleanup."""
-    set_ws_manager(cast("ConnectionManager", None))
+class TestGetManager:
+    """Tests for _get_manager function."""
 
-
-class TestGetWsManager:
-    """Tests for get_ws_manager function."""
-
-    def test_creates_manager_when_none(self) -> None:
-        """Creates new manager when none exists."""
-        # Reset global state
-        clear_ws_manager()
-
-        with patch("agent.api.routers.websocket.get_cache") as mock_get_cache:
-            mock_cache = MagicMock()
-            mock_get_cache.return_value = mock_cache
-
-            with patch("agent.api.routers.websocket.ConnectionManager") as mock_manager_class:
-                mock_manager = MagicMock()
-                mock_manager_class.return_value = mock_manager
-
-                result = get_ws_manager()
-
-                mock_manager_class.assert_called_once_with(cache=mock_cache)
-                assert result is mock_manager
-
-        # Clean up
-        clear_ws_manager()
-
-    def test_returns_existing_manager(self) -> None:
-        """Returns existing manager when one exists."""
+    def test_gets_manager_from_app_state(self) -> None:
+        """Gets manager from websocket app state."""
+        mock_websocket = MagicMock()
         mock_manager = MagicMock()
-        set_ws_manager(cast("ConnectionManager", mock_manager))
+        mock_websocket.app.state.ws_manager = mock_manager
 
-        result = get_ws_manager()
+        result = _get_manager(mock_websocket)
 
         assert result is mock_manager
 
-        # Clean up
-        clear_ws_manager()
+
+@pytest.fixture
+def app_with_ws_manager(app: FastAPI) -> FastAPI:
+    """Create app with WebSocket manager in state."""
+    mock_manager = MagicMock()
+    app.state.ws_manager = mock_manager
+    return app
 
 
-class TestSetWsManager:
-    """Tests for set_ws_manager function."""
+class TestWebSocketEndpoints:
+    """Integration tests for WebSocket endpoints."""
 
-    def test_sets_manager(self) -> None:
-        """Sets the global manager."""
-        mock_manager = MagicMock()
-
-        set_ws_manager(cast("ConnectionManager", mock_manager))
-
-        assert get_ws_manager() is mock_manager
-
-        # Clean up
-        clear_ws_manager()
-
-    def test_clears_manager_with_none(self) -> None:
-        """Clears manager when set to None."""
-        mock_manager = MagicMock()
-        set_ws_manager(cast("ConnectionManager", mock_manager))
-
-        clear_ws_manager()
-
-        # Next call should create new manager
-        with patch("agent.api.routers.websocket.get_cache") as mock_get_cache:
-            mock_cache = MagicMock()
-            mock_get_cache.return_value = mock_cache
-
-            with patch("agent.api.routers.websocket.ConnectionManager") as mock_manager_class:
-                mock_manager_class.return_value = MagicMock()
-                get_ws_manager()
-                mock_manager_class.assert_called_once()
-
-        # Clean up
-        clear_ws_manager()
+    def test_ws_endpoint_accessible(self, app_with_ws_manager: FastAPI) -> None:
+        """WebSocket endpoint is accessible."""
+        routes = [getattr(route, "path", "") for route in app_with_ws_manager.routes]
+        assert "/api/v1/ws" in routes or any("/ws" in r for r in routes)

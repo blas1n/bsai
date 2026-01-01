@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -63,8 +63,8 @@ class TestCreateAndExecuteTask:
         mock_task.session_id = session_id
         mock_task.original_request = "Test request"
         mock_task.status = TaskStatus.PENDING.value
-        mock_task.created_at = datetime.utcnow()
-        mock_task.updated_at = datetime.utcnow()
+        mock_task.created_at = datetime.now(UTC)
+        mock_task.updated_at = datetime.now(UTC)
         mock_task.final_result = None
         mock_task.retry_count = 0
 
@@ -184,8 +184,8 @@ class TestGetTask:
         mock_task.session_id = session_id
         mock_task.original_request = "Test request"
         mock_task.status = TaskStatus.IN_PROGRESS.value
-        mock_task.created_at = datetime.utcnow()
-        mock_task.updated_at = datetime.utcnow()
+        mock_task.created_at = datetime.now(UTC)
+        mock_task.updated_at = datetime.now(UTC)
         mock_task.final_result = None
         mock_task.retry_count = 0
 
@@ -258,8 +258,8 @@ class TestListTasks:
                 session_id=session_id,
                 original_request=f"Request {i}",
                 status=TaskStatus.COMPLETED.value,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 final_result="Result",
                 retry_count=0,
             )
@@ -316,8 +316,8 @@ class TestCancelTask:
         mock_cancelled.original_request = "Test"
         mock_cancelled.status = TaskStatus.FAILED.value
         mock_cancelled.final_result = "Task cancelled by user"
-        mock_cancelled.created_at = datetime.utcnow()
-        mock_cancelled.updated_at = datetime.utcnow()
+        mock_cancelled.created_at = datetime.now(UTC)
+        mock_cancelled.updated_at = datetime.now(UTC)
         mock_cancelled.retry_count = 0
 
         with (
@@ -411,6 +411,7 @@ class TestGetMilestone:
         mock_milestone.task_id = task_id
         mock_milestone.sequence_number = 1
         mock_milestone.title = "Test Milestone"
+        mock_milestone.description = ""
         mock_milestone.complexity = "simple"
         mock_milestone.status = "passed"
         mock_milestone.selected_llm = "gpt-4"
@@ -418,7 +419,7 @@ class TestGetMilestone:
         mock_milestone.input_tokens = 100
         mock_milestone.output_tokens = 50
         mock_milestone.cost_usd = 0.005
-        mock_milestone.created_at = datetime.utcnow()
+        mock_milestone.created_at = datetime.now(UTC)
         mock_milestone.worker_output = "Output"
         mock_milestone.qa_result = None
         mock_milestone.acceptance_criteria = None
@@ -495,6 +496,7 @@ class TestListMilestones:
                 task_id=task_id,
                 sequence_number=i,
                 title=f"Milestone {i}",
+                description="",
                 complexity="simple",
                 status="passed",
                 selected_llm="gpt-4",
@@ -502,7 +504,7 @@ class TestListMilestones:
                 input_tokens=100,
                 output_tokens=50,
                 cost_usd=0.005,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
             )
             for i in range(2)
         ]

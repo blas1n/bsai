@@ -1,5 +1,6 @@
 """Database repository layer."""
 
+from .artifact_repo import ArtifactRepository
 from .base import BaseRepository
 from .custom_llm_model_repo import CustomLLMModelRepository
 from .generated_prompt_repo import GeneratedPromptRepository
@@ -12,6 +13,7 @@ from .task_repo import TaskRepository
 from .user_settings_repo import UserSettingsRepository
 
 __all__ = [
+    "ArtifactRepository",
     "BaseRepository",
     "UserSettingsRepository",
     "SessionRepository",

@@ -7,8 +7,8 @@ and WebSocket connection tracking.
 from __future__ import annotations
 
 import json
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import UUID
 
 import structlog
@@ -54,7 +54,7 @@ class SessionCache:
         key = f"session:{session_id}:state"
         data = await self.client.get(key)
         if data:
-            return json.loads(data)  # type: ignore[no-any-return]
+            return cast(dict[str, Any], json.loads(data))
         return None
 
     async def set_session_state(
@@ -106,7 +106,7 @@ class SessionCache:
         data = {
             "messages": context,
             "summary": summary,
-            "cached_at": datetime.utcnow().isoformat(),
+            "cached_at": datetime.now(UTC).isoformat(),
         }
         ttl = ttl or self.SESSION_CONTEXT_TTL
         await self.client.setex(key, ttl, json.dumps(data))
@@ -129,7 +129,7 @@ class SessionCache:
         key = f"session:{session_id}:context"
         data = await self.client.get(key)
         if data:
-            return json.loads(data)  # type: ignore[no-any-return]
+            return cast(dict[str, Any], json.loads(data))
         return None
 
     async def invalidate_context(self, session_id: UUID) -> None:
@@ -167,7 +167,7 @@ class SessionCache:
             "total": total_milestones,
             "progress": progress,
             "status": status,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
         ttl = ttl or self.TASK_PROGRESS_TTL
         await self.client.setex(key, ttl, json.dumps(data))
@@ -184,7 +184,7 @@ class SessionCache:
         key = f"task:{task_id}:progress"
         data = await self.client.get(key)
         if data:
-            return json.loads(data)  # type: ignore[no-any-return]
+            return cast(dict[str, Any], json.loads(data))
         return None
 
     async def invalidate_task_progress(self, task_id: UUID) -> None:
@@ -289,7 +289,7 @@ class SessionCache:
             Set of connection IDs
         """
         key = f"ws:connections:{session_id}"
-        return await self.client.smembers(key)  # type: ignore[no-any-return]
+        return cast(set[str], await self.client.smembers(key))
 
     async def clear_ws_connections(self, session_id: UUID) -> None:
         """Clear all WebSocket connections for session.

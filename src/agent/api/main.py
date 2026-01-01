@@ -4,18 +4,22 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import structlog
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi_keycloak_middleware import setup_keycloak_middleware
 
-from agent.cache.redis_client import close_redis, init_redis
+from agent.cache import SessionCache
+from agent.cache.redis_client import close_redis, get_redis, init_redis
+from agent.db import close_db, init_db
 
 from .auth import get_keycloak_config, user_mapper
-from .config import get_api_settings, get_auth_settings
+from .config import get_api_settings, get_auth_settings, get_database_settings
 from .handlers import register_exception_handlers
 from .middleware import LoggingMiddleware, RequestIDMiddleware
 from .routers import (
+    artifacts_router,
     health_router,
     milestones_router,
     sessions_router,
@@ -23,7 +27,9 @@ from .routers import (
     tasks_router,
     websocket_router,
 )
+from .websocket import ConnectionManager
 
+load_dotenv()
 logger = structlog.get_logger()
 
 
@@ -41,13 +47,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # Startup
     logger.info("starting_application")
+    db_settings = get_database_settings()
+    init_db(db_settings.database_url)
+    logger.info("database_initialized")
     await init_redis()
+    logger.info("redis_initialized")
+
+    # Initialize WebSocket manager
+    cache = SessionCache(get_redis())
+    app.state.ws_manager = ConnectionManager(cache=cache)
+    logger.info("websocket_manager_initialized")
 
     yield
 
     # Shutdown
     logger.info("shutting_down_application")
     await close_redis()
+    await close_db()
+    logger.info("shutdown_complete")
 
 
 def create_app() -> FastAPI:
@@ -76,12 +93,14 @@ def create_app() -> FastAPI:
         ],
     )
 
-    # Register middleware (order matters - first added = last executed)
+    # Register middleware (order matters - last added = first to process request)
+    # Per docs: "Add Keycloak middleware first, then CORS middleware, so CORS processes requests initially"
+
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(RequestIDMiddleware)
 
-    # Keycloak authentication middleware
+    # Keycloak authentication middleware - added FIRST so it runs AFTER CORS
     auth_settings = get_auth_settings()
     if auth_settings.auth_enabled:
         setup_keycloak_middleware(
@@ -94,10 +113,13 @@ def create_app() -> FastAPI:
                 "/openapi.json",
                 "/health",
                 "/ready",
+                # WebSocket handles its own authentication via token query param
+                "/api/v1/ws",
+                "/api/v1/ws/*",
             ],
         )
 
-    # CORS
+    # CORS middleware - added AFTER Keycloak so it runs FIRST (handles OPTIONS preflight)
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -121,6 +143,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks_router, prefix=api_prefix)
     app.include_router(milestones_router, prefix=api_prefix)
     app.include_router(snapshots_router, prefix=api_prefix)
+    app.include_router(artifacts_router, prefix=api_prefix)
 
     # WebSocket (under api prefix)
     app.include_router(websocket_router, prefix=api_prefix)

@@ -1,7 +1,8 @@
 """Pydantic schemas for API request/response validation."""
 
-from .requests import SessionCreate, SnapshotCreate, TaskCreate
+from .requests import BulkSessionAction, SessionCreate, SnapshotCreate, TaskCreate
 from .responses import (
+    ArtifactResponse,
     ErrorResponse,
     MilestoneDetailResponse,
     MilestoneResponse,
@@ -29,6 +30,7 @@ __all__ = [
     "SessionCreate",
     "TaskCreate",
     "SnapshotCreate",
+    "BulkSessionAction",
     # Responses
     "SessionResponse",
     "SessionDetailResponse",
@@ -37,6 +39,7 @@ __all__ = [
     "MilestoneResponse",
     "MilestoneDetailResponse",
     "SnapshotResponse",
+    "ArtifactResponse",
     "PaginatedResponse",
     "ErrorResponse",
     # WebSocket

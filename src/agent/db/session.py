@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import NullPool
 
 from .models.base import Base
 
@@ -25,16 +24,27 @@ class DatabaseSessionManager:
         session_factory: Factory for creating async sessions
     """
 
-    def __init__(self, database_url: str, **engine_kwargs: Any) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        pool_size: int = 10,
+        max_overflow: int = 20,
+        **engine_kwargs: Any,
+    ) -> None:
         """Initialize database session manager.
 
         Args:
             database_url: PostgreSQL connection URL (must start with postgresql+asyncpg://)
+            pool_size: Number of persistent connections in the pool
+            max_overflow: Max additional connections beyond pool_size
             **engine_kwargs: Additional arguments passed to create_async_engine
         """
         self.engine: AsyncEngine = create_async_engine(
             database_url,
-            poolclass=NullPool,  # Use NullPool for connection-per-request pattern
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_pre_ping=True,  # Verify connections before use
+            pool_recycle=3600,  # Recycle connections after 1 hour
             **engine_kwargs,
         )
         self.session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
@@ -87,8 +97,31 @@ class DatabaseSessionManager:
             await conn.run_sync(Base.metadata.drop_all)
 
 
-# Global session manager instance (will be initialized in main.py)
+# Global session manager instance (initialized via init_db())
 session_manager: DatabaseSessionManager | None = None
+
+
+def init_db(database_url: str) -> None:
+    """Initialize the global database session manager.
+
+    Args:
+        database_url: PostgreSQL connection URL (must use asyncpg driver)
+
+    Raises:
+        RuntimeError: If already initialized
+    """
+    global session_manager
+    if session_manager is not None:
+        raise RuntimeError("DatabaseSessionManager already initialized")
+    session_manager = DatabaseSessionManager(database_url)
+
+
+async def close_db() -> None:
+    """Close the global database session manager."""
+    global session_manager
+    if session_manager is not None:
+        await session_manager.close()
+        session_manager = None
 
 
 def get_session_manager() -> DatabaseSessionManager:

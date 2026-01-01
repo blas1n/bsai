@@ -16,7 +16,8 @@ services:
       - claude-code-bashhistory:/commandhistory
       - claude-code-config:/home/vscode/.claude
     ports:
-      - "8000:8000"
+      - "18000:8000"  # FastAPI
+      - "13000:3000"  # Frontend (Next.js)
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
@@ -94,6 +95,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
     volumes:
       - ../infra/keycloak:/opt/keycloak/data/import:ro
+      - ../infra/keycloak/themes/bsai:/opt/keycloak/themes/bsai:ro
     ports:
       - "8080:8080"
     depends_on:

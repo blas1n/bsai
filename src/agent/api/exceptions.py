@@ -58,6 +58,28 @@ class NotFoundError(APIError):
         self.resource_id = resource_id
 
 
+class AuthenticationError(APIError):
+    """Authentication error."""
+
+    def __init__(
+        self,
+        message: str = "Not authenticated",
+        detail: str | None = None,
+    ) -> None:
+        """Initialize authentication error.
+
+        Args:
+            message: Error message
+            detail: Additional detail
+        """
+        super().__init__(
+            message=message,
+            code="AUTHENTICATION_ERROR",
+            status_code=401,
+            detail=detail,
+        )
+
+
 class AccessDeniedError(APIError):
     """Access denied error."""
 

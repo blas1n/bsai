@@ -9,7 +9,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.cache import SessionCache
-from agent.container import get_container
+from agent.container import lifespan
 from agent.core import SummarizerAgent
 from agent.db.models.enums import SessionStatus, TaskStatus
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
@@ -179,8 +179,22 @@ class SessionService:
         if has_more:
             sessions = sessions[:limit]
 
+        # Build response with titles from first task
+        session_responses = []
+        for session in sessions:
+            response = SessionResponse.model_validate(session)
+            tasks = await self.task_repo.get_by_session_id(session.id, limit=1)
+            if tasks:
+                title = tasks[0].original_request[:50]
+                if len(tasks[0].original_request) > 50:
+                    title += "..."
+                response.title = title
+            else:
+                response.title = "New session"
+            session_responses.append(response)
+
         return PaginatedResponse(
-            items=[SessionResponse.model_validate(s) for s in sessions],
+            items=session_responses,
             total=len(sessions),  # Note: This is not accurate total count
             limit=limit,
             offset=offset,
@@ -364,18 +378,8 @@ class SessionService:
             session_id: Session ID
             user_id: User ID
         """
-        session = await self._get_session_for_user(session_id, user_id)
-
-        # Only allow deleting completed or failed sessions
-        if session.status not in (
-            SessionStatus.COMPLETED.value,
-            SessionStatus.FAILED.value,
-        ):
-            raise InvalidStateError(
-                resource="Session",
-                current_state=session.status,
-                action="deleted",
-            )
+        # Validate user owns this session (raises NotFoundError/AccessDeniedError if not)
+        await self._get_session_for_user(session_id, user_id)
 
         await self.session_repo.delete(session_id)
         await self.db.commit()
@@ -448,26 +452,27 @@ class SessionService:
         task = tasks[0]
 
         # Create snapshot using summarizer
-        container = get_container()
-        summarizer = SummarizerAgent(
-            llm_client=container.llm_client,
-            router=container.router,
-            session=self.db,
-        )
+        async with lifespan(self.db) as container:
+            summarizer = SummarizerAgent(
+                llm_client=container.llm_client,
+                router=container.router,
+                prompt_manager=container.prompt_manager,
+                session=self.db,
+            )
 
-        # Get context from cache
-        cached_context = await self.cache.get_cached_context(session_id)
-        context_messages: list[ChatMessage] = []
-        if cached_context and "messages" in cached_context:
-            context_messages = cached_context["messages"]
+            # Get context from cache
+            cached_context = await self.cache.get_cached_context(session_id)
+            context_messages: list[ChatMessage] = []
+            if cached_context and "messages" in cached_context:
+                context_messages = cached_context["messages"]
 
-        # Create snapshot (returns summary string)
-        await summarizer.create_manual_snapshot(
-            session_id=session_id,
-            task_id=task.id,
-            conversation_history=context_messages,
-            reason=reason,
-        )
+            # Create snapshot (returns summary string)
+            await summarizer.create_manual_snapshot(
+                session_id=session_id,
+                task_id=task.id,
+                conversation_history=context_messages,
+                reason=reason,
+            )
 
         # Get the latest snapshot that was just created
         created_snapshot = await self.snapshot_repo.get_latest_snapshot(session_id)
@@ -578,13 +583,6 @@ class SessionService:
             session_id: Session ID
             context_messages: Context messages to snapshot
         """
-        container = get_container()
-        summarizer = SummarizerAgent(
-            llm_client=container.llm_client,
-            router=container.router,
-            session=self.db,
-        )
-
         # Get active task
         tasks = await self.task_repo.get_by_session_id(session_id, limit=1)
         if not tasks:
@@ -592,9 +590,17 @@ class SessionService:
 
         task_id = tasks[0].id
 
-        await summarizer.create_manual_snapshot(
-            session_id=session_id,
-            task_id=task_id,
-            conversation_history=context_messages,
-            reason="Session paused",
-        )
+        async with lifespan(self.db) as container:
+            summarizer = SummarizerAgent(
+                llm_client=container.llm_client,
+                router=container.router,
+                prompt_manager=container.prompt_manager,
+                session=self.db,
+            )
+
+            await summarizer.create_manual_snapshot(
+                session_id=session_id,
+                task_id=task_id,
+                conversation_history=context_messages,
+                reason="Session paused",
+            )

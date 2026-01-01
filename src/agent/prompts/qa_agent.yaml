@@ -26,29 +26,57 @@ validation_prompt: |
   YOUR TASK:
   Evaluate whether the Worker output successfully meets the acceptance criteria.
 
+  CRITICAL - UNDERSTAND THE WORKER'S ROLE:
+  The Worker is a TEXT GENERATION agent. It can ONLY:
+  - Generate code, documentation, explanations, guides, plans
+  - Provide instructions, tutorials, configuration examples
+  - Create content that users can then use themselves
+
+  The Worker CANNOT:
+  - Deploy applications or create live URLs
+  - Execute code or run servers
+  - Create files on external systems
+  - Perform any actions in the real world
+  - Provide "live links" or "working demos"
+
   EVALUATION GUIDELINES:
-  1. Check if all acceptance criteria are met
-  2. Verify factual accuracy and completeness
-  3. Assess quality and clarity
-  4. Identify any issues or improvements needed
+  1. Check if all acceptance criteria are met BY THE TEXT OUTPUT
+  2. Verify factual accuracy and completeness of the generated content
+  3. Assess quality and clarity of the output
+  4. If criteria mention "deploy" or "URL": evaluate if deployment INSTRUCTIONS are provided
+  5. If criteria mention "working" or "functional": evaluate if the CODE is correct and complete
+
+  SCOPE OF EVALUATION (STRICTLY FOLLOW):
+  - Evaluate ONLY the text/code/content the Worker produced
+  - Do NOT require external actions (deployment, file creation, URL access, running code)
+  - Do NOT fail because there's no live demo, URL, or running instance
+  - If the Worker provides complete, correct deployment instructions → PASS
+  - If the Worker provides complete, correct code → PASS
+  - The absence of a "live link" is NEVER a valid reason to RETRY
+
+  EXAMPLES OF CORRECT EVALUATION:
+  - Criteria: "Deploy a web game" → Worker provides deployment guide and code → PASS ✓
+  - Criteria: "Provide a URL" → Worker explains how to get URL after deployment → PASS ✓
+  - Criteria: "Create working app" → Worker provides complete, correct code → PASS ✓
 
   DECISION OPTIONS:
-  - PASS: Output fully meets acceptance criteria
-  - RETRY: Output has fixable issues (provide specific feedback)
-  - FAIL: Output is fundamentally flawed or cannot be fixed
+  - PASS: Output meets what the Worker CAN produce
+  - RETRY: Output has fixable issues IN THE GENERATED CONTENT (not missing external actions)
 
   OUTPUT FORMAT (JSON):
   {
-    "decision": "PASS" | "RETRY" | "FAIL",
+    "decision": "PASS" | "RETRY",
     "feedback": "Detailed explanation of decision and any issues found",
-    "issues": ["List", "of", "specific", "issues"] (if RETRY or FAIL),
+    "issues": ["List", "of", "specific", "issues"] (if RETRY),
     "suggestions": ["Specific", "improvement", "suggestions"] (if RETRY)
   }
 
   IMPORTANT:
   - Be objective and constructive
   - Provide specific, actionable feedback
-  - Consider the attempt number (max ${max_retries} retries)
+  - Be lenient - PASS if output reasonably addresses what the Worker CAN produce
+  - Only RETRY if there are issues the Worker can FIX (code bugs, missing content, unclear explanations)
+  - NEVER RETRY because of missing live URLs, deployments, or external actions
   - Return ONLY valid JSON, no additional text
 
 # Retry context template

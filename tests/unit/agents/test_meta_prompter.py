@@ -1,7 +1,7 @@
 """Tests for MetaPrompterAgent."""
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -67,20 +67,16 @@ def meta_prompter(
     mock_session: AsyncMock,
 ) -> MetaPrompterAgent:
     """Create MetaPrompterAgent with mocked dependencies."""
-    with patch("agent.core.meta_prompter.get_container") as mock_get_container:
-        mock_container = MagicMock()
-        mock_container.prompt_manager = mock_prompt_manager
-        mock_get_container.return_value = mock_container
-
-        agent = MetaPrompterAgent(
-            llm_client=mock_llm_client,
-            router=mock_router,
-            session=mock_session,
-        )
-        # Mock the prompt_repo that gets created internally
-        agent.prompt_repo = MagicMock()
-        agent.prompt_repo.create = AsyncMock()
-        return agent
+    agent = MetaPrompterAgent(
+        llm_client=mock_llm_client,
+        router=mock_router,
+        prompt_manager=mock_prompt_manager,
+        session=mock_session,
+    )
+    # Mock the prompt_repo that gets created internally
+    agent.prompt_repo = MagicMock()
+    agent.prompt_repo.create = AsyncMock()
+    return agent
 
 
 class TestMetaPrompterAgent:
@@ -158,9 +154,9 @@ class TestMetaPrompterAgent:
         # Verify
         assert result == "Optimized prompt with context"
 
-        # Check that context was passed to render
+        # Check that context was passed to render as additional_context
         render_call = mock_prompt_manager.render.call_args
-        assert render_call.kwargs["context"] == context
+        assert render_call.kwargs["additional_context"] == context
 
     @pytest.mark.asyncio
     async def test_generate_prompt_all_complexities(
