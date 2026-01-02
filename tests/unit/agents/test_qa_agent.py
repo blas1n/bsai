@@ -93,7 +93,7 @@ class TestQAAgent:
 
         # Mock LLM response with PASS
         mock_response = LLMResponse(
-            content='{"decision": "PASS", "feedback": "Implementation meets criteria"}',
+            content='{"decision": "PASS", "feedback": "Implementation meets criteria", "issues": [], "suggestions": []}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -131,7 +131,7 @@ class TestQAAgent:
 
         # Mock LLM response with RETRY
         mock_response = LLMResponse(
-            content='{"decision": "RETRY", "feedback": "Missing password validation"}',
+            content='{"decision": "RETRY", "feedback": "Missing password validation", "issues": ["Password validation missing"], "suggestions": ["Add password validation"]}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -208,7 +208,7 @@ class TestQAAgent:
 
         # Mock LLM response with RETRY (now structured output enforces PASS/RETRY)
         mock_response = LLMResponse(
-            content='{"decision": "RETRY", "feedback": "Wrong implementation approach"}',
+            content='{"decision": "RETRY", "feedback": "Wrong implementation approach", "issues": [], "suggestions": []}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -270,7 +270,7 @@ class TestQAAgent:
 
         # Mock LLM response
         mock_response = LLMResponse(
-            content='{"decision": "PASS", "feedback": "Good"}',
+            content='{"decision": "PASS", "feedback": "Good", "issues": [], "suggestions": []}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -303,7 +303,7 @@ class TestQAAgent:
 
         # Mock LLM response
         mock_response = LLMResponse(
-            content='{"decision": "PASS", "feedback": "Good"}',
+            content='{"decision": "PASS", "feedback": "Good", "issues": [], "suggestions": []}',
             usage=UsageInfo(input_tokens=500, output_tokens=150, total_tokens=650),
             model="test-model",
         )

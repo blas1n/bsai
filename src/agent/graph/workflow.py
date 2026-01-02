@@ -14,7 +14,11 @@ import structlog
 from langgraph.graph import END, StateGraph
 
 from agent.container import lifespan
-from agent.db.models.enums import TaskStatus
+from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.db.repository.artifact_repo import ArtifactRepository
+from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
+from agent.db.repository.milestone_repo import MilestoneRepository
+from agent.llm import ChatMessage
 
 from .edges import (
     AdvanceRoute,
@@ -34,13 +38,14 @@ from .nodes.execute import execute_worker_node
 from .nodes.llm import generate_prompt_node, select_llm_node
 from .nodes.qa import verify_qa_node
 from .nodes.response import generate_response_node
-from .state import AgentState
+from .state import AgentState, MilestoneData
 
 if TYPE_CHECKING:
     from langgraph.graph.graph import CompiledGraph
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from agent.api.websocket.manager import ConnectionManager
+    from agent.cache import SessionCache
 
 logger = structlog.get_logger()
 
@@ -211,15 +216,164 @@ class WorkflowRunner:
         self,
         session: AsyncSession,
         ws_manager: ConnectionManager | None = None,
+        cache: SessionCache | None = None,
     ) -> None:
         """Initialize workflow runner.
 
         Args:
             session: Database session for the workflow
             ws_manager: Optional WebSocket manager for real-time updates
+            cache: Optional session cache for context persistence
         """
         self.session = session
         self.ws_manager = ws_manager
+        self.cache = cache
+
+    async def _load_previous_milestones(
+        self,
+        session_id: UUID,
+    ) -> tuple[list[MilestoneData], int]:
+        """Load previous milestones from session for continuity.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Tuple of (milestones_data, next_sequence_number)
+        """
+        # Map QADecision values to MilestoneStatus
+        status_mapping = {
+            "pass": MilestoneStatus.PASSED,
+            "retry": MilestoneStatus.IN_PROGRESS,
+            "fail": MilestoneStatus.FAILED,
+        }
+
+        milestone_repo = MilestoneRepository(self.session)
+        db_milestones = await milestone_repo.get_by_session_id(session_id)
+
+        milestones: list[MilestoneData] = []
+        for m in db_milestones:
+            # Convert DB model to MilestoneData
+            complexity = m.complexity
+            if isinstance(complexity, str):
+                complexity = TaskComplexity(complexity)
+
+            status = m.status
+            if isinstance(status, str):
+                # Try mapping from QADecision values first, then MilestoneStatus
+                status = status_mapping.get(status) or MilestoneStatus(status)
+
+            milestones.append(
+                MilestoneData(
+                    id=m.id,
+                    description=m.description,
+                    complexity=complexity,
+                    acceptance_criteria=m.acceptance_criteria or "",
+                    status=status,
+                    selected_model=m.selected_llm or None,
+                    generated_prompt=None,
+                    worker_output=m.worker_output,
+                    qa_feedback=m.qa_result,
+                    retry_count=m.retry_count,
+                )
+            )
+
+        # Get max sequence number for next milestone numbering
+        max_seq = await milestone_repo.get_max_sequence_for_session(session_id)
+
+        logger.info(
+            "previous_milestones_loaded",
+            session_id=str(session_id),
+            milestone_count=len(milestones),
+            max_sequence=max_seq,
+        )
+
+        return milestones, max_seq
+
+    async def _load_previous_context(
+        self,
+        session_id: UUID,
+    ) -> tuple[list[ChatMessage], str | None, int]:
+        """Load previous conversation context from cache or memory snapshot.
+
+        Also includes recent artifacts from the session for better context.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Tuple of (context_messages, context_summary, estimated_tokens)
+        """
+        context_messages: list[ChatMessage] = []
+        context_summary: str | None = None
+        token_count = 0
+
+        # Try cache first
+        if self.cache:
+            cached = await self.cache.get_cached_context(session_id)
+            if cached:
+                messages_data = cached.get("messages", [])
+                context_messages = [
+                    ChatMessage(role=m["role"], content=m["content"]) for m in messages_data
+                ]
+                context_summary = cached.get("summary")
+                token_count = cached["token_count"]
+                logger.info(
+                    "context_loaded_from_cache",
+                    session_id=str(session_id),
+                    message_count=len(context_messages),
+                    has_summary=context_summary is not None,
+                    token_count=token_count,
+                )
+                return context_messages, context_summary, token_count
+
+        # Fall back to memory snapshot
+        snapshot_repo = MemorySnapshotRepository(self.session)
+        snapshot = await snapshot_repo.get_latest_snapshot(session_id)
+        if snapshot:
+            context_summary = snapshot.compressed_context
+            token_count = snapshot.token_count
+            # Add summary as system context
+            context_messages = [
+                ChatMessage(
+                    role="system",
+                    content=f"Previous conversation summary:\n{context_summary}",
+                )
+            ]
+            logger.info(
+                "context_loaded_from_snapshot",
+                session_id=str(session_id),
+                snapshot_id=str(snapshot.id),
+                token_count=token_count,
+            )
+
+        # Add recent artifacts as additional context
+        artifact_repo = ArtifactRepository(self.session)
+        recent_artifacts = await artifact_repo.get_by_session_id(session_id, limit=10)
+        if recent_artifacts:
+            artifact_summaries = []
+            for artifact in reversed(recent_artifacts):  # Oldest first
+                summary = f"- {artifact.filename} ({artifact.kind})"
+                if len(artifact.content) <= 500:
+                    summary += f":\n```{artifact.kind}\n{artifact.content}\n```"
+                else:
+                    # Truncate long content
+                    summary += f" [{len(artifact.content)} chars, truncated]:\n```{artifact.kind}\n{artifact.content[:300]}...\n```"
+                artifact_summaries.append(summary)
+
+            artifacts_context = "Previously created artifacts in this session:\n" + "\n".join(
+                artifact_summaries
+            )
+            context_messages.append(ChatMessage(role="system", content=artifacts_context))
+            # Update token estimate
+            token_count += len(artifacts_context) // 4
+            logger.info(
+                "artifacts_added_to_context",
+                session_id=str(session_id),
+                artifact_count=len(recent_artifacts),
+            )
+
+        return context_messages, context_summary, token_count
 
     async def run(
         self,
@@ -245,17 +399,25 @@ class WorkflowRunner:
         if isinstance(task_id, str):
             task_id = UUID(task_id)
 
-        # Build initial state
+        # Load previous context and milestones from same session
+        context_messages, context_summary, context_tokens = await self._load_previous_context(
+            session_id
+        )
+        previous_milestones, max_sequence = await self._load_previous_milestones(session_id)
+
+        # Build initial state with previous context and milestones
         initial_state: AgentState = {
             "session_id": session_id,
             "task_id": task_id,
             "original_request": original_request,
             "task_status": TaskStatus.PENDING,
-            "milestones": [],
-            "current_milestone_index": 0,
+            "milestones": previous_milestones,
+            "current_milestone_index": len(previous_milestones),
+            "milestone_sequence_offset": max_sequence,
             "retry_count": 0,
-            "context_messages": [],
-            "current_context_tokens": 0,
+            "context_messages": context_messages,
+            "context_summary": context_summary,
+            "current_context_tokens": context_tokens,
             "max_context_tokens": max_context_tokens,
             "total_input_tokens": 0,
             "total_output_tokens": 0,
@@ -269,6 +431,8 @@ class WorkflowRunner:
             "workflow_started",
             session_id=str(session_id),
             task_id=str(task_id),
+            has_previous_context=len(context_messages) > 0,
+            previous_milestone_count=len(previous_milestones),
         )
 
         async with lifespan(self.session) as container:

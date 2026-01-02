@@ -17,6 +17,7 @@ from .websocket import (
     LLMChunkPayload,
     LLMCompletePayload,
     MilestoneProgressPayload,
+    PreviousMilestoneInfo,
     TaskCompletedPayload,
     TaskFailedPayload,
     TaskProgressPayload,
@@ -50,6 +51,7 @@ __all__ = [
     "TaskCompletedPayload",
     "TaskFailedPayload",
     "MilestoneProgressPayload",
+    "PreviousMilestoneInfo",
     "LLMChunkPayload",
     "LLMCompletePayload",
 ]

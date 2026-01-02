@@ -95,7 +95,7 @@ class WorkerAgent:
         )
 
         # Get system prompt for output format guidelines
-        system_prompt = self.prompt_manager.get_data("worker", WorkerPrompts.SYSTEM_PROMPT)
+        system_prompt = self.prompt_manager.render("worker", WorkerPrompts.SYSTEM_PROMPT)
 
         # Build messages list with system prompt
         messages = []

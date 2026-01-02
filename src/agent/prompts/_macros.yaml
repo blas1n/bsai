@@ -2,8 +2,6 @@
 #
 # Usage in other YAML files:
 #   ${worker_capabilities()}
-#   ${complexity_guide()}
-#   ${output_rules()}
 
 worker_capabilities: |
   <%def name="worker_capabilities()">
@@ -16,28 +14,4 @@ worker_capabilities: |
   - "Deploy" request -> Provide deployment instructions
   - "URL" request -> Explain how to obtain URL after deployment
   - "Working app" request -> Provide complete, correct code
-  </%def>
-
-complexity_guide: |
-  <%def name="complexity_guide()">
-  COMPLEXITY LEVELS:
-  - TRIVIAL: Simple facts, basic calculations (<100 tokens)
-  - SIMPLE: Straightforward tasks with clear steps (<500 tokens)
-  - MODERATE: Tasks requiring analysis or multi-step reasoning (<2000 tokens)
-  - COMPLEX: Tasks requiring deep expertise or complex logic (<8000 tokens)
-  - CONTEXT_HEAVY: Tasks with massive context or research (>8000 tokens)
-  </%def>
-
-output_rules: |
-  <%def name="output_rules()">
-  OUTPUT RULES:
-  - Provide COMPLETE, WORKING artifacts (no placeholders, no truncation)
-  - Each file must have a valid path (e.g., "src/app.js", "index.html")
-  - Use appropriate directory structure for the project type
-  - Keep explanations concise; code must be comprehensive
-  </%def>
-
-language_instruction: |
-  <%def name="language_instruction()">
-  LANGUAGE: Respond in the SAME LANGUAGE as the user's original request.
   </%def>

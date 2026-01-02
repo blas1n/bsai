@@ -11,7 +11,12 @@ analysis_prompt: |
 
   ${worker_capabilities()}
 
-  ${complexity_guide()}
+  COMPLEXITY LEVELS:
+  - TRIVIAL: Simple facts, basic calculations (<100 tokens)
+  - SIMPLE: Straightforward tasks with clear steps (<500 tokens)
+  - MODERATE: Tasks requiring analysis or multi-step reasoning (<2000 tokens)
+  - COMPLEX: Tasks requiring deep expertise or complex logic (<8000 tokens)
+  - CONTEXT_HEAVY: Tasks with massive context or research (>8000 tokens)
 
   RULES:
   - Use MINIMUM milestones needed (prefer fewer, larger milestones)

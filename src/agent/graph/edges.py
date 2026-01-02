@@ -61,7 +61,7 @@ def should_use_meta_prompter(state: AgentState) -> PromptRoute:
     milestones = state.get("milestones")
     idx = state.get("current_milestone_index")
 
-    if milestones is None or idx is None:
+    if milestones is None or idx is None or idx >= len(milestones):
         return PromptRoute.SKIP
 
     milestone = milestones[idx]

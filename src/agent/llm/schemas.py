@@ -36,6 +36,8 @@ class LLMRequest(BaseModel):
 class MilestoneSchema(BaseModel):
     """Schema for a single milestone in Conductor output."""
 
+    model_config = {"extra": "forbid"}
+
     description: str = Field(..., description="Brief description of what needs to be done")
     complexity: Literal["TRIVIAL", "SIMPLE", "MODERATE", "COMPLEX", "CONTEXT_HEAVY"] = Field(
         ..., description="Task complexity level"
@@ -46,6 +48,8 @@ class MilestoneSchema(BaseModel):
 class ConductorOutput(BaseModel):
     """Structured output schema for Conductor agent."""
 
+    model_config = {"extra": "forbid"}
+
     milestones: list[MilestoneSchema] = Field(
         ..., description="List of milestones to complete the task"
     )
@@ -54,16 +58,18 @@ class ConductorOutput(BaseModel):
 class QAOutput(BaseModel):
     """Structured output schema for QA agent validation."""
 
+    model_config = {"extra": "forbid"}
+
     decision: Literal["PASS", "RETRY"] = Field(..., description="Validation decision")
     feedback: str = Field(..., description="Detailed explanation of decision")
-    issues: list[str] | None = Field(default=None, description="Specific issues found (if RETRY)")
-    suggestions: list[str] | None = Field(
-        default=None, description="Improvement suggestions (if RETRY)"
-    )
+    issues: list[str] = Field(..., description="Specific issues found (empty if PASS)")
+    suggestions: list[str] = Field(..., description="Improvement suggestions (empty if PASS)")
 
 
 class FileArtifact(BaseModel):
     """Schema for a single file artifact."""
+
+    model_config = {"extra": "forbid"}
 
     path: str = Field(
         ...,
@@ -79,12 +85,13 @@ class FileArtifact(BaseModel):
 class WorkerOutput(BaseModel):
     """Structured output schema for Worker agent."""
 
+    model_config = {"extra": "forbid"}
+
     explanation: str = Field(
         ..., description="Brief explanation of what was created (in user's language)"
     )
     files: list[FileArtifact] = Field(
-        default_factory=list,
-        description="List of generated file artifacts with paths and content",
+        ..., description="List of generated file artifacts with paths and content"
     )
 
 

@@ -57,6 +57,7 @@ class AgentState(TypedDict):
     # Milestones (list of MilestoneData)
     milestones: NotRequired[list[MilestoneData]]
     current_milestone_index: NotRequired[int]
+    milestone_sequence_offset: NotRequired[int]  # Offset for new milestone numbering
 
     # Current milestone processing state
     current_prompt: NotRequired[str | None]

@@ -27,6 +27,7 @@ from ..schemas import (
     MilestoneDetailResponse,
     MilestoneResponse,
     PaginatedResponse,
+    PreviousMilestoneInfo,
     TaskCompletedPayload,
     TaskCreate,
     TaskDetailResponse,
@@ -349,6 +350,24 @@ class TaskService:
         try:
             # Notify task started (streaming only)
             if stream and self.ws_manager:
+                # Get previous milestones for session continuity
+                previous_milestones: list[PreviousMilestoneInfo] = []
+                async for db_session in get_db_session():
+                    milestone_repo = MilestoneRepository(db_session)
+                    db_milestones = await milestone_repo.get_by_session_id(session_id)
+                    previous_milestones = [
+                        PreviousMilestoneInfo(
+                            id=m.id,
+                            sequence_number=m.sequence_number,
+                            description=m.description,
+                            complexity=m.complexity,
+                            status=m.status,
+                            worker_output=m.worker_output[:500] if m.worker_output else None,
+                        )
+                        for m in db_milestones
+                    ]
+                    break  # Only need one iteration
+
                 await self.ws_manager.broadcast_to_session(
                     session_id,
                     WSMessage(
@@ -358,6 +377,7 @@ class TaskService:
                             session_id=session_id,
                             original_request=original_request,
                             milestone_count=0,
+                            previous_milestones=previous_milestones,
                         ).model_dump(),
                     ),
                 )
@@ -367,6 +387,7 @@ class TaskService:
                 runner = WorkflowRunner(
                     db_session,
                     ws_manager=self.ws_manager if stream else None,
+                    cache=self.cache,
                 )
 
                 # Execute workflow
@@ -451,6 +472,12 @@ class TaskService:
                     )
 
                 await db_session.commit()
+
+                # Cache context for next task in session
+                await self._save_context_to_cache(
+                    session_id=session_id,
+                    final_state=final_state,
+                )
 
                 # Notify completion after commit (streaming only)
                 if stream and self.ws_manager:
@@ -568,3 +595,48 @@ class TaskService:
                     ).model_dump(),
                 ),
             )
+
+    async def _save_context_to_cache(
+        self,
+        session_id: UUID,
+        final_state: AgentState,
+    ) -> None:
+        """Save conversation context to cache for session continuity.
+
+        Args:
+            session_id: Session ID
+            final_state: Final workflow state containing context messages
+        """
+        context_messages = final_state.get("context_messages", [])
+        context_summary = final_state.get("context_summary")
+
+        if not context_messages:
+            return
+
+        token_count = final_state.get("current_context_tokens")
+        if token_count is None:
+            logger.warning(
+                "context_not_cached_missing_token_count",
+                session_id=str(session_id),
+            )
+            return
+
+        # Convert ChatMessage objects to dicts for JSON serialization
+        messages_data = [{"role": msg.role, "content": msg.content} for msg in context_messages]
+
+        # Use longer TTL for session context (2 hours)
+        await self.cache.cache_context(
+            session_id=session_id,
+            context=messages_data,
+            token_count=token_count,
+            summary=context_summary,
+            ttl=7200,  # 2 hours
+        )
+
+        logger.info(
+            "context_saved_to_cache",
+            session_id=str(session_id),
+            message_count=len(messages_data),
+            has_summary=context_summary is not None,
+            token_count=token_count,
+        )

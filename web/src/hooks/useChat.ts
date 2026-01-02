@@ -126,7 +126,17 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           break;
         }
 
-        // Create assistant message for this task
+        // Convert previous milestones from backend to MilestoneInfo format
+        const previousMilestones: MilestoneInfo[] = (payload.previous_milestones || []).map((m) => ({
+          id: m.id,
+          sequenceNumber: m.sequence_number,
+          title: m.description,
+          description: m.description,
+          complexity: m.complexity as TaskComplexity,
+          status: (m.status === 'pass' ? 'passed' : m.status) as MilestoneStatus,
+        }));
+
+        // Create assistant message for this task, preserving previous milestones
         currentTaskIdRef.current = taskIdStr;
         const newMessageId = `msg-${Date.now()}`;
         streamingMessageIdRef.current = newMessageId;
@@ -137,7 +147,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           content: '',
           timestamp: new Date().toISOString(),
           taskId: taskIdStr,
-          milestones: [],
+          milestones: previousMilestones,
           agentActivity: [],
           isStreaming: true,
         };
@@ -145,12 +155,10 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         setMessages((prev) => [...prev, assistantMessage]);
         setStreaming({
           isStreaming: true,
-          totalMilestones: payload.milestone_count,
-          currentMilestone: 0,
+          totalMilestones: payload.milestone_count + previousMilestones.length,
+          currentMilestone: previousMilestones.length,
           chunks: [],
         });
-        setCompletedAgents([]); // Reset completed agents for new task
-        setAgentHistory([]); // Reset activity history for new task
         break;
       }
 

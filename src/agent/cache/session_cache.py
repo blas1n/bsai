@@ -91,6 +91,7 @@ class SessionCache:
         self,
         session_id: UUID,
         context: list[dict[str, str]],
+        token_count: int,
         summary: str | None = None,
         ttl: int | None = None,
     ) -> None:
@@ -99,6 +100,7 @@ class SessionCache:
         Args:
             session_id: Session UUID
             context: List of context messages
+            token_count: Token count for the context
             summary: Optional context summary
             ttl: TTL in seconds (default: SESSION_CONTEXT_TTL)
         """
@@ -106,6 +108,7 @@ class SessionCache:
         data = {
             "messages": context,
             "summary": summary,
+            "token_count": token_count,
             "cached_at": datetime.now(UTC).isoformat(),
         }
         ttl = ttl or self.SESSION_CONTEXT_TTL
@@ -115,6 +118,7 @@ class SessionCache:
             session_id=str(session_id),
             message_count=len(context),
             has_summary=summary is not None,
+            token_count=token_count,
         )
 
     async def get_cached_context(self, session_id: UUID) -> dict[str, Any] | None:

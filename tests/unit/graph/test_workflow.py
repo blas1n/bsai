@@ -79,6 +79,18 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_context",
+                new_callable=AsyncMock,
+                return_value=([], None, 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_milestones",
+                new_callable=AsyncMock,
+                return_value=([], 0),
+            ),
         ):
             # Setup mock container from lifespan context manager
             mock_container = MagicMock()
@@ -118,6 +130,18 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_context",
+                new_callable=AsyncMock,
+                return_value=([], None, 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_milestones",
+                new_callable=AsyncMock,
+                return_value=([], 0),
+            ),
         ):
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
@@ -157,6 +181,18 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_context",
+                new_callable=AsyncMock,
+                return_value=([], None, 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_milestones",
+                new_callable=AsyncMock,
+                return_value=([], 0),
+            ),
         ):
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
@@ -192,6 +228,18 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_context",
+                new_callable=AsyncMock,
+                return_value=([], None, 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_milestones",
+                new_callable=AsyncMock,
+                return_value=([], 0),
+            ),
         ):
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
@@ -229,6 +277,18 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_context",
+                new_callable=AsyncMock,
+                return_value=([], None, 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_milestones",
+                new_callable=AsyncMock,
+                return_value=([], 0),
+            ),
         ):
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)

@@ -69,8 +69,12 @@ async def analyze_task_node(
         milestone_repo = MilestoneRepository(session)
         db_milestones = await milestone_repo.get_by_task_id(state["task_id"])
 
+        # Get existing milestones from state (from previous tasks in session)
+        existing_milestones: list[MilestoneData] = list(state.get("milestones", []))
+        sequence_offset = state.get("milestone_sequence_offset", 0)
+
         # Convert to MilestoneData format with actual DB IDs
-        milestones: list[MilestoneData] = []
+        new_milestones: list[MilestoneData] = []
         for i, m in enumerate(milestones_raw):
             # Get DB ID if available, otherwise use placeholder
             db_id = db_milestones[i].id if i < len(db_milestones) else UUID(int=i)
@@ -80,7 +84,7 @@ async def analyze_task_node(
             if not isinstance(complexity, TaskComplexity):
                 complexity = TaskComplexity(complexity)
 
-            milestones.append(
+            new_milestones.append(
                 MilestoneData(
                     id=db_id,
                     description=str(m["description"]),
@@ -95,17 +99,22 @@ async def analyze_task_node(
                 )
             )
 
+        # Combine existing milestones with new ones
+        all_milestones = existing_milestones + new_milestones
+
         logger.info(
             "analyze_task_complete",
             task_id=str(state["task_id"]),
-            milestone_count=len(milestones),
+            new_milestone_count=len(new_milestones),
+            total_milestone_count=len(all_milestones),
+            sequence_offset=sequence_offset,
         )
 
-        # Build milestone details for broadcast
+        # Build milestone details for broadcast (only new milestones)
         milestone_details = {
             "milestones": [
                 {
-                    "index": i + 1,
+                    "index": sequence_offset + i + 1,  # Continue numbering from offset
                     "description": m["description"],
                     "complexity": (
                         m["complexity"].value
@@ -114,7 +123,7 @@ async def analyze_task_node(
                     ),
                     "acceptance_criteria": m["acceptance_criteria"],
                 }
-                for i, m in enumerate(milestones)
+                for i, m in enumerate(new_milestones)
             ]
         }
 
@@ -126,13 +135,14 @@ async def analyze_task_node(
             milestone_id=state["task_id"],
             sequence_number=0,
             agent="conductor",
-            message=f"Created {len(milestones)} milestones",
+            message=f"Created {len(new_milestones)} milestones (total: {len(all_milestones)})",
             details=milestone_details,
         )
 
+        # Return combined milestones, starting index after existing ones
         return {
-            "milestones": milestones,
-            "current_milestone_index": 0,
+            "milestones": all_milestones,
+            "current_milestone_index": len(existing_milestones),  # Start at first new milestone
             "task_status": TaskStatus.IN_PROGRESS,
             "retry_count": 0,
         }

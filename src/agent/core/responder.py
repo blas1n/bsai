@@ -70,7 +70,7 @@ def get_language_name(code: str) -> str:
     Returns:
         Language name in English
     """
-    for lang in Language:
+    for lang in Language.all():
         if lang.iso_code_639_1.name.lower() == code.lower():
             return lang.name.title()
     return "English"

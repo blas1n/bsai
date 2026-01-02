@@ -89,7 +89,7 @@ class TestConductorAgent:
 
         # Mock LLM response with valid JSON
         mock_response = LLMResponse(
-            content='{"milestones": [{"title": "Setup project", "description": "Initialize repo", "complexity": "SIMPLE", "acceptance_criteria": "Repo created"}]}',
+            content='{"milestones": [{"description": "Initialize repo", "complexity": "SIMPLE", "acceptance_criteria": "Repo created"}]}',
             usage=UsageInfo(input_tokens=100, output_tokens=50, total_tokens=150),
             model="test-model",
         )
@@ -188,7 +188,7 @@ class TestConductorAgent:
 
         # Mock LLM response with multiple milestones
         mock_response = LLMResponse(
-            content='{"milestones": [{"title": "M1", "description": "D1", "complexity": "SIMPLE", "acceptance_criteria": "AC1"}, {"title": "M2", "description": "D2", "complexity": "COMPLEX", "acceptance_criteria": "AC2"}]}',
+            content='{"milestones": [{"description": "D1", "complexity": "SIMPLE", "acceptance_criteria": "AC1"}, {"description": "D2", "complexity": "COMPLEX", "acceptance_criteria": "AC2"}]}',
             usage=UsageInfo(input_tokens=100, output_tokens=50, total_tokens=150),
             model="test-model",
         )
