@@ -1,10 +1,14 @@
 """SQLAlchemy declarative base for all models."""
 
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Column
 from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy.orm import DeclarativeBase, declared_attr
+from sqlalchemy.orm import DeclarativeBase
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlalchemy.orm import Mapped
 
 
 class Base(AsyncAttrs, DeclarativeBase):
@@ -13,10 +17,8 @@ class Base(AsyncAttrs, DeclarativeBase):
     Includes:
     - AsyncAttrs for async attribute loading
     - DeclarativeBase for SQLAlchemy 2.0 declarative mapping
+
+    All subclasses must define an `id` column as primary key.
     """
 
-    # Declare id attribute for type checking (actual column defined in subclasses)
-    @declared_attr
-    def id(cls) -> Column[UUID]:
-        """Primary key column - must be overridden in subclasses."""
-        raise NotImplementedError("Subclasses must define id column")
+    id: Mapped[UUID]
