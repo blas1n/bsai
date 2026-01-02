@@ -10,12 +10,13 @@ BSAI is a **LangGraph-based Multi-Agent LLM Orchestration System** with the foll
 ## Architecture
 
 - **LiteLLM**: Direct usage for unified multi-provider LLM access
-- **LangGraph StateGraph**: Orchestrates 5 specialized agents
+- **LangGraph StateGraph**: Orchestrates 7 specialized agents
 - **FastAPI**: REST API with async/await throughout
 
 ## Development Guidelines
 
-For detailed coding conventions and implementation guidelines, see [src/agent/CLAUDE.md](src/agent/CLAUDE.md).
+- **Backend**: [src/agent/CLAUDE.md](src/agent/CLAUDE.md)
+- **Frontend**: [web/CLAUDE.md](web/CLAUDE.md)
 
 ## Quick Reference
 
@@ -52,8 +53,16 @@ python3 -m alembic downgrade -1
 
 ## References
 
+### Backend
 - FastAPI: https://fastapi.tiangolo.com
 - Pydantic: https://docs.pydantic.dev
 - SQLAlchemy: https://docs.sqlalchemy.org/en/20/
 - LangGraph: https://langchain-ai.github.io/langgraph/
 - LiteLLM: https://docs.litellm.ai/
+
+### Frontend
+- Next.js: https://nextjs.org/docs
+- React: https://react.dev
+- Tailwind CSS: https://tailwindcss.com/docs
+- Radix UI: https://www.radix-ui.com/docs
+- Zustand: https://zustand-demo.pmnd.rs/

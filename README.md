@@ -74,15 +74,15 @@
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Responder Agent (Lightweight LLM)                          │
-│  - Detect user's language (75+ languages via lingua-py)    │
-│  - Generate localized, user-friendly response               │
-└─────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
 │  Summarizer Agent (Medium LLM, when memory pressure)        │
 │  - Compress context to free memory                          │
 │  - Preserve key decisions and artifacts                     │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Responder Agent (Lightweight LLM)                          │
+│  - Detect user's language (75+ languages via lingua-py)    │
+│  - Generate localized, user-friendly response               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -149,7 +149,17 @@ API will be available at: http://localhost:8000
 
 API Documentation: http://localhost:8000/docs
 
-### 4. VS Code Dev Container (Recommended)
+### 4. Start Frontend (Optional)
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Dashboard will be available at: http://localhost:3000
+
+### 5. VS Code Dev Container (Recommended)
 
 **Prerequisites**: VS Code + Docker + Dev Containers extension
 
@@ -160,23 +170,39 @@ API Documentation: http://localhost:8000/docs
 
 ## Technology Stack
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **Orchestration** | LangGraph | State machine workflow |
-| **Framework** | FastAPI | Async web framework |
-| **Database** | PostgreSQL 16 | Primary datastore |
-| **Cache** | Redis | Session & caching |
-| **LLM Client** | LiteLLM | Unified multi-provider interface |
-| **ORM** | SQLAlchemy 2.0 | Async database access |
-| **Migrations** | Alembic | Database schema versioning |
-| **Templates** | Jinja2 | Prompt template system |
-| **Token Counting** | tiktoken | Cost estimation |
-| **Language Detection** | lingua-py | 75+ language detection |
-| **Retry Logic** | Tenacity | Exponential backoff |
-| **Logging** | Structlog | Structured JSON logs |
-| **Testing** | pytest | Test framework |
-| **Type Checking** | mypy | Static type analysis |
-| **Docs** | MkDocs Material | Documentation |
+### Backend
+
+| Component              | Technology      | Purpose                          |
+| ---------------------- | --------------- | -------------------------------- |
+| **Orchestration**      | LangGraph       | State machine workflow           |
+| **Framework**          | FastAPI         | Async web framework              |
+| **Database**           | PostgreSQL 16   | Primary datastore                |
+| **Cache**              | Redis           | Session & caching                |
+| **LLM Client**         | LiteLLM         | Unified multi-provider interface |
+| **ORM**                | SQLAlchemy 2.0  | Async database access            |
+| **Migrations**         | Alembic         | Database schema versioning       |
+| **Templates**          | Jinja2          | Prompt template system           |
+| **Token Counting**     | tiktoken        | Cost estimation                  |
+| **Language Detection** | lingua-py       | 75+ language detection           |
+| **Retry Logic**        | Tenacity        | Exponential backoff              |
+| **Logging**            | Structlog       | Structured JSON logs             |
+| **Testing**            | pytest          | Test framework                   |
+| **Type Checking**      | mypy            | Static type analysis             |
+| **Docs**               | MkDocs Material | Documentation                    |
+
+### Frontend
+
+| Component              | Technology      | Purpose                          |
+| ---------------------- | --------------- | -------------------------------- |
+| **Framework**          | Next.js 16      | React framework with App Router  |
+| **UI Library**         | React 19        | Component-based UI               |
+| **Styling**            | Tailwind CSS    | Utility-first CSS                |
+| **UI Components**      | Radix UI        | Accessible component primitives  |
+| **State Management**   | Zustand         | Lightweight state management     |
+| **Data Fetching**      | SWR             | React hooks for data fetching    |
+| **Charts**             | Recharts        | Data visualization               |
+| **Authentication**     | NextAuth.js     | OAuth/Social login               |
+| **Icons**              | Lucide React    | Icon library                     |
 
 ## Directory Structure
 
@@ -184,16 +210,18 @@ API Documentation: http://localhost:8000/docs
 bsai/
 ├── src/agent/                  # Main source code
 │   ├── db/                    # Database layer
-│   │   ├── base.py           # SQLAlchemy declarative base
 │   │   ├── session.py        # Async session factory
 │   │   ├── models/           # 11 SQLAlchemy models
-│   │   └── repository/       # Data access layer
+│   │   │   └── base.py       # SQLAlchemy declarative base
+│   │   └── repository/       # Data access layer (11 repositories)
 │   ├── llm/                  # LLM layer
 │   │   ├── client.py         # LiteLLM wrapper
 │   │   ├── router.py         # LLM selection logic
+│   │   ├── registry.py       # Model registry
 │   │   ├── models.py         # Model definitions with pricing
+│   │   ├── schemas.py        # LLM request/response schemas
 │   │   └── logger.py         # Usage logging
-│   ├── core/                 # Agent implementations
+│   ├── core/                 # Agent implementations (7 agents)
 │   │   ├── conductor.py
 │   │   ├── meta_prompter.py
 │   │   ├── worker.py
@@ -203,20 +231,49 @@ bsai/
 │   │   └── responder.py
 │   ├── graph/                # LangGraph workflow
 │   │   ├── state.py          # AgentState TypedDict
-│   │   ├── nodes.py          # Graph node functions
+│   │   ├── edges.py          # Conditional edge routing
+│   │   ├── broadcast.py      # WebSocket broadcast
+│   │   ├── nodes/            # Graph node functions
 │   │   └── workflow.py       # StateGraph composition
 │   ├── cache/                # Redis cache layer
-│   │   └── redis_client.py   # Redis client wrapper
+│   │   ├── redis_client.py   # Redis client wrapper
+│   │   └── session_cache.py  # Session caching
 │   ├── container/            # Dependency injection
 │   │   └── container.py      # AgentContainer singleton
 │   ├── prompts/              # Prompt system
-│   │   ├── loader.py         # Jinja2 template loader
-│   │   ├── version.py        # Prompt versioning
-│   │   └── templates/        # Agent prompt templates
+│   │   ├── manager.py        # PromptManager
+│   │   ├── keys.py           # Prompt keys enum
+│   │   └── *.yaml            # Agent prompt templates
 │   ├── api/                  # FastAPI layer
+│   │   ├── main.py           # FastAPI app entry
+│   │   ├── config.py         # API configuration
+│   │   ├── auth.py           # Keycloak authentication
+│   │   ├── middleware.py     # Request/Response middleware
+│   │   ├── exceptions.py     # Custom exceptions
+│   │   ├── handlers.py       # Exception handlers
 │   │   ├── dependencies.py   # FastAPI dependencies
-│   │   └── routers/          # API endpoints
-│   └── schemas/              # Pydantic models
+│   │   ├── routers/          # API endpoints
+│   │   ├── schemas/          # Request/Response models
+│   │   ├── services/         # Business logic
+│   │   └── websocket/        # WebSocket handlers
+├── web/                      # Frontend (Next.js)
+│   ├── src/
+│   │   ├── app/             # Next.js App Router
+│   │   │   ├── (dashboard)/ # Dashboard pages
+│   │   │   ├── chat/        # Chat interface
+│   │   │   ├── login/       # Authentication
+│   │   │   └── api/         # API routes (NextAuth)
+│   │   ├── components/      # React components
+│   │   │   ├── ui/          # Base UI components
+│   │   │   ├── chat/        # Chat components
+│   │   │   ├── sessions/    # Session management
+│   │   │   ├── tasks/       # Task views
+│   │   │   └── monitoring/  # Monitoring dashboard
+│   │   ├── hooks/           # Custom React hooks
+│   │   ├── stores/          # Zustand stores
+│   │   ├── providers/       # React context providers
+│   │   ├── lib/             # Utility functions
+│   │   └── types/           # TypeScript types
 ├── tests/                    # Tests
 │   ├── unit/                # Unit tests
 │   ├── integration/         # Integration tests
@@ -394,63 +451,6 @@ mkdocs serve
 - [API Reference](docs/api/rest.md)
 - [Development Guide](docs/guides/development.md)
 
-## Roadmap
-
-### Phase 1: Foundation ✅
-- [x] Database schema (9 tables)
-- [x] Alembic migrations setup
-- [x] All 9 SQLAlchemy models
-- [x] Repository layer (8 repositories)
-- [x] LiteLLM client wrapper
-- [x] Dynamic model pricing with LiteLLM API
-- [x] Custom model support (fine-tuned, self-hosted)
-
-### Phase 2: Core Agents ✅
-- [x] Prompt system (Jinja2 templates + PromptManager)
-- [x] Conductor Agent (task analysis, milestone planning, LLM selection)
-- [x] Meta Prompter Agent (prompt optimization for complex tasks)
-- [x] Worker Agent (task execution with retry support)
-- [x] QA Agent (output validation with structured feedback)
-- [x] Summarizer Agent (context compression)
-
-### Phase 3: LangGraph Workflow ✅
-- [x] AgentState TypedDict with MilestoneData
-- [x] 8 node functions (analyze, select_llm, generate_prompt, execute, verify, check_context, summarize, advance)
-- [x] Conditional edge routing with StrEnum (QARoute, PromptRoute, CompressionRoute, AdvanceRoute)
-- [x] StateGraph composition with workflow.py
-- [x] AgentContainer singleton DI (PromptManager, LiteLLMClient, ModelRegistry, LLMRouter)
-- [x] WorkflowRunner with auto-initialization
-
-### Phase 4: API & Memory ✅
-- [x] FastAPI REST API (sessions, tasks, milestones, snapshots)
-- [x] Redis cache integration (SessionCache with DI)
-- [x] WebSocket streaming (ConnectionManager, real-time updates)
-- [x] Session management (create, pause, resume, complete, delete)
-- [x] Keycloak authentication (fastapi-keycloak, social login only)
-- [x] API documentation (Swagger UI, ReDoc)
-- [x] Custom exceptions (HTTPException inheritance)
-- [x] Request/Response middleware (RequestID, Logging)
-- [x] VSCode launch configurations
-
-### Phase 5: Production (Current)
-- [ ] Comprehensive tests (164 tests passing, expand coverage)
-- [ ] Performance optimization
-- [ ] Monitoring dashboard
-- [ ] Production deployment guide
-- [ ] CI/CD pipeline
-
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](docs/guides/contributing.md) for details.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Write tests for your changes
-4. Implement your changes
-5. Run tests and type checks
-6. Commit with conventional commits (`git commit -m "feat: add amazing feature"`)
-7. Push to your fork
-8. Open a Pull Request
 
 ## License
 
@@ -461,11 +461,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [LangGraph](https://github.com/langchain-ai/langgraph)
 - Powered by [LiteLLM](https://github.com/BerriAI/litellm)
 - Inspired by production LLM orchestration systems
-
-## Contact & Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/bsai/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/bsai/discussions)
 
 ---
 
