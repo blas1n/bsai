@@ -74,6 +74,8 @@ dev = [
     "types-redis>=4.6.0",
     "types-requests>=2.31.0",
     "types-jwcrypto>=1.0.0",
+    "types-Pygments>=2.17.0",
+    "types-PyYAML>=6.0.0",
     "sqlalchemy[mypy]>=2.0.25",
 ]
 docs = [
