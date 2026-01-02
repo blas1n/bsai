@@ -26,7 +26,7 @@ class Artifact(Base):
         milestone_id: Foreign key to milestones table (optional)
         artifact_type: Type of artifact (code, file, document)
         filename: Filename or identifier
-        language: Programming language (for code artifacts)
+        kind: File type/extension (e.g., 'js', 'py', 'html', 'md', 'json')
         content: Full content of the artifact
         path: Optional path within project structure
         sequence_number: Order within task (for multiple artifacts)
@@ -42,9 +42,9 @@ class Artifact(Base):
     )
     artifact_type: Mapped[str] = mapped_column(VARCHAR(20), default="code")
     filename: Mapped[str] = mapped_column(VARCHAR(255))
-    language: Mapped[str | None] = mapped_column(VARCHAR(50), nullable=True)
+    kind: Mapped[str] = mapped_column(VARCHAR(50))
     content: Mapped[str] = mapped_column(TEXT)
-    path: Mapped[str | None] = mapped_column(VARCHAR(500), nullable=True)
+    path: Mapped[str] = mapped_column(VARCHAR(500))
     sequence_number: Mapped[int] = mapped_column(INTEGER, default=0)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
@@ -63,7 +63,7 @@ class Artifact(Base):
             "milestone_id": str(self.milestone_id) if self.milestone_id else None,
             "type": self.artifact_type,
             "filename": self.filename,
-            "language": self.language,
+            "kind": self.kind,
             "content": self.content,
             "path": self.path,
             "sequence_number": self.sequence_number,

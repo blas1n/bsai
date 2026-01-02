@@ -4,82 +4,18 @@
 # - milestone_description: Original milestone description
 # - acceptance_criteria: Success criteria
 # - worker_output: Output to validate
-# - attempt_number: Current attempt number
-# - max_retries: Maximum retry attempts allowed
-# - retry_context: Optional retry context message
 
 validation_prompt: |
-  You are a QA Agent responsible for validating Worker outputs against acceptance criteria.
+  Validate Worker output against acceptance criteria.
 
-  MILESTONE OBJECTIVE:
-  ${milestone_description}
+  MILESTONE: ${milestone_description}
+  CRITERIA: ${acceptance_criteria}
 
-  ACCEPTANCE CRITERIA:
-  ${acceptance_criteria}
-
-  WORKER OUTPUT:
+  OUTPUT TO VALIDATE:
   ${worker_output}
-  % if retry_context:
-  ${retry_context}
-  % endif
 
-  YOUR TASK:
-  Evaluate whether the Worker output successfully meets the acceptance criteria.
+  ${worker_capabilities()}
 
-  CRITICAL - UNDERSTAND THE WORKER'S ROLE:
-  The Worker is a TEXT GENERATION agent. It can ONLY:
-  - Generate code, documentation, explanations, guides, plans
-  - Provide instructions, tutorials, configuration examples
-  - Create content that users can then use themselves
-
-  The Worker CANNOT:
-  - Deploy applications or create live URLs
-  - Execute code or run servers
-  - Create files on external systems
-  - Perform any actions in the real world
-  - Provide "live links" or "working demos"
-
-  EVALUATION GUIDELINES:
-  1. Check if all acceptance criteria are met BY THE TEXT OUTPUT
-  2. Verify factual accuracy and completeness of the generated content
-  3. Assess quality and clarity of the output
-  4. If criteria mention "deploy" or "URL": evaluate if deployment INSTRUCTIONS are provided
-  5. If criteria mention "working" or "functional": evaluate if the CODE is correct and complete
-
-  SCOPE OF EVALUATION (STRICTLY FOLLOW):
-  - Evaluate ONLY the text/code/content the Worker produced
-  - Do NOT require external actions (deployment, file creation, URL access, running code)
-  - Do NOT fail because there's no live demo, URL, or running instance
-  - If the Worker provides complete, correct deployment instructions → PASS
-  - If the Worker provides complete, correct code → PASS
-  - The absence of a "live link" is NEVER a valid reason to RETRY
-
-  EXAMPLES OF CORRECT EVALUATION:
-  - Criteria: "Deploy a web game" → Worker provides deployment guide and code → PASS ✓
-  - Criteria: "Provide a URL" → Worker explains how to get URL after deployment → PASS ✓
-  - Criteria: "Create working app" → Worker provides complete, correct code → PASS ✓
-
-  DECISION OPTIONS:
-  - PASS: Output meets what the Worker CAN produce
-  - RETRY: Output has fixable issues IN THE GENERATED CONTENT (not missing external actions)
-
-  OUTPUT FORMAT (JSON):
-  {
-    "decision": "PASS" | "RETRY",
-    "feedback": "Detailed explanation of decision and any issues found",
-    "issues": ["List", "of", "specific", "issues"] (if RETRY),
-    "suggestions": ["Specific", "improvement", "suggestions"] (if RETRY)
-  }
-
-  IMPORTANT:
-  - Be objective and constructive
-  - Provide specific, actionable feedback
-  - Be lenient - PASS if output reasonably addresses what the Worker CAN produce
-  - Only RETRY if there are issues the Worker can FIX (code bugs, missing content, unclear explanations)
-  - NEVER RETRY because of missing live URLs, deployments, or external actions
-  - Return ONLY valid JSON, no additional text
-
-# Retry context template
-retry_context_template: |
-
-  NOTE: This is attempt ${attempt_number} of ${max_retries}. Previous attempts were not satisfactory.
+  EVALUATION RULES:
+  - PASS: Output meets criteria
+  - RETRY: Output has fixable issues (bugs, missing content, unclear explanations)

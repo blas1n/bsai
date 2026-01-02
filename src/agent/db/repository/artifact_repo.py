@@ -60,9 +60,9 @@ class ArtifactRepository(BaseRepository[Artifact]):
         artifact_type: str,
         filename: str,
         content: str,
+        kind: str,
+        path: str,
         milestone_id: UUID | None = None,
-        language: str | None = None,
-        path: str | None = None,
         sequence_number: int = 0,
     ) -> Artifact:
         """Create a new artifact.
@@ -72,9 +72,9 @@ class ArtifactRepository(BaseRepository[Artifact]):
             artifact_type: Type of artifact (code, file, document)
             filename: Filename or identifier
             content: Full content of the artifact
+            kind: File type/extension (e.g., 'js', 'py', 'html', 'md')
+            path: File path within project
             milestone_id: Optional milestone UUID
-            language: Programming language (for code)
-            path: Optional path within project
             sequence_number: Order within task
 
         Returns:
@@ -85,7 +85,7 @@ class ArtifactRepository(BaseRepository[Artifact]):
             milestone_id=milestone_id,
             artifact_type=artifact_type,
             filename=filename,
-            language=language,
+            kind=kind,
             content=content,
             path=path,
             sequence_number=sequence_number,

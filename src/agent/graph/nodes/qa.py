@@ -65,7 +65,6 @@ async def verify_qa_node(
             router=container.router,
             prompt_manager=container.prompt_manager,
             session=session,
-            max_retries=3,
         )
 
         decision, feedback = await qa.validate_output(
@@ -73,7 +72,6 @@ async def verify_qa_node(
             milestone_description=milestone["description"],
             acceptance_criteria=milestone["acceptance_criteria"],
             worker_output=milestone["worker_output"] or "",
-            attempt_number=retry_count + 1,
         )
 
         # Update milestone with QA result (immutable)

@@ -4,6 +4,7 @@ Async wrapper around LiteLLM with error handling and retries.
 """
 
 from collections.abc import AsyncIterator
+from typing import Any, cast
 
 import litellm
 import structlog
@@ -64,7 +65,7 @@ class LiteLLMClient:
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
 
         # Build request parameters
-        params: dict[str, object] = {
+        params: dict[str, Any] = {
             "model": request.model,
             "messages": messages,
             "temperature": request.temperature,
@@ -79,24 +80,30 @@ class LiteLLMClient:
         if request.api_key is not None:
             params["api_key"] = request.api_key
 
+        if request.response_format:
+            params["response_format"] = request.response_format
+
         # Make API call through LiteLLM
-        response = await litellm.acompletion(**params)
+        response = cast(Any, await litellm.acompletion(**params))
 
         # Extract response data
-        choice = response["choices"][0]
-        content = choice["message"]["content"]
-        finish_reason = choice.get("finish_reason")
+        choice = response.choices[0]
+        content: str = choice.message.content or ""
+        finish_reason: str | None = choice.finish_reason
 
         # Build usage info
+        response_usage = response.usage
         usage = UsageInfo(
-            input_tokens=response["usage"]["prompt_tokens"],
-            output_tokens=response["usage"]["completion_tokens"],
-            total_tokens=response["usage"]["total_tokens"],
+            input_tokens=response_usage.prompt_tokens,
+            output_tokens=response_usage.completion_tokens,
+            total_tokens=response_usage.total_tokens,
         )
+
+        model_name: str = response.model or request.model
 
         logger.info(
             "llm_chat_completion_success",
-            model=response["model"],
+            model=model_name,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
             finish_reason=finish_reason,
@@ -105,7 +112,7 @@ class LiteLLMClient:
         return LLMResponse(
             content=content,
             usage=usage,
-            model=response["model"],
+            model=model_name,
             finish_reason=finish_reason,
         )
 
@@ -140,7 +147,7 @@ class LiteLLMClient:
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
 
         # Build request parameters
-        params: dict[str, object] = {
+        params: dict[str, Any] = {
             "model": request.model,
             "messages": messages,
             "temperature": request.temperature,
@@ -157,12 +164,12 @@ class LiteLLMClient:
             params["api_key"] = request.api_key
 
         # Make streaming API call through LiteLLM
-        stream = await litellm.acompletion(**params)
+        stream = cast(Any, await litellm.acompletion(**params))
 
         chunk_count = 0
         async for chunk in stream:
-            if chunk["choices"] and chunk["choices"][0].get("delta", {}).get("content"):
-                content = chunk["choices"][0]["delta"]["content"]
+            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
                 chunk_count += 1
                 yield content
 

@@ -67,7 +67,6 @@ def qa_agent(
         router=mock_router,
         prompt_manager=mock_prompt_manager,
         session=mock_session,
-        max_retries=3,
     )
     # Mock the milestone_repo that gets created internally
     agent.milestone_repo = MagicMock()
@@ -144,7 +143,6 @@ class TestQAAgent:
             milestone_description=milestone_description,
             acceptance_criteria=acceptance_criteria,
             worker_output=worker_output,
-            attempt_number=1,
         )
 
         # Verify
@@ -161,59 +159,20 @@ class TestQAAgent:
         assert len(update_calls) == 0
 
     @pytest.mark.asyncio
-    async def test_validate_output_fail_max_retries(
+    async def test_validate_output_structured_feedback(
         self,
         qa_agent: QAAgent,
         mock_llm_client: MagicMock,
     ) -> None:
-        """Test validation fails after max retries."""
+        """Test structured feedback with issues and suggestions."""
         milestone_id = uuid4()
         milestone_description = "Implement login"
         acceptance_criteria = "Users can login"
         worker_output = "Bad implementation"
 
-        # Mock LLM response with RETRY
+        # Mock LLM response with RETRY including issues and suggestions
         mock_response = LLMResponse(
-            content='{"decision": "RETRY", "feedback": "Still has issues"}',
-            usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
-            model="test-model",
-        )
-        mock_llm_client.chat_completion.return_value = mock_response
-
-        # Execute with attempt_number = max_retries
-        decision, feedback = await qa_agent.validate_output(
-            milestone_id=milestone_id,
-            milestone_description=milestone_description,
-            acceptance_criteria=acceptance_criteria,
-            worker_output=worker_output,
-            attempt_number=3,  # max_retries
-        )
-
-        # Verify - should convert RETRY to FAIL
-        assert decision == QADecision.FAIL
-        assert "still has issues" in feedback.lower()
-
-        # Check milestone status was updated to "fail" (enum value)
-        mock_repo = cast(MagicMock, qa_agent.milestone_repo)
-        mock_repo.update.assert_called()
-        update_call = mock_repo.update.call_args
-        assert update_call.kwargs["status"] == QADecision.FAIL.value
-
-    @pytest.mark.asyncio
-    async def test_validate_output_explicit_fail(
-        self,
-        qa_agent: QAAgent,
-        mock_llm_client: MagicMock,
-    ) -> None:
-        """Test validation with explicit FAIL decision."""
-        milestone_id = uuid4()
-        milestone_description = "Implement login"
-        acceptance_criteria = "Users can login"
-        worker_output = "Wrong feature implemented"
-
-        # Mock LLM response with FAIL
-        mock_response = LLMResponse(
-            content='{"decision": "FAIL", "feedback": "Completely wrong implementation"}',
+            content='{"decision": "RETRY", "feedback": "Still has issues", "issues": ["Missing validation", "No error handling"], "suggestions": ["Add input validation"]}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -227,8 +186,43 @@ class TestQAAgent:
             worker_output=worker_output,
         )
 
-        # Verify - FAIL is converted to RETRY at attempt 1 (not max_retries)
-        # Per qa_agent.py logic: FAIL from LLM is treated as RETRY
+        # Verify decision and feedback structure
+        assert decision == QADecision.RETRY
+        assert "still has issues" in feedback.lower()
+        assert "issues found" in feedback.lower()
+        assert "missing validation" in feedback.lower()
+        assert "suggestions" in feedback.lower()
+        assert "add input validation" in feedback.lower()
+
+    @pytest.mark.asyncio
+    async def test_validate_output_non_pass_becomes_retry(
+        self,
+        qa_agent: QAAgent,
+        mock_llm_client: MagicMock,
+    ) -> None:
+        """Test that non-PASS decisions become RETRY (QA only returns PASS or RETRY)."""
+        milestone_id = uuid4()
+        milestone_description = "Implement login"
+        acceptance_criteria = "Users can login"
+        worker_output = "Wrong feature implemented"
+
+        # Mock LLM response with RETRY (now structured output enforces PASS/RETRY)
+        mock_response = LLMResponse(
+            content='{"decision": "RETRY", "feedback": "Wrong implementation approach"}',
+            usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
+            model="test-model",
+        )
+        mock_llm_client.chat_completion.return_value = mock_response
+
+        # Execute
+        decision, feedback = await qa_agent.validate_output(
+            milestone_id=milestone_id,
+            milestone_description=milestone_description,
+            acceptance_criteria=acceptance_criteria,
+            worker_output=worker_output,
+        )
+
+        # Verify RETRY decision
         assert decision == QADecision.RETRY
         assert "wrong implementation" in feedback.lower()
 
@@ -239,15 +233,15 @@ class TestQAAgent:
         assert update_call.kwargs["status"] == QADecision.RETRY.value
 
     @pytest.mark.asyncio
-    async def test_validate_output_invalid_decision(
+    async def test_validate_output_invalid_decision_raises_error(
         self,
         qa_agent: QAAgent,
         mock_llm_client: MagicMock,
     ) -> None:
-        """Test handling of invalid decision from LLM."""
+        """Test handling of invalid decision from LLM raises ValueError."""
         milestone_id = uuid4()
 
-        # Mock LLM response with invalid decision
+        # Mock LLM response with invalid decision (would fail Pydantic validation)
         mock_response = LLMResponse(
             content='{"decision": "MAYBE", "feedback": "Not sure"}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
@@ -255,25 +249,23 @@ class TestQAAgent:
         )
         mock_llm_client.chat_completion.return_value = mock_response
 
-        # Execute - should default to RETRY
-        decision, feedback = await qa_agent.validate_output(
-            milestone_id=milestone_id,
-            milestone_description="Test",
-            acceptance_criteria="Done",
-            worker_output="Output",
-        )
-
-        # Should fallback to RETRY for safety
-        assert decision == QADecision.RETRY
+        # Execute - should raise ValueError due to Pydantic validation failure
+        with pytest.raises(ValueError, match="Failed to parse QA response"):
+            await qa_agent.validate_output(
+                milestone_id=milestone_id,
+                milestone_description="Test",
+                acceptance_criteria="Done",
+                worker_output="Output",
+            )
 
     @pytest.mark.asyncio
-    async def test_validate_output_retry_context_template(
+    async def test_validate_output_prompt_rendering(
         self,
         qa_agent: QAAgent,
         mock_llm_client: MagicMock,
         mock_prompt_manager: MagicMock,
     ) -> None:
-        """Test retry context template rendering."""
+        """Test validation prompt is properly rendered."""
         milestone_id = uuid4()
 
         # Mock LLM response
@@ -284,17 +276,20 @@ class TestQAAgent:
         )
         mock_llm_client.chat_completion.return_value = mock_response
 
-        # Execute with attempt > 1
+        # Execute
         await qa_agent.validate_output(
             milestone_id=milestone_id,
-            milestone_description="Test",
-            acceptance_criteria="Done",
-            worker_output="Output",
-            attempt_number=2,
+            milestone_description="Test milestone",
+            acceptance_criteria="Must be done",
+            worker_output="Output content",
         )
 
-        # Verify prompt was rendered
+        # Verify prompt was rendered with correct arguments
         mock_prompt_manager.render.assert_called_once()
+        render_call = mock_prompt_manager.render.call_args
+        assert render_call.kwargs["milestone_description"] == "Test milestone"
+        assert render_call.kwargs["acceptance_criteria"] == "Must be done"
+        assert render_call.kwargs["worker_output"] == "Output content"
 
     @pytest.mark.asyncio
     async def test_validate_output_cost_tracking(

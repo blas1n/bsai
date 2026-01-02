@@ -16,6 +16,7 @@ from agent.api.config import get_agent_settings
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMResponse, LLMRouter
+from agent.llm.schemas import WorkerOutput
 from agent.prompts import PromptManager, WorkerPrompts
 
 logger = structlog.get_logger()
@@ -103,7 +104,7 @@ class WorkerAgent:
             messages.extend(context_messages)
         messages.append(ChatMessage(role="user", content=prompt))
 
-        # Execute task
+        # Execute task with structured output
         settings = get_agent_settings()
         request = LLMRequest(
             model=model.name,
@@ -111,6 +112,14 @@ class WorkerAgent:
             temperature=settings.worker_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "worker_output",
+                    "strict": True,
+                    "schema": WorkerOutput.model_json_schema(),
+                },
+            },
         )
 
         response = await self.llm_client.chat_completion(request)
