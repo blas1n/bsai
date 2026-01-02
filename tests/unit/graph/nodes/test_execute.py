@@ -7,7 +7,7 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
-from agent.graph.nodes import execute_worker_node
+from agent.graph.nodes.execute import execute_worker_node
 from agent.graph.state import AgentState, MilestoneData
 from agent.llm import LLMResponse, UsageInfo
 

@@ -39,7 +39,8 @@ def _get_extension_for_language(language: str) -> str:
         if lexer.filenames:
             for pattern in lexer.filenames:
                 if "*." in pattern:
-                    return pattern.replace("*", "")
+                    ext: str = pattern.replace("*", "")
+                    return ext
             return ""
         return ".txt"
     except ClassNotFound:

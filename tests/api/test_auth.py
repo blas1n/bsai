@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException, WebSocketDisconnect
+from fastapi import WebSocketDisconnect
 
 from agent.api.auth import (
     authenticate_websocket,
@@ -86,11 +86,11 @@ class TestGetCurrentUserId:
         with patch("agent.api.auth.get_user", new_callable=AsyncMock) as mock_get_user:
             mock_get_user.return_value = None
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(AuthenticationError) as exc_info:
                 await get_current_user_id(mock_request)
 
             assert exc_info.value.status_code == 401
-            assert exc_info.value.detail == "Not authenticated"
+            assert exc_info.value.message == "Not authenticated"
 
 
 class TestAuthenticateWebsocket:
@@ -142,11 +142,11 @@ class TestAuthenticateWebsocket:
                 side_effect=Exception("Connection failed")
             )
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(AuthenticationError) as exc_info:
                 await authenticate_websocket("invalid-token")
 
             assert exc_info.value.status_code == 401
-            assert exc_info.value.detail == "Invalid token"
+            assert exc_info.value.message == "Invalid token"
 
 
 class TestAuthenticateWebsocketConnection:

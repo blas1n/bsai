@@ -41,7 +41,8 @@ def get_ws_manager(request: Request) -> ConnectionManager:
     Returns:
         ConnectionManager instance
     """
-    return request.app.state.ws_manager
+    manager: ConnectionManager = request.app.state.ws_manager
+    return manager
 
 
 # Type aliases for cleaner route signatures

@@ -52,7 +52,8 @@ class BaseRepository(Generic[ModelType]):
         Returns:
             Model instance or None if not found
         """
-        stmt = select(self.model).where(self.model.id == id)  # type: ignore[attr-defined]
+        id_column = self.model.id
+        stmt = select(self.model).where(id_column == id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
