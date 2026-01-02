@@ -29,9 +29,7 @@ class SystemPromptRepository(BaseRepository[SystemPrompt]):
             Active system prompt or None if not found
         """
         stmt = select(SystemPrompt).where(
-            SystemPrompt.agent_type == agent_type,
-            SystemPrompt.name == name,
-            SystemPrompt.is_active == True,  # noqa: E712
+            SystemPrompt.agent_type == agent_type, SystemPrompt.name == name, SystemPrompt.is_active
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

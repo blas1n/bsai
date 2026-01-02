@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 from agent.core.qa_agent import QADecision
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
-from agent.graph.nodes import advance_node
+from agent.graph.nodes.advance import advance_node
 from agent.graph.state import AgentState, MilestoneData
 
 

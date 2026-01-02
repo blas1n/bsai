@@ -7,7 +7,7 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 
 from agent.db.models.enums import TaskComplexity, TaskStatus
-from agent.graph.nodes import analyze_task_node
+from agent.graph.nodes.analyze import analyze_task_node
 from agent.graph.state import AgentState
 
 

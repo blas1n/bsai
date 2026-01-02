@@ -26,18 +26,14 @@ from .edges import (
     should_compress_context,
     should_use_meta_prompter,
 )
-from .nodes import (
-    Node,
-    advance_node,
-    analyze_task_node,
-    check_context_node,
-    execute_worker_node,
-    generate_prompt_node,
-    generate_response_node,
-    select_llm_node,
-    summarize_node,
-    verify_qa_node,
-)
+from .nodes import Node
+from .nodes.advance import advance_node
+from .nodes.analyze import analyze_task_node
+from .nodes.context import check_context_node, summarize_node
+from .nodes.execute import execute_worker_node
+from .nodes.llm import generate_prompt_node, select_llm_node
+from .nodes.qa import verify_qa_node
+from .nodes.response import generate_response_node
 from .state import AgentState
 
 if TYPE_CHECKING:
@@ -68,7 +64,8 @@ def _create_node_with_session(
     from langchain_core.runnables import RunnableConfig
 
     async def wrapper(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
-        return await node_func(state, config, session)
+        result: dict[str, Any] = await node_func(state, config, session)
+        return result
 
     # Preserve the original function name for debugging
     wrapper.__name__ = node_func.__name__

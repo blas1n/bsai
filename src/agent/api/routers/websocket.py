@@ -11,7 +11,8 @@ router = APIRouter(tags=["websocket"])
 
 def _get_manager(websocket: WebSocket) -> ConnectionManager:
     """Get the WebSocket connection manager from app state."""
-    return websocket.app.state.ws_manager
+    manager: ConnectionManager = websocket.app.state.ws_manager
+    return manager
 
 
 @router.websocket("/ws")

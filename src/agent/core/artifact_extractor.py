@@ -36,12 +36,12 @@ def _get_extension_for_language(language: str) -> str:
     """
     try:
         lexer = get_lexer_by_name(language.lower())
-        if lexer.filenames:
-            for pattern in lexer.filenames:
-                if "*." in pattern:
-                    return pattern.replace("*", "")
-            return ""
-        return ".txt"
+        filenames: list[str] = getattr(lexer, "filenames", [])
+        for pattern in filenames:
+            if "*." in pattern:
+                ext: str = pattern.replace("*", "")
+                return ext
+        return ".txt" if not filenames else ""
     except ClassNotFound:
         return ".txt"
 

@@ -1,13 +1,13 @@
 """Tests for QA verification node."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 from langchain_core.runnables import RunnableConfig
 
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
-from agent.graph.nodes import verify_qa_node
+from agent.graph.nodes.qa import verify_qa_node
 from agent.graph.state import AgentState, MilestoneData
 
 
@@ -17,7 +17,6 @@ class TestVerifyQaNode:
     @pytest.mark.asyncio
     async def test_pass_decision(
         self,
-        mock_container: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
     ) -> None:

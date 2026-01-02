@@ -368,7 +368,6 @@ class TaskService:
                     db_session,
                     ws_manager=self.ws_manager if stream else None,
                 )
-                await runner.initialize()
 
                 # Execute workflow
                 final_state = await runner.run(

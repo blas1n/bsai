@@ -6,7 +6,7 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 
 from agent.db.models.enums import MilestoneStatus
-from agent.graph.nodes import generate_prompt_node, select_llm_node
+from agent.graph.nodes.llm import generate_prompt_node, select_llm_node
 from agent.graph.state import AgentState
 
 
@@ -16,7 +16,6 @@ class TestSelectLlmNode:
     @pytest.mark.asyncio
     async def test_success(
         self,
-        mock_container: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         state_with_milestone: AgentState,

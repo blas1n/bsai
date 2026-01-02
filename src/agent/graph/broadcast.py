@@ -62,7 +62,7 @@ async def broadcast_agent_started(
                     status=MilestoneStatus.IN_PROGRESS,
                     agent=agent,
                     message=message,
-                    details=details,
+                    details=details or {},
                 ).model_dump(),
             ),
         )
@@ -118,7 +118,7 @@ async def broadcast_agent_completed(
                     status=status,
                     agent=agent,
                     message=message,
-                    details=details,
+                    details=details or {},
                 ).model_dump(),
             ),
         )

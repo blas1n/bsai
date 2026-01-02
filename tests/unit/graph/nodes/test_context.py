@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from agent.graph.nodes import check_context_node, summarize_node
+from agent.graph.nodes.context import check_context_node, summarize_node
 from agent.graph.state import AgentState
 from agent.llm import ChatMessage
 
