@@ -162,7 +162,7 @@ class ResponderAgent:
             model=model.name,
             messages=messages,
             temperature=settings.worker_temperature,
-            max_tokens=500,  # Keep response concise
+            max_tokens=2000,
             api_base=model.api_base,
             api_key=model.api_key,
         )

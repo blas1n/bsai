@@ -69,16 +69,19 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
 
   // Accumulate all milestones from all assistant messages in the session
   const currentMilestones = useMemo(() => {
-    const allMilestones: MilestoneInfo[] = [];
+    const milestonesMap = new Map<string, MilestoneInfo>();
 
     // Collect milestones from all assistant messages (including previous tasks in session)
+    // Use Map to deduplicate by ID, keeping the latest version
     messages.forEach((m) => {
       if (m.role === 'assistant' && m.milestones?.length) {
-        allMilestones.push(...m.milestones);
+        m.milestones.forEach((milestone) => {
+          milestonesMap.set(milestone.id, milestone);
+        });
       }
     });
 
-    return allMilestones;
+    return Array.from(milestonesMap.values());
   }, [messages]);
 
   // Get the latest task ID (for artifact download)

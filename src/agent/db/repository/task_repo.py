@@ -22,7 +22,11 @@ class TaskRepository(BaseRepository[Task]):
         super().__init__(Task, session)
 
     async def get_by_session_id(
-        self, session_id: UUID, limit: int = 50, offset: int = 0
+        self,
+        session_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+        oldest_first: bool = False,
     ) -> list[Task]:
         """Get tasks by session ID.
 
@@ -30,14 +34,16 @@ class TaskRepository(BaseRepository[Task]):
             session_id: Session UUID
             limit: Maximum number of tasks to return
             offset: Number of tasks to skip
+            oldest_first: If True, order by oldest first (asc), otherwise newest first (desc)
 
         Returns:
             List of tasks for the session
         """
+        order = Task.created_at.asc() if oldest_first else Task.created_at.desc()
         stmt = (
             select(Task)
             .where(Task.session_id == session_id)
-            .order_by(Task.created_at.desc())
+            .order_by(order)
             .limit(limit)
             .offset(offset)
         )
