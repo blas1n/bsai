@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,6 +18,25 @@ if TYPE_CHECKING:
 def get_unwrapped(method: Any) -> Callable[..., Any]:
     """Get the unwrapped function from a tenacity-decorated method."""
     return method.__wrapped__
+
+
+def create_mock_response(
+    content: str = "Response",
+    finish_reason: str = "stop",
+    prompt_tokens: int = 10,
+    completion_tokens: int = 10,
+    model: str = "gpt-4",
+) -> MagicMock:
+    """Create a mock LiteLLM response with proper attribute access."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = content
+    mock_response.choices[0].finish_reason = finish_reason
+    mock_response.usage.prompt_tokens = prompt_tokens
+    mock_response.usage.completion_tokens = completion_tokens
+    mock_response.usage.total_tokens = prompt_tokens + completion_tokens
+    mock_response.model = model
+    return mock_response
 
 
 @pytest.fixture
@@ -50,20 +69,13 @@ class TestChatCompletion:
         sample_request: LLMRequest,
     ) -> None:
         """Returns response on successful completion."""
-        mock_response = {
-            "choices": [
-                {
-                    "message": {"content": "Hello! How can I help?"},
-                    "finish_reason": "stop",
-                }
-            ],
-            "usage": {
-                "prompt_tokens": 20,
-                "completion_tokens": 10,
-                "total_tokens": 30,
-            },
-            "model": "gpt-4",
-        }
+        mock_response = create_mock_response(
+            content="Hello! How can I help?",
+            finish_reason="stop",
+            prompt_tokens=20,
+            completion_tokens=10,
+            model="gpt-4",
+        )
 
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
@@ -91,11 +103,12 @@ class TestChatCompletion:
             api_key="custom-key",
         )
 
-        mock_response = {
-            "choices": [{"message": {"content": "Response"}, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
-            "model": "claude-3-opus",
-        }
+        mock_response = create_mock_response(
+            content="Response",
+            prompt_tokens=5,
+            completion_tokens=5,
+            model="claude-3-opus",
+        )
 
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
@@ -121,11 +134,11 @@ class TestChatCompletion:
             max_tokens=None,
         )
 
-        mock_response = {
-            "choices": [{"message": {"content": "Response"}, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
-            "model": "gpt-4",
-        }
+        mock_response = create_mock_response(
+            content="Response",
+            prompt_tokens=5,
+            completion_tokens=5,
+        )
 
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
@@ -142,11 +155,7 @@ class TestChatCompletion:
         sample_request: LLMRequest,
     ) -> None:
         """Logs completion start and success."""
-        mock_response = {
-            "choices": [{"message": {"content": "Response"}, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
-            "model": "gpt-4",
-        }
+        mock_response = create_mock_response()
 
         with (
             patch("agent.llm.client.litellm.acompletion", return_value=mock_response),
@@ -163,15 +172,11 @@ class TestChatCompletion:
         sample_request: LLMRequest,
     ) -> None:
         """Retries on transient failures."""
-        mock_response = {
-            "choices": [{"message": {"content": "Response"}, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
-            "model": "gpt-4",
-        }
+        mock_response = create_mock_response()
 
         call_count = 0
 
-        async def mock_completion(**kwargs: object) -> dict[str, object]:
+        async def mock_completion(**kwargs: object) -> MagicMock:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
@@ -204,6 +209,18 @@ class TestChatCompletion:
                 await client.chat_completion(sample_request)
 
 
+def create_stream_chunk(content: str | None = None) -> MagicMock:
+    """Create a mock stream chunk with proper attribute access."""
+    chunk = MagicMock()
+    if content is not None:
+        chunk.choices = [MagicMock()]
+        chunk.choices[0].delta.content = content
+    else:
+        chunk.choices = [MagicMock()]
+        chunk.choices[0].delta.content = None
+    return chunk
+
+
 class TestStreamCompletion:
     """Tests for stream_completion method."""
 
@@ -216,13 +233,8 @@ class TestStreamCompletion:
         """Yields content from stream chunks."""
 
         async def mock_stream():
-            chunks = [
-                {"choices": [{"delta": {"content": "Hello"}}]},
-                {"choices": [{"delta": {"content": " World"}}]},
-                {"choices": [{"delta": {"content": "!"}}]},
-            ]
-            for chunk in chunks:
-                yield chunk
+            for content in ["Hello", " World", "!"]:
+                yield create_stream_chunk(content)
 
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_stream()
@@ -242,14 +254,16 @@ class TestStreamCompletion:
         """Skips chunks without content."""
 
         async def mock_stream():
-            chunks = [
-                {"choices": [{"delta": {}}]},  # No content
-                {"choices": [{"delta": {"content": "Hello"}}]},
-                {"choices": []},  # Empty choices
-                {"choices": [{"delta": {"content": "!"}}]},
-            ]
-            for chunk in chunks:
-                yield chunk
+            # Chunk with no content
+            yield create_stream_chunk(None)
+            # Chunk with content
+            yield create_stream_chunk("Hello")
+            # Empty choices
+            empty_chunk = MagicMock()
+            empty_chunk.choices = []
+            yield empty_chunk
+            # Chunk with content
+            yield create_stream_chunk("!")
 
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_stream()
@@ -269,7 +283,7 @@ class TestStreamCompletion:
         """Sets stream=True in API call."""
 
         async def mock_stream():
-            yield {"choices": [{"delta": {"content": "Test"}}]}
+            yield create_stream_chunk("Test")
 
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_stream()
@@ -290,7 +304,7 @@ class TestStreamCompletion:
         """Logs stream start and success."""
 
         async def mock_stream():
-            yield {"choices": [{"delta": {"content": "Test"}}]}
+            yield create_stream_chunk("Test")
 
         with (
             patch("agent.llm.client.litellm.acompletion", return_value=mock_stream()),

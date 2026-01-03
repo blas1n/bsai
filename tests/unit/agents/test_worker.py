@@ -215,12 +215,15 @@ class TestWorkerAgent:
         # Verify
         assert result.content == "Improved implementation"
 
-        # Check retry prompt was generated
-        mock_prompt_manager.render.assert_called_once()
-        render_call = mock_prompt_manager.render.call_args
-        assert render_call.kwargs["previous_output"] == previous_output
-        assert render_call.kwargs["qa_feedback"] == qa_feedback
-        assert render_call.kwargs["original_prompt"] == original_prompt
+        # Check retry prompt was generated (render is called twice:
+        # once for RETRY_PROMPT in retry_with_feedback, once for SYSTEM_PROMPT in execute_milestone)
+        assert mock_prompt_manager.render.call_count == 2
+
+        # First call should be for retry prompt
+        first_call = mock_prompt_manager.render.call_args_list[0]
+        assert first_call.kwargs["previous_output"] == previous_output
+        assert first_call.kwargs["qa_feedback"] == qa_feedback
+        assert first_call.kwargs["original_prompt"] == original_prompt
 
     @pytest.mark.asyncio
     async def test_execute_milestone_all_complexities(
