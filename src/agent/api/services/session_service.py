@@ -183,7 +183,7 @@ class SessionService:
         session_responses = []
         for session in sessions:
             response = SessionResponse.model_validate(session)
-            tasks = await self.task_repo.get_by_session_id(session.id, limit=1)
+            tasks = await self.task_repo.get_by_session_id(session.id, limit=1, oldest_first=True)
             if tasks:
                 title = tasks[0].original_request[:50]
                 if len(tasks[0].original_request) > 50:

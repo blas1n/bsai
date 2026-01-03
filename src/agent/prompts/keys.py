@@ -27,7 +27,6 @@ class QAAgentPrompts(str, Enum):
     """Prompt keys for QA Agent."""
 
     VALIDATION_PROMPT = "validation_prompt"
-    RETRY_CONTEXT_TEMPLATE = "retry_context_template"
 
 
 class SummarizerPrompts(str, Enum):

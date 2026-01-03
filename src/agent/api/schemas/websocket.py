@@ -65,6 +65,17 @@ class WSMessage(BaseModel):
 # Task Event Payloads
 
 
+class PreviousMilestoneInfo(BaseModel):
+    """Previous milestone info for session continuity."""
+
+    id: UUID
+    sequence_number: int
+    description: str
+    complexity: str
+    status: str
+    worker_output: str | None = None
+
+
 class TaskStartedPayload(BaseModel):
     """Payload for TASK_STARTED event."""
 
@@ -72,6 +83,7 @@ class TaskStartedPayload(BaseModel):
     session_id: UUID
     original_request: str
     milestone_count: int = 0
+    previous_milestones: list[PreviousMilestoneInfo] = Field(default_factory=list)
 
 
 class TaskProgressPayload(BaseModel):

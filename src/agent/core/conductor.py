@@ -7,7 +7,6 @@ The Conductor is responsible for:
 4. Monitoring context usage
 """
 
-import json
 from uuid import UUID
 
 import structlog
@@ -18,6 +17,7 @@ from agent.db.models.enums import TaskComplexity
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
+from agent.llm.schemas import ConductorOutput
 from agent.prompts import ConductorPrompts, PromptManager
 
 logger = structlog.get_logger()
@@ -85,7 +85,7 @@ class ConductorAgent:
         prompt = self._build_analysis_prompt(original_request)
         messages = [ChatMessage(role="user", content=prompt)]
 
-        # Call LLM
+        # Call LLM with structured output
         settings = get_agent_settings()
         request = LLMRequest(
             model=model.name,
@@ -93,14 +93,22 @@ class ConductorAgent:
             temperature=settings.conductor_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "conductor_output",
+                    "strict": True,
+                    "schema": ConductorOutput.model_json_schema(),
+                },
+            },
         )
 
         response = await self.llm_client.chat_completion(request)
 
-        # Parse response
+        # Parse structured response
         try:
             milestones = self._parse_milestones(response.content)
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
+        except (ValueError, KeyError) as e:
             logger.error(
                 "conductor_parse_failed",
                 task_id=str(task_id),
@@ -140,51 +148,35 @@ class ConductorAgent:
         """Parse LLM response into milestone definitions.
 
         Args:
-            response_content: Raw LLM response
+            response_content: Raw LLM response (structured JSON)
 
         Returns:
             List of milestone dictionaries
 
         Raises:
-            json.JSONDecodeError: If response is not valid JSON
-            KeyError: If required fields are missing
-            ValueError: If complexity value is invalid
+            ValueError: If response validation fails
         """
-        # Try to extract JSON from response (handle markdown code blocks)
-        content = response_content.strip()
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        content = content.strip()
-
-        data = json.loads(content)
-        milestones_raw = data["milestones"]
+        # Parse using Pydantic model
+        output = ConductorOutput.model_validate_json(response_content)
 
         milestones = []
-        for m in milestones_raw:
-            # Validate complexity
-            complexity_str = m["complexity"].upper()
+        for m in output.milestones:
+            # Convert complexity string to enum
             try:
-                complexity = TaskComplexity[complexity_str]
+                complexity = TaskComplexity[m.complexity]
             except KeyError:
-                # Fallback to MODERATE if invalid
                 logger.warning(
                     "invalid_complexity",
-                    provided=complexity_str,
+                    provided=m.complexity,
                     defaulting_to="MODERATE",
                 )
                 complexity = TaskComplexity.MODERATE
 
             milestones.append(
                 {
-                    "description": m["description"],
+                    "description": m.description,
                     "complexity": complexity,
-                    "acceptance_criteria": m.get(
-                        "acceptance_criteria", "Task completed successfully"
-                    ),
+                    "acceptance_criteria": m.acceptance_criteria,
                 }
             )
 

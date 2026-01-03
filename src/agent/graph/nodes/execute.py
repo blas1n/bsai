@@ -165,7 +165,7 @@ async def execute_worker_node(
                     milestone_id=milestone["id"],
                     artifact_type=artifact.artifact_type,
                     filename=artifact.filename,
-                    language=artifact.language,
+                    kind=artifact.kind,
                     content=artifact.content,
                     path=artifact.path,
                     sequence_number=artifact.sequence_number,
@@ -175,7 +175,7 @@ async def execute_worker_node(
                         "id": str(saved.id),
                         "type": saved.artifact_type,
                         "filename": saved.filename,
-                        "language": saved.language,
+                        "kind": saved.kind,
                         "content": saved.content,
                         "path": saved.path,
                     }

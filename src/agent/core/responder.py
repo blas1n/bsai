@@ -70,7 +70,7 @@ def get_language_name(code: str) -> str:
     Returns:
         Language name in English
     """
-    for lang in Language:
+    for lang in Language.all():
         if lang.iso_code_639_1.name.lower() == code.lower():
             return lang.name.title()
     return "English"
@@ -162,7 +162,7 @@ class ResponderAgent:
             model=model.name,
             messages=messages,
             temperature=settings.worker_temperature,
-            max_tokens=500,  # Keep response concise
+            max_tokens=2000,
             api_base=model.api_base,
             api_key=model.api_key,
         )

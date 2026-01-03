@@ -47,12 +47,23 @@ export interface WSMessage<T = unknown> {
   request_id?: string;
 }
 
+// Previous milestone info for session continuity
+export interface PreviousMilestoneInfo {
+  id: string;
+  sequence_number: number;
+  description: string;
+  complexity: string;
+  status: string;
+  worker_output?: string | null;
+}
+
 // Payload types
 export interface TaskStartedPayload {
   task_id: string;
   session_id: string;
   original_request: string;
   milestone_count: number;
+  previous_milestones?: PreviousMilestoneInfo[];
 }
 
 export interface TaskProgressPayload {

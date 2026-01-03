@@ -18,7 +18,7 @@ class PromptManager:
     """Manager for loading and rendering prompt templates.
 
     Loads YAML prompt files and renders them using Mako template engine.
-    Supports caching for performance.
+    Supports caching for performance and common Mako macros.
     """
 
     def __init__(self, prompts_dir: Path | None = None) -> None:
@@ -35,6 +35,32 @@ class PromptManager:
         self.prompts_dir = prompts_dir
         self._cache: dict[str, dict[str, Any]] = {}
         self._template_cache: dict[str, Template] = {}
+        self._macros: str | None = None
+
+    def _load_macros(self) -> str:
+        """Load common Mako macros from _macros.yaml.
+
+        Returns:
+            Combined macro definitions as a string, or empty string if not found.
+        """
+        if self._macros is not None:
+            return self._macros
+
+        macros_path = self.prompts_dir / "_macros.yaml"
+        if not macros_path.exists():
+            self._macros = ""
+            return self._macros
+
+        try:
+            with open(macros_path, encoding="utf-8") as f:
+                data: dict[str, Any] = yaml.safe_load(f)
+                # Combine all macro definitions
+                self._macros = "\n".join(str(v) for v in data.values() if isinstance(v, str))
+                return self._macros
+        except yaml.YAMLError as e:
+            logger.warning("macros_load_error", path=str(macros_path), error=str(e))
+            self._macros = ""
+            return self._macros
 
     def _load_yaml(self, agent_name: str) -> dict[str, Any]:
         """Load YAML file for given agent.
@@ -74,12 +100,15 @@ class PromptManager:
             )
             raise
 
-    def _get_template(self, template_str: str, cache_key: str) -> Template:
+    def _get_template(
+        self, template_str: str, cache_key: str, include_macros: bool = True
+    ) -> Template:
         """Get Mako template, using cache if available.
 
         Args:
             template_str: Template string
             cache_key: Unique key for caching
+            include_macros: Whether to prepend common macros (default True)
 
         Returns:
             Compiled Mako template
@@ -87,7 +116,14 @@ class PromptManager:
         if cache_key in self._template_cache:
             return self._template_cache[cache_key]
 
-        template = Template(text=template_str, strict_undefined=True)
+        # Prepend macros if requested
+        if include_macros:
+            macros = self._load_macros()
+            full_template = f"{macros}\n{template_str}" if macros else template_str
+        else:
+            full_template = template_str
+
+        template = Template(text=full_template, strict_undefined=True)
         self._template_cache[cache_key] = template
         return template
 
@@ -249,4 +285,5 @@ class PromptManager:
         """
         self._cache.clear()
         self._template_cache.clear()
+        self._macros = None
         logger.debug("prompt_cache_cleared")

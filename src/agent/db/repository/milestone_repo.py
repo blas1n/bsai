@@ -3,10 +3,11 @@
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.milestone import Milestone
+from ..models.task import Task
 from .base import BaseRepository
 
 
@@ -158,3 +159,39 @@ class MilestoneRepository(BaseRepository[Milestone]):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_by_session_id(self, session_id: UUID) -> list[Milestone]:
+        """Get all milestones for a session (across all tasks).
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            List of milestones ordered by task creation time and sequence number
+        """
+        stmt = (
+            select(Milestone)
+            .join(Task, Milestone.task_id == Task.id)
+            .where(Task.session_id == session_id)
+            .order_by(Task.created_at.asc(), Milestone.sequence_number.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_max_sequence_for_session(self, session_id: UUID) -> int:
+        """Get the maximum sequence number across all milestones in a session.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Maximum sequence number or 0 if no milestones exist
+        """
+        stmt = (
+            select(func.max(Milestone.sequence_number))
+            .join(Task, Milestone.task_id == Task.id)
+            .where(Task.session_id == session_id)
+        )
+        result = await self.session.execute(stmt)
+        max_seq = result.scalar_one_or_none()
+        return max_seq or 0

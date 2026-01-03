@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.artifact import Artifact
+from ..models.task import Task
 from .base import BaseRepository
 
 
@@ -60,9 +61,9 @@ class ArtifactRepository(BaseRepository[Artifact]):
         artifact_type: str,
         filename: str,
         content: str,
+        kind: str,
+        path: str,
         milestone_id: UUID | None = None,
-        language: str | None = None,
-        path: str | None = None,
         sequence_number: int = 0,
     ) -> Artifact:
         """Create a new artifact.
@@ -72,9 +73,9 @@ class ArtifactRepository(BaseRepository[Artifact]):
             artifact_type: Type of artifact (code, file, document)
             filename: Filename or identifier
             content: Full content of the artifact
+            kind: File type/extension (e.g., 'js', 'py', 'html', 'md')
+            path: File path within project
             milestone_id: Optional milestone UUID
-            language: Programming language (for code)
-            path: Optional path within project
             sequence_number: Order within task
 
         Returns:
@@ -85,7 +86,7 @@ class ArtifactRepository(BaseRepository[Artifact]):
             milestone_id=milestone_id,
             artifact_type=artifact_type,
             filename=filename,
-            language=language,
+            kind=kind,
             content=content,
             path=path,
             sequence_number=sequence_number,
@@ -124,6 +125,26 @@ class ArtifactRepository(BaseRepository[Artifact]):
             select(Artifact)
             .where(Artifact.task_id == task_id, Artifact.artifact_type == "code")
             .order_by(Artifact.sequence_number.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_by_session_id(self, session_id: UUID, limit: int = 20) -> list[Artifact]:
+        """Get recent artifacts from a session (across all tasks).
+
+        Args:
+            session_id: Session UUID
+            limit: Maximum number of artifacts to return
+
+        Returns:
+            List of artifacts ordered by creation time (most recent first)
+        """
+        stmt = (
+            select(Artifact)
+            .join(Task, Artifact.task_id == Task.id)
+            .where(Task.session_id == session_id)
+            .order_by(Artifact.created_at.desc())
+            .limit(limit)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

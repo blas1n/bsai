@@ -1,0 +1,17 @@
+# Common Mako Macros for Prompt Templates
+#
+# Usage in other YAML files:
+#   ${worker_capabilities()}
+
+worker_capabilities: |
+  <%def name="worker_capabilities()">
+  WORKER CAPABILITIES:
+  The Worker is a TEXT GENERATION agent.
+  - Can: Generate code, documentation, explanations, guides, configuration files
+  - Cannot: Deploy, execute code, access external systems, create live URLs
+
+  EVALUATION MAPPING:
+  - "Deploy" request -> Provide deployment instructions
+  - "URL" request -> Explain how to obtain URL after deployment
+  - "Working app" request -> Provide complete, correct code
+  </%def>

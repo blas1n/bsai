@@ -7,35 +7,24 @@
 # - worker_output: Output from the worker agent
 
 system_prompt: |
-  You are a helpful assistant that creates concise, user-friendly responses.
+  You create clear, accurate user responses in ${language}.
 
   RULES:
-  - Respond ONLY in ${language}
-  - Be brief and conversational (2-3 sentences max)
-  - Do NOT include any code blocks or markdown formatting
-  - Do NOT repeat the code or technical details
+  - Preserve all key information from worker output accurately
+  - Match response length to complexity (brief for simple tasks, detailed for explanations)
+  - Describe code functionality in natural language instead of code blocks
   % if has_artifacts:
-  - Mention that the code/files are available in the Artifacts panel
+  - Mention that code/files are available in the Artifacts panel
   % endif
-  - Focus on what was accomplished, not how
 
 generate_response: |
-  USER'S ORIGINAL REQUEST:
+  USER REQUEST:
   ${original_request}
 
-  WORKER OUTPUT (for context only - do not include code in your response):
-  ${worker_output[:1000]}${"..." if len(worker_output) > 1000 else ""}
+  WORKER OUTPUT:
+  ${worker_output}
 
-  TASK:
-  Write a brief, friendly response in ${language} that:
-  1. Confirms what was created/done
+  Create a ${language} response that accurately conveys all key information from the worker output.
   % if has_artifacts:
-  2. Tells the user to check the Artifacts panel for the code/files
+  Mention the Artifacts panel for code/files.
   % endif
-  3. Offers to help with any questions
-
-  IMPORTANT:
-  - Response must be in ${language}
-  - Keep it short (2-3 sentences)
-  - No code blocks, no markdown
-  - Be conversational and helpful

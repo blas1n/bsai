@@ -12,6 +12,7 @@ import { ArtifactPanel, Artifact, CodeArtifact } from '@/components/artifacts/Ar
 import { AlertCircle, Bot, LogIn, PanelRightClose, PanelRight, Activity, FileCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { MilestoneInfo } from '@/types/chat';
 
 interface ChatContainerProps {
   sessionId?: string;
@@ -66,21 +67,21 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
     window.history.pushState({}, '', `/chat/${newSessionId}`);
   };
 
-  // Extract milestones from the latest assistant message (streaming or most recent completed)
+  // Accumulate all milestones from all assistant messages in the session
   const currentMilestones = useMemo(() => {
-    // First try to find a streaming message
-    const streamingMessage = messages.find((m) => m.isStreaming);
-    if (streamingMessage?.milestones?.length) {
-      return streamingMessage.milestones;
-    }
+    const milestonesMap = new Map<string, MilestoneInfo>();
 
-    // Otherwise, find the most recent assistant message with milestones
-    const assistantMessages = messages.filter((m) => m.role === 'assistant' && m.milestones?.length);
-    if (assistantMessages.length > 0) {
-      return assistantMessages[assistantMessages.length - 1].milestones || [];
-    }
+    // Collect milestones from all assistant messages (including previous tasks in session)
+    // Use Map to deduplicate by ID, keeping the latest version
+    messages.forEach((m) => {
+      if (m.role === 'assistant' && m.milestones?.length) {
+        m.milestones.forEach((milestone) => {
+          milestonesMap.set(milestone.id, milestone);
+        });
+      }
+    });
 
-    return [];
+    return Array.from(milestonesMap.values());
   }, [messages]);
 
   // Get the latest task ID (for artifact download)

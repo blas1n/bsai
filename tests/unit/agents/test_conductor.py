@@ -89,7 +89,7 @@ class TestConductorAgent:
 
         # Mock LLM response with valid JSON
         mock_response = LLMResponse(
-            content='{"milestones": [{"title": "Setup project", "description": "Initialize repo", "complexity": "SIMPLE", "acceptance_criteria": "Repo created"}]}',
+            content='{"milestones": [{"description": "Initialize repo", "complexity": "SIMPLE", "acceptance_criteria": "Repo created"}]}',
             usage=UsageInfo(input_tokens=100, output_tokens=50, total_tokens=150),
             model="test-model",
         )
@@ -159,23 +159,22 @@ class TestConductorAgent:
         conductor: ConductorAgent,
         mock_llm_client: MagicMock,
     ) -> None:
-        """Test complexity validation and fallback."""
+        """Test complexity validation - invalid complexity raises error."""
         task_id = uuid4()
         original_request = "Build a web scraper"
 
         # Mock LLM response with invalid complexity
+        # With structured output, Pydantic will reject invalid complexity values
         mock_response = LLMResponse(
-            content='{"milestones": [{"title": "Test", "description": "Test", "complexity": "INVALID", "acceptance_criteria": "Done"}]}',
+            content='{"milestones": [{"description": "Test", "complexity": "INVALID", "acceptance_criteria": "Done"}]}',
             usage=UsageInfo(input_tokens=100, output_tokens=50, total_tokens=150),
             model="test-model",
         )
         mock_llm_client.chat_completion.return_value = mock_response
 
-        # Execute
-        milestones = await conductor.analyze_and_plan(task_id, original_request)
-
-        # Should fallback to MODERATE
-        assert milestones[0]["complexity"] == TaskComplexity.MODERATE
+        # Should raise ValueError due to Pydantic validation failure
+        with pytest.raises(ValueError, match="Failed to parse Conductor response"):
+            await conductor.analyze_and_plan(task_id, original_request)
 
     @pytest.mark.asyncio
     async def test_analyze_and_plan_multiple_milestones(
@@ -189,7 +188,7 @@ class TestConductorAgent:
 
         # Mock LLM response with multiple milestones
         mock_response = LLMResponse(
-            content='{"milestones": [{"title": "M1", "description": "D1", "complexity": "SIMPLE", "acceptance_criteria": "AC1"}, {"title": "M2", "description": "D2", "complexity": "COMPLEX", "acceptance_criteria": "AC2"}]}',
+            content='{"milestones": [{"description": "D1", "complexity": "SIMPLE", "acceptance_criteria": "AC1"}, {"description": "D2", "complexity": "COMPLEX", "acceptance_criteria": "AC2"}]}',
             usage=UsageInfo(input_tokens=100, output_tokens=50, total_tokens=150),
             model="test-model",
         )

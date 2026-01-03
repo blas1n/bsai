@@ -1,0 +1,7 @@
+name: "CodeQL Config"
+
+paths-ignore:
+  - migrations/
+  - "**/node_modules/**"
+  - "**/*.test.py"
+  - "**/*_test.py"

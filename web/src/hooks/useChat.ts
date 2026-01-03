@@ -29,6 +29,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from './useAuth';
 import { useWebSocket } from './useWebSocket';
+import { useSessionStore } from '@/stores/sessionStore';
 
 interface UseChatOptions {
   sessionId?: string;
@@ -88,6 +89,7 @@ interface UseChatReturn {
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const { sessionId: initialSessionId, onError } = options;
   const { accessToken } = useAuth();
+  const updateSessionTitle = useSessionStore((state) => state.updateSessionTitle);
 
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -126,7 +128,17 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           break;
         }
 
-        // Create assistant message for this task
+        // Convert previous milestones from backend to MilestoneInfo format
+        const previousMilestones: MilestoneInfo[] = (payload.previous_milestones || []).map((m) => ({
+          id: m.id,
+          sequenceNumber: m.sequence_number,
+          title: m.description,
+          description: m.description,
+          complexity: m.complexity as TaskComplexity,
+          status: (m.status === 'pass' ? 'passed' : m.status) as MilestoneStatus,
+        }));
+
+        // Create assistant message for this task, preserving previous milestones
         currentTaskIdRef.current = taskIdStr;
         const newMessageId = `msg-${Date.now()}`;
         streamingMessageIdRef.current = newMessageId;
@@ -137,7 +149,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           content: '',
           timestamp: new Date().toISOString(),
           taskId: taskIdStr,
-          milestones: [],
+          milestones: previousMilestones,
           agentActivity: [],
           isStreaming: true,
         };
@@ -145,12 +157,18 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         setMessages((prev) => [...prev, assistantMessage]);
         setStreaming({
           isStreaming: true,
-          totalMilestones: payload.milestone_count,
-          currentMilestone: 0,
+          totalMilestones: payload.milestone_count + previousMilestones.length,
+          currentMilestone: previousMilestones.length,
           chunks: [],
         });
-        setCompletedAgents([]); // Reset completed agents for new task
-        setAgentHistory([]); // Reset activity history for new task
+
+        // Update session title with first task's request
+        if (payload.session_id && payload.original_request) {
+          const title = payload.original_request.length > 50
+            ? payload.original_request.slice(0, 50) + '...'
+            : payload.original_request;
+          updateSessionTitle(String(payload.session_id), title);
+        }
         break;
       }
 
@@ -590,7 +608,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         break;
       }
     }
-  }, [onError]);
+  }, [onError, updateSessionTitle]);
 
   // WebSocket connection with auth token
   const { isConnected, reconnect: wsReconnect } = useWebSocket({

@@ -98,8 +98,9 @@ class TestSessionCache:
         session_id = uuid4()
         context = [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}]
         summary = "User greeted assistant"
+        token_count = 150
 
-        await cache.cache_context(session_id, context, summary=summary)
+        await cache.cache_context(session_id, context, token_count, summary=summary)
 
         mock_redis_client.client.setex.assert_called_once()
         call_args = mock_redis_client.client.setex.call_args
@@ -107,6 +108,7 @@ class TestSessionCache:
         cached_data = json.loads(call_args[0][2])
         assert cached_data["messages"] == context
         assert cached_data["summary"] == summary
+        assert cached_data["token_count"] == token_count
         assert "cached_at" in cached_data
 
     @pytest.mark.asyncio
@@ -116,6 +118,7 @@ class TestSessionCache:
         context_data = {
             "messages": [{"role": "user", "content": "Test"}],
             "summary": "Test summary",
+            "token_count": 100,
             "cached_at": "2024-01-01T00:00:00",
         }
         mock_redis_client.client.get.return_value = json.dumps(context_data)
@@ -123,6 +126,7 @@ class TestSessionCache:
         result = await cache.get_cached_context(session_id)
 
         assert result == context_data
+        assert result["token_count"] == 100
 
     @pytest.mark.asyncio
     async def test_invalidate_context(self, cache, mock_redis_client):

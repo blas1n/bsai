@@ -10,7 +10,8 @@ import { SessionStats } from './SessionStats';
 import { UserMenu } from '@/components/auth';
 import { ThemeToggle } from '@/components/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { api, SessionResponse } from '@/lib/api';
+import { useSessionStore } from '@/stores/sessionStore';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -26,8 +27,7 @@ export function Sidebar({ currentSessionId, onNewChat, stats }: SidebarProps) {
   const pathname = usePathname();
   const { accessToken, isAuthenticated } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [sessions, setSessions] = useState<SessionResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { sessions, isLoading, fetchSessions } = useSessionStore();
 
   // Set API token when auth changes
   useEffect(() => {
@@ -38,24 +38,10 @@ export function Sidebar({ currentSessionId, onNewChat, stats }: SidebarProps) {
 
   // Fetch sessions when authenticated
   useEffect(() => {
-    const fetchSessions = async () => {
-      if (!isAuthenticated || !accessToken) {
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const response = await api.getSessions(50, 0);
-        setSessions(response.items);
-      } catch (err) {
-        console.error('Failed to fetch sessions:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSessions();
-  }, [currentSessionId, isAuthenticated, accessToken]);
+    if (isAuthenticated && accessToken) {
+      fetchSessions();
+    }
+  }, [isAuthenticated, accessToken, fetchSessions]);
 
   return (
     <div

@@ -85,6 +85,8 @@ class TestCreateAndExecuteTask:
         ):
             mock_get_session.return_value = mock_session
             mock_create.return_value = mock_task
+            # Prevent "coroutine was never awaited" warning by closing the coroutine
+            mock_create_task.side_effect = lambda coro: coro.close() or MagicMock()
 
             result = await task_service.create_and_execute_task(session_id, user_id, request)
 

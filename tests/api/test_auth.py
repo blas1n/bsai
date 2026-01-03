@@ -172,7 +172,7 @@ class TestAuthenticateWebsocketConnection:
     @pytest.mark.asyncio
     async def test_authenticates_with_message_token(self) -> None:
         """Authenticates using token from first message."""
-        mock_websocket = AsyncMock()
+        mock_websocket = MagicMock(spec=["accept", "receive_json"])
         mock_websocket.accept = AsyncMock()
         mock_websocket.receive_json = AsyncMock(
             return_value={"type": "auth", "token": "message-token"}
@@ -190,7 +190,7 @@ class TestAuthenticateWebsocketConnection:
     @pytest.mark.asyncio
     async def test_raises_disconnect_on_invalid_message_type(self) -> None:
         """Raises WebSocketDisconnect on invalid message type."""
-        mock_websocket = AsyncMock()
+        mock_websocket = MagicMock(spec=["accept", "receive_json", "close"])
         mock_websocket.accept = AsyncMock()
         mock_websocket.receive_json = AsyncMock(return_value={"type": "not-auth", "token": "token"})
         mock_websocket.close = AsyncMock()
@@ -204,7 +204,7 @@ class TestAuthenticateWebsocketConnection:
     @pytest.mark.asyncio
     async def test_raises_disconnect_on_missing_token(self) -> None:
         """Raises WebSocketDisconnect when token is missing from message."""
-        mock_websocket = AsyncMock()
+        mock_websocket = MagicMock(spec=["accept", "receive_json", "close"])
         mock_websocket.accept = AsyncMock()
         mock_websocket.receive_json = AsyncMock(return_value={"type": "auth"})
         mock_websocket.close = AsyncMock()
@@ -218,12 +218,18 @@ class TestAuthenticateWebsocketConnection:
     @pytest.mark.asyncio
     async def test_raises_disconnect_on_timeout(self) -> None:
         """Raises WebSocketDisconnect on authentication timeout."""
-        mock_websocket = AsyncMock()
+        mock_websocket = MagicMock(spec=["accept", "receive_json", "close"])
         mock_websocket.accept = AsyncMock()
         mock_websocket.receive_json = AsyncMock(side_effect=TimeoutError())
         mock_websocket.close = AsyncMock()
 
-        with patch("agent.api.auth.asyncio.wait_for", side_effect=TimeoutError()):
+        async def mock_wait_for(coro: object, timeout: float) -> None:
+            # Close the coroutine to prevent "was never awaited" warning
+            if hasattr(coro, "close"):
+                coro.close()  # type: ignore[union-attr]
+            raise TimeoutError()
+
+        with patch("agent.api.auth.asyncio.wait_for", side_effect=mock_wait_for):
             with pytest.raises(WebSocketDisconnect) as exc_info:
                 await authenticate_websocket_connection(mock_websocket, token=None)
 
@@ -232,15 +238,21 @@ class TestAuthenticateWebsocketConnection:
     @pytest.mark.asyncio
     async def test_raises_disconnect_on_invalid_token(self) -> None:
         """Raises WebSocketDisconnect when token validation fails."""
-        mock_websocket = AsyncMock()
-        mock_websocket.close = AsyncMock()
+        # Use spec to limit attributes and prevent unintended AsyncMock creation
+        mock_websocket = MagicMock(spec=["close"])
+
+        async def mock_close(code: int, reason: str) -> None:
+            pass
+
+        mock_websocket.close = mock_close
+
+        async def raise_auth_error(token: str) -> str:
+            raise AuthenticationError(message="Invalid token")
 
         with patch(
             "agent.api.auth.authenticate_websocket",
-            new_callable=AsyncMock,
-        ) as mock_auth:
-            mock_auth.side_effect = AuthenticationError(message="Invalid token")
-
+            new=raise_auth_error,
+        ):
             with pytest.raises(WebSocketDisconnect) as exc_info:
                 await authenticate_websocket_connection(
                     mock_websocket,
