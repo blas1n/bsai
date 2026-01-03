@@ -29,6 +29,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from './useAuth';
 import { useWebSocket } from './useWebSocket';
+import { useSessionStore } from '@/stores/sessionStore';
 
 interface UseChatOptions {
   sessionId?: string;
@@ -88,6 +89,7 @@ interface UseChatReturn {
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const { sessionId: initialSessionId, onError } = options;
   const { accessToken } = useAuth();
+  const updateSessionTitle = useSessionStore((state) => state.updateSessionTitle);
 
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -159,6 +161,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           currentMilestone: previousMilestones.length,
           chunks: [],
         });
+
+        // Update session title with first task's request
+        if (payload.session_id && payload.original_request) {
+          const title = payload.original_request.length > 50
+            ? payload.original_request.slice(0, 50) + '...'
+            : payload.original_request;
+          updateSessionTitle(String(payload.session_id), title);
+        }
         break;
       }
 
@@ -598,7 +608,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         break;
       }
     }
-  }, [onError]);
+  }, [onError, updateSessionTitle]);
 
   // WebSocket connection with auth token
   const { isConnected, reconnect: wsReconnect } = useWebSocket({

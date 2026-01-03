@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { CheckSquare, Pause, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SessionCard } from './SessionCard';
@@ -9,32 +9,13 @@ import { useSessionStore } from '@/stores/sessionStore';
 import { useAuth } from '@/hooks/useAuth';
 
 export function SessionList() {
-  const { sessions, setSessions, addSession, isLoading, setLoading, error, setError } = useSessionStore();
+  const { sessions, addSession, isLoading, setError, error, fetchSessions } = useSessionStore();
   const { accessToken, isLoading: isAuthLoading } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkActing, setIsBulkActing] = useState(false);
   const hasFetchedRef = useRef(false);
-
-  const fetchSessions = useCallback(async () => {
-    if (!accessToken) {
-      console.log('[SessionList] No token, skipping fetch');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.getSessions();
-      setSessions(response.items);
-    } catch (err) {
-      setError('Failed to fetch sessions');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken, setLoading, setError, setSessions]);
 
   const handleCreateSession = async () => {
     setIsCreating(true);
