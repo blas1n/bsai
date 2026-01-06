@@ -174,3 +174,100 @@ def get_api_settings() -> APISettings:
 def get_agent_settings() -> AgentSettings:
     """Get cached agent settings."""
     return AgentSettings()
+
+
+class McpSettings(BaseSettings):
+    """MCP (Model Context Protocol) security and configuration settings."""
+
+    # Encryption key for credentials (base64-encoded Fernet key)
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    encryption_key: str = Field(
+        default="",
+        description="Fernet encryption key for MCP credentials (base64). REQUIRED in production.",
+    )
+
+    # Allowlisted commands for stdio MCP servers
+    allowed_stdio_commands: list[str] = Field(
+        default=["npx", "node", "python", "python3", "deno"],
+        description="Allowlisted commands for stdio MCP servers",
+    )
+
+    # Blocked URL patterns for SSRF prevention (regex patterns)
+    blocked_url_patterns: list[str] = Field(
+        default=[
+            r"^https?://localhost",
+            r"^https?://127\.0\.0\.1",
+            r"^https?://0\.0\.0\.0",
+            r"^https?://10\.",
+            r"^https?://172\.(1[6-9]|2[0-9]|3[01])\.",
+            r"^https?://192\.168\.",
+            r"^https?://169\.254\.",
+            r"^https?://\[::1\]",
+            r"^https?://\[0:0:0:0:0:0:0:1\]",
+        ],
+        description="Blocked URL patterns for SSRF prevention",
+    )
+
+    # Rate limiting
+    tool_calls_per_hour: int = Field(
+        default=100,
+        description="Maximum tool calls per user per hour",
+    )
+
+    # Resource limits
+    tool_execution_timeout: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+        description="Tool execution timeout in seconds",
+    )
+    max_tool_calls_per_request: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum tool calls in a single LLM request",
+    )
+    max_tool_output_size: int = Field(
+        default=1024 * 1024,  # 1MB
+        description="Maximum tool output size in bytes",
+    )
+
+    # Risk assessment keywords
+    high_risk_keywords: list[str] = Field(
+        default=[
+            "delete",
+            "remove",
+            "destroy",
+            "drop",
+            "truncate",
+            "execute",
+            "exec",
+            "eval",
+            "system",
+            "shell",
+            "kill",
+            "terminate",
+        ],
+        description="Keywords that indicate high-risk tool operations",
+    )
+    medium_risk_keywords: list[str] = Field(
+        default=[
+            "write",
+            "update",
+            "modify",
+            "create",
+            "change",
+            "edit",
+            "move",
+            "rename",
+        ],
+        description="Keywords that indicate medium-risk tool operations",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="MCP_", extra="ignore")
+
+
+@lru_cache
+def get_mcp_settings() -> McpSettings:
+    """Get cached MCP settings."""
+    return McpSettings()
