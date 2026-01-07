@@ -188,3 +188,27 @@ class RateLimitError(APIError):
             status_code=429,
             detail=detail,
         )
+
+
+class ConflictError(APIError):
+    """Resource conflict error."""
+
+    def __init__(
+        self,
+        resource: str,
+        identifier: str,
+        detail: str | None = None,
+    ) -> None:
+        """Initialize conflict error.
+
+        Args:
+            resource: Resource type
+            identifier: Resource identifier causing conflict
+            detail: Additional detail
+        """
+        super().__init__(
+            message=f"{resource} already exists",
+            code="CONFLICT",
+            status_code=409,
+            detail=detail or f"{resource} with identifier '{identifier}' already exists",
+        )
