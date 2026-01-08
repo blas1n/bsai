@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from langchain_core.runnables import RunnableConfig
 
     from agent.api.websocket.manager import ConnectionManager
+    from agent.mcp.executor import McpToolExecutor
 
 
 class Node(StrEnum):
@@ -79,8 +80,22 @@ def get_container(config: RunnableConfig) -> ContainerState:
     return container
 
 
+def get_mcp_executor(config: RunnableConfig) -> McpToolExecutor | None:
+    """Extract MCP tool executor from config.
+
+    Args:
+        config: LangGraph RunnableConfig
+
+    Returns:
+        McpToolExecutor if available, None otherwise
+    """
+    configurable = config.get("configurable", {})
+    return configurable.get("mcp_executor")
+
+
 __all__ = [
     "Node",
     "get_ws_manager",
     "get_container",
+    "get_mcp_executor",
 ]

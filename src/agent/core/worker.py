@@ -160,6 +160,8 @@ class WorkerAgent:
                     session_id=session_id,
                     ws_manager=self.ws_manager,
                 )
+                # Register executor in ConnectionManager for WebSocket access
+                self.ws_manager.register_mcp_executor(session_id, tool_executor)
                 logger.info(
                     "worker_mcp_enabled",
                     milestone_id=str(milestone_id),

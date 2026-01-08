@@ -15,7 +15,7 @@ from agent.cache import SessionCache
 from ..schemas import WSMessage
 
 if TYPE_CHECKING:
-    pass
+    from agent.mcp.executor import McpToolExecutor
 
 logger = structlog.get_logger()
 
@@ -37,11 +37,14 @@ class ConnectionManager:
 
     Handles connection lifecycle, session subscriptions, and
     message routing for real-time streaming.
+
+    Also manages MCP tool executors for each session.
     """
 
     cache: SessionCache
     _connections: dict[str, Connection] = field(default_factory=dict)
     _session_connections: dict[UUID, set[str]] = field(default_factory=dict)
+    _mcp_executors: dict[UUID, McpToolExecutor] = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def connect(
@@ -313,3 +316,38 @@ class ConnectionManager:
             Total connection count
         """
         return len(self._connections)
+
+    def register_mcp_executor(
+        self,
+        session_id: UUID,
+        executor: McpToolExecutor,
+    ) -> None:
+        """Register MCP tool executor for a session.
+
+        Args:
+            session_id: Session ID
+            executor: MCP tool executor instance
+        """
+        self._mcp_executors[session_id] = executor
+        logger.debug("mcp_executor_registered", session_id=str(session_id))
+
+    def get_mcp_executor(self, session_id: UUID) -> McpToolExecutor | None:
+        """Get MCP tool executor for a session.
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            Executor if found, None otherwise
+        """
+        return self._mcp_executors.get(session_id)
+
+    def unregister_mcp_executor(self, session_id: UUID) -> None:
+        """Unregister MCP tool executor for a session.
+
+        Args:
+            session_id: Session ID
+        """
+        executor = self._mcp_executors.pop(session_id, None)
+        if executor:
+            logger.debug("mcp_executor_unregistered", session_id=str(session_id))

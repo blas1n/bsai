@@ -79,6 +79,7 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
                 WorkflowRunner,
                 "_load_previous_context",
@@ -96,6 +97,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock session repository
+            mock_session_obj = MagicMock()
+            mock_session_obj.user_id = "test-user-123"
+            mock_session_repo = MagicMock()
+            mock_session_repo.get_by_id = AsyncMock(return_value=mock_session_obj)
+            mock_session_repo_class.return_value = mock_session_repo
 
             mock_compiled = MagicMock()
             mock_compiled.ainvoke = AsyncMock(
@@ -130,6 +138,7 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
                 WorkflowRunner,
                 "_load_previous_context",
@@ -146,6 +155,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock session repository
+            mock_session_obj = MagicMock()
+            mock_session_obj.user_id = "test-user-123"
+            mock_session_repo = MagicMock()
+            mock_session_repo.get_by_id = AsyncMock(return_value=mock_session_obj)
+            mock_session_repo_class.return_value = mock_session_repo
 
             mock_compiled = MagicMock()
             mock_compiled.ainvoke = AsyncMock(
@@ -181,6 +197,7 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
                 WorkflowRunner,
                 "_load_previous_context",
@@ -197,6 +214,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock session repository
+            mock_session_obj = MagicMock()
+            mock_session_obj.user_id = "test-user-123"
+            mock_session_repo = MagicMock()
+            mock_session_repo.get_by_id = AsyncMock(return_value=mock_session_obj)
+            mock_session_repo_class.return_value = mock_session_repo
 
             mock_compiled = MagicMock()
             mock_compiled.ainvoke = AsyncMock(
@@ -228,6 +252,7 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
                 WorkflowRunner,
                 "_load_previous_context",
@@ -244,6 +269,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock session repository
+            mock_session_obj = MagicMock()
+            mock_session_obj.user_id = "test-user-123"
+            mock_session_repo = MagicMock()
+            mock_session_repo.get_by_id = AsyncMock(return_value=mock_session_obj)
+            mock_session_repo_class.return_value = mock_session_repo
 
             mock_compiled = MagicMock()
             mock_compiled.ainvoke = AsyncMock(
@@ -277,6 +309,7 @@ class TestWorkflowRunner:
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
                 WorkflowRunner,
                 "_load_previous_context",
@@ -293,6 +326,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock session repository
+            mock_session_obj = MagicMock()
+            mock_session_obj.user_id = "test-user-123"
+            mock_session_repo = MagicMock()
+            mock_session_repo.get_by_id = AsyncMock(return_value=mock_session_obj)
+            mock_session_repo_class.return_value = mock_session_repo
 
             mock_compiled = MagicMock()
             mock_compiled.ainvoke = AsyncMock(

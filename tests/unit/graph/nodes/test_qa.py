@@ -39,6 +39,7 @@ class TestVerifyQaNode:
         state = AgentState(
             session_id=uuid4(),
             task_id=uuid4(),
+            user_id="test-user-123",
             original_request="Test",
             milestones=[milestone],
             current_milestone_index=0,
