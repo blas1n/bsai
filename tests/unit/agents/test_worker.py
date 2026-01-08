@@ -54,11 +54,18 @@ def mock_session() -> AsyncMock:
 
 
 @pytest.fixture
+def mock_ws_manager() -> MagicMock:
+    """Create mock WebSocket manager."""
+    return MagicMock()
+
+
+@pytest.fixture
 def worker(
     mock_llm_client: MagicMock,
     mock_router: MagicMock,
     mock_prompt_manager: MagicMock,
     mock_session: AsyncMock,
+    mock_ws_manager: MagicMock,
 ) -> WorkerAgent:
     """Create WorkerAgent with mocked dependencies."""
     agent = WorkerAgent(
@@ -66,12 +73,18 @@ def worker(
         router=mock_router,
         prompt_manager=mock_prompt_manager,
         session=mock_session,
+        ws_manager=mock_ws_manager,
     )
     # Mock milestone_repo that gets created internally
     agent.milestone_repo = MagicMock()
     mock_milestone = MagicMock()
     agent.milestone_repo.get_by_id = AsyncMock(return_value=mock_milestone)
     agent.milestone_repo.update = AsyncMock()
+
+    # Mock mcp_server_repo to return empty list (no MCP servers in tests)
+    agent.mcp_server_repo = MagicMock()
+    agent.mcp_server_repo.get_enabled_for_agent = AsyncMock(return_value=[])
+
     return agent
 
 
@@ -103,6 +116,8 @@ class TestWorkerAgent:
             milestone_id=milestone_id,
             prompt=prompt,
             complexity=complexity,
+            user_id="test-user",
+            session_id=uuid4(),
         )
 
         # Verify
@@ -139,6 +154,8 @@ class TestWorkerAgent:
             milestone_id=milestone_id,
             prompt=prompt,
             complexity=complexity,
+            user_id="test-user",
+            session_id=uuid4(),
             preferred_model=preferred_model,
         )
 
@@ -173,6 +190,8 @@ class TestWorkerAgent:
             milestone_id=milestone_id,
             prompt=prompt,
             complexity=complexity,
+            user_id="test-user",
+            session_id=uuid4(),
         )
 
         # Verify cost calculation
@@ -210,6 +229,8 @@ class TestWorkerAgent:
             previous_output=previous_output,
             qa_feedback=qa_feedback,
             complexity=complexity,
+            user_id="test-user",
+            session_id=uuid4(),
         )
 
         # Verify
@@ -258,6 +279,8 @@ class TestWorkerAgent:
                 milestone_id=milestone_id,
                 prompt=prompt,
                 complexity=complexity,
+                user_id="test-user",
+                session_id=uuid4(),
             )
 
             # Verify
@@ -291,6 +314,8 @@ class TestWorkerAgent:
             milestone_id=milestone_id,
             prompt=prompt,
             complexity=complexity,
+            user_id="test-user",
+            session_id=uuid4(),
         )
 
         # Should return empty string without error

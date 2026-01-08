@@ -7,6 +7,9 @@ The Worker is responsible for:
 4. Tracking execution metadata
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
@@ -14,10 +17,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.api.config import get_agent_settings
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
+from agent.db.repository.mcp_server_repo import McpServerRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMResponse, LLMRouter
 from agent.llm.schemas import WorkerOutput
+from agent.mcp.executor import McpToolExecutor
+from agent.mcp.utils import load_user_mcp_servers
 from agent.prompts import PromptManager, WorkerPrompts
+
+if TYPE_CHECKING:
+    from agent.api.websocket.manager import ConnectionManager
+    from agent.db.models.mcp_server_config import McpServerConfig
 
 logger = structlog.get_logger()
 
@@ -35,6 +45,7 @@ class WorkerAgent:
         router: LLMRouter,
         prompt_manager: PromptManager,
         session: AsyncSession,
+        ws_manager: ConnectionManager,
     ) -> None:
         """Initialize Worker agent.
 
@@ -43,20 +54,26 @@ class WorkerAgent:
             router: Router for model selection
             prompt_manager: Prompt manager for template rendering
             session: Database session
+            ws_manager: WebSocket manager
         """
         self.llm_client = llm_client
         self.router = router
         self.prompt_manager = prompt_manager
         self.session = session
         self.milestone_repo = MilestoneRepository(session)
+        self.mcp_server_repo = McpServerRepository(session)
+        self.ws_manager = ws_manager
 
     async def execute_milestone(
         self,
         milestone_id: UUID,
         prompt: str,
         complexity: TaskComplexity,
+        user_id: str,
+        session_id: UUID,
         preferred_model: str | None = None,
         context_messages: list[ChatMessage] | None = None,
+        mcp_enabled: bool = True,
     ) -> LLMResponse:
         """Execute a milestone using the provided prompt.
 
@@ -64,8 +81,11 @@ class WorkerAgent:
             milestone_id: Milestone ID being executed
             prompt: Execution prompt (from Meta Prompter or direct)
             complexity: Milestone complexity level
+            user_id: User ID for MCP tool ownership
+            session_id: Session ID for MCP tool logging
             preferred_model: Optional user-preferred model override
             context_messages: Optional conversation history for context
+            mcp_enabled: Enable MCP tool calling (default: True)
 
         Returns:
             LLM response with execution result
@@ -78,6 +98,7 @@ class WorkerAgent:
             milestone_id=str(milestone_id),
             complexity=complexity.name,
             prompt_length=len(prompt),
+            mcp_enabled=mcp_enabled,
         )
 
         # Update milestone status to in_progress
@@ -122,7 +143,35 @@ class WorkerAgent:
             },
         )
 
-        response = await self.llm_client.chat_completion(request)
+        # Load MCP servers if enabled
+        mcp_servers: list[McpServerConfig] = []
+        tool_executor: McpToolExecutor | None = None
+
+        if mcp_enabled:
+            mcp_servers = await load_user_mcp_servers(
+                mcp_server_repo=self.mcp_server_repo,
+                user_id=user_id,
+                agent_type="worker",
+            )
+
+            if mcp_servers:
+                tool_executor = McpToolExecutor(
+                    user_id=user_id,
+                    session_id=session_id,
+                    ws_manager=self.ws_manager,
+                )
+                logger.info(
+                    "worker_mcp_enabled",
+                    milestone_id=str(milestone_id),
+                    mcp_server_count=len(mcp_servers),
+                )
+
+        # Execute with or without tools (unified interface)
+        response = await self.llm_client.chat_completion(
+            request=request,
+            mcp_servers=mcp_servers if tool_executor else None,
+            tool_executor=tool_executor,
+        )
 
         # Calculate cost
         cost = self.router.calculate_cost(
@@ -149,6 +198,8 @@ class WorkerAgent:
         previous_output: str,
         qa_feedback: str,
         complexity: TaskComplexity,
+        user_id: str,
+        session_id: UUID,
     ) -> LLMResponse:
         """Retry milestone execution with QA feedback.
 
@@ -158,6 +209,8 @@ class WorkerAgent:
             previous_output: Previous attempt output
             qa_feedback: Feedback from QA Agent
             complexity: Milestone complexity
+            user_id: User ID for MCP tool ownership
+            session_id: Session ID for MCP tool logging
 
         Returns:
             LLM response from retry attempt
@@ -182,6 +235,8 @@ class WorkerAgent:
             milestone_id=milestone_id,
             prompt=retry_prompt,
             complexity=complexity,
+            user_id=user_id,
+            session_id=session_id,
         )
 
         logger.info(

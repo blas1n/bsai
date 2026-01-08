@@ -49,6 +49,7 @@ class AgentState(TypedDict):
     # Session context
     session_id: UUID
     task_id: UUID
+    user_id: str
     original_request: str
 
     # Task status

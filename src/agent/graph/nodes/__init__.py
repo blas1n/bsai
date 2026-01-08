@@ -38,17 +38,24 @@ class Node(StrEnum):
     GENERATE_RESPONSE = "generate_response"
 
 
-def get_ws_manager(config: RunnableConfig) -> ConnectionManager | None:
+def get_ws_manager(config: RunnableConfig) -> ConnectionManager:
     """Extract WebSocket manager from config.
 
     Args:
         config: LangGraph RunnableConfig
 
     Returns:
-        ConnectionManager if present, None otherwise
+        ConnectionManager instance
+
+    Raises:
+        RuntimeError: If ws_manager not in config
     """
     configurable = config.get("configurable", {})
-    return configurable.get("ws_manager")
+    ws_manager = configurable.get("ws_manager")
+    if ws_manager is None:
+        msg = "WebSocket manager not found in config. Ensure workflow is run with proper context."
+        raise RuntimeError(msg)
+    return ws_manager
 
 
 def get_container(config: RunnableConfig) -> ContainerState:

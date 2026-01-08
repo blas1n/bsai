@@ -80,7 +80,7 @@ class TestChatCompletion:
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
-            result = await client.chat_completion(sample_request)
+            result = await client.chat_completion(sample_request, mcp_servers=[])
 
             assert result.content == "Hello! How can I help?"
             assert result.usage.input_tokens == 20
@@ -113,7 +113,7 @@ class TestChatCompletion:
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
-            await client.chat_completion(request)
+            await client.chat_completion(request, mcp_servers=[])
 
             call_kwargs = mock_completion.call_args[1]
             assert call_kwargs["model"] == "claude-3-opus"
@@ -143,7 +143,7 @@ class TestChatCompletion:
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
-            await client.chat_completion(request)
+            await client.chat_completion(request, mcp_servers=[])
 
             call_kwargs = mock_completion.call_args[1]
             assert "max_tokens" not in call_kwargs
@@ -161,7 +161,7 @@ class TestChatCompletion:
             patch("agent.llm.client.litellm.acompletion", return_value=mock_response),
             patch("agent.llm.client.logger") as mock_logger,
         ):
-            await client.chat_completion(sample_request)
+            await client.chat_completion(sample_request, mcp_servers=[])
 
             assert mock_logger.info.call_count == 2
 
@@ -187,7 +187,7 @@ class TestChatCompletion:
             patch("agent.llm.client.litellm.acompletion", side_effect=mock_completion),
             patch("tenacity.nap.time.sleep", return_value=None),  # Skip retry delays
         ):
-            result = await client.chat_completion(sample_request)
+            result = await client.chat_completion(sample_request, mcp_servers=[])
 
             assert result.content == "Response"
             assert call_count == 3  # Initial call + 2 retries
@@ -206,7 +206,7 @@ class TestChatCompletion:
             mock_completion.side_effect = Exception("Persistent error")
 
             with pytest.raises(Exception, match="Persistent error"):
-                await client.chat_completion(sample_request)
+                await client.chat_completion(sample_request, mcp_servers=[])
 
 
 def create_stream_chunk(content: str | None = None) -> MagicMock:

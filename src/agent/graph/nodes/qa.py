@@ -65,6 +65,7 @@ async def verify_qa_node(
             router=container.router,
             prompt_manager=container.prompt_manager,
             session=session,
+            ws_manager=ws_manager,
         )
 
         decision, feedback = await qa.validate_output(
@@ -72,6 +73,8 @@ async def verify_qa_node(
             milestone_description=milestone["description"],
             acceptance_criteria=milestone["acceptance_criteria"],
             worker_output=milestone["worker_output"] or "",
+            user_id=state["user_id"],
+            session_id=state["session_id"],
         )
 
         # Update milestone with QA result (immutable)

@@ -7,7 +7,10 @@ The QA Agent is responsible for:
 4. Tracking validation history
 """
 
+from __future__ import annotations
+
 from enum import Enum
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
@@ -15,10 +18,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.api.config import get_agent_settings
 from agent.db.models.enums import TaskComplexity
+from agent.db.repository.mcp_server_repo import McpServerRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
 from agent.llm.schemas import QAOutput
+from agent.mcp.executor import McpToolExecutor
+from agent.mcp.utils import load_user_mcp_servers
 from agent.prompts import PromptManager, QAAgentPrompts
+
+if TYPE_CHECKING:
+    from agent.api.websocket.manager import ConnectionManager
+    from agent.db.models.mcp_server_config import McpServerConfig
 
 logger = structlog.get_logger()
 
@@ -48,6 +58,7 @@ class QAAgent:
         router: LLMRouter,
         prompt_manager: PromptManager,
         session: AsyncSession,
+        ws_manager: ConnectionManager,
     ) -> None:
         """Initialize QA agent.
 
@@ -56,12 +67,15 @@ class QAAgent:
             router: Router for model selection
             prompt_manager: Prompt manager for template rendering
             session: Database session
+            ws_manager: WebSocket manager
         """
         self.llm_client = llm_client
         self.router = router
         self.prompt_manager = prompt_manager
         self.session = session
         self.milestone_repo = MilestoneRepository(session)
+        self.mcp_server_repo = McpServerRepository(session)
+        self.ws_manager = ws_manager
 
     async def validate_output(
         self,
@@ -69,6 +83,9 @@ class QAAgent:
         milestone_description: str,
         acceptance_criteria: str,
         worker_output: str,
+        user_id: str,
+        session_id: UUID,
+        mcp_enabled: bool = True,
     ) -> tuple[QADecision, str]:
         """Validate Worker output against acceptance criteria.
 
@@ -77,6 +94,9 @@ class QAAgent:
             milestone_description: Original milestone description
             acceptance_criteria: Success criteria
             worker_output: Output from Worker agent
+            user_id: User ID for MCP tool ownership
+            session_id: Session ID for MCP tool logging
+            mcp_enabled: Enable MCP tool calling (default: True)
 
         Returns:
             Tuple of (decision, feedback):
@@ -90,6 +110,7 @@ class QAAgent:
             "qa_validation_start",
             milestone_id=str(milestone_id),
             output_length=len(worker_output),
+            mcp_enabled=mcp_enabled,
         )
 
         # Use MODERATE complexity for QA (medium LLM)
@@ -122,7 +143,35 @@ class QAAgent:
             },
         )
 
-        response = await self.llm_client.chat_completion(request)
+        # Load MCP servers if enabled
+        mcp_servers: list[McpServerConfig] = []
+        tool_executor: McpToolExecutor | None = None
+
+        if mcp_enabled:
+            mcp_servers = await load_user_mcp_servers(
+                mcp_server_repo=self.mcp_server_repo,
+                user_id=user_id,
+                agent_type="qa",
+            )
+
+            if mcp_servers:
+                tool_executor = McpToolExecutor(
+                    user_id=user_id,
+                    session_id=session_id,
+                    ws_manager=self.ws_manager,
+                )
+                logger.info(
+                    "qa_mcp_enabled",
+                    milestone_id=str(milestone_id),
+                    mcp_server_count=len(mcp_servers),
+                )
+
+        # Execute with or without tools (unified interface)
+        response = await self.llm_client.chat_completion(
+            request=request,
+            mcp_servers=mcp_servers if tool_executor else None,
+            tool_executor=tool_executor,
+        )
 
         # Parse structured response
         try:

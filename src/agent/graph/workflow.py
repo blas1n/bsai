@@ -18,6 +18,7 @@ from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
 from agent.db.repository.artifact_repo import ArtifactRepository
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
+from agent.db.repository.session_repo import SessionRepository
 from agent.llm import ChatMessage
 
 from .edges import (
@@ -399,6 +400,13 @@ class WorkflowRunner:
         if isinstance(task_id, str):
             task_id = UUID(task_id)
 
+        # Load user_id from session
+        session_repo = SessionRepository(self.session)
+        session = await session_repo.get_by_id(session_id)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        user_id = session.user_id or "unknown"
+
         # Load previous context and milestones from same session
         context_messages, context_summary, context_tokens = await self._load_previous_context(
             session_id
@@ -409,6 +417,7 @@ class WorkflowRunner:
         initial_state: AgentState = {
             "session_id": session_id,
             "task_id": task_id,
+            "user_id": user_id,
             "original_request": original_request,
             "task_status": TaskStatus.PENDING,
             "milestones": previous_milestones,

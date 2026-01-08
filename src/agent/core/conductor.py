@@ -103,7 +103,7 @@ class ConductorAgent:
             },
         )
 
-        response = await self.llm_client.chat_completion(request)
+        response = await self.llm_client.chat_completion(request, mcp_servers=[])
 
         # Parse structured response
         try:

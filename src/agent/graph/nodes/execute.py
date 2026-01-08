@@ -72,6 +72,7 @@ async def execute_worker_node(
             router=container.router,
             prompt_manager=container.prompt_manager,
             session=session,
+            ws_manager=ws_manager,
         )
 
         # Determine prompt to use (MetaPrompter output or description)
@@ -87,12 +88,16 @@ async def execute_worker_node(
                 previous_output=previous_output,
                 qa_feedback=qa_feedback,
                 complexity=milestone["complexity"],
+                user_id=state["user_id"],
+                session_id=state["session_id"],
             )
         else:
             response = await worker.execute_milestone(
                 milestone_id=milestone["id"],
                 prompt=prompt,
                 complexity=milestone["complexity"],
+                user_id=state["user_id"],
+                session_id=state["session_id"],
                 preferred_model=milestone.get("selected_model"),
                 context_messages=state.get("context_messages"),
             )
