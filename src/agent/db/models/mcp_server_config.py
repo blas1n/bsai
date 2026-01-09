@@ -1,7 +1,6 @@
 """MCP server configuration model."""
 
 from datetime import datetime
-from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import BOOLEAN, TEXT, VARCHAR, Index, UniqueConstraint, func
@@ -73,7 +72,7 @@ class McpServerConfig(Base):
     env_vars: Mapped[dict[str, str] | None] = mapped_column(JSONB)
 
     # Tool configuration
-    available_tools: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    available_tools: Mapped[list[str] | None] = mapped_column(JSONB)
     require_approval: Mapped[str] = mapped_column(
         VARCHAR(20), default="always", nullable=False
     )  # "always" | "never" | "conditional"

@@ -1,8 +1,11 @@
 """MCP (Model Context Protocol) server management endpoints."""
 
+import time
 from uuid import UUID
 
 from fastapi import APIRouter, status
+from mcp import ClientSession
+from mcp.client.sse import sse_client
 
 from agent.api.config import get_mcp_settings
 from agent.api.exceptions import ConflictError, NotFoundError, ValidationError
@@ -110,7 +113,7 @@ async def get_mcp_server(
     db: DBSession,
     user_id: CurrentUserId,
     include_stdio_config: bool = True,
-) -> McpServerDetailResponse:
+) -> McpServerResponse | McpServerDetailResponse:
     """Get detailed MCP server configuration.
 
     Args:
@@ -369,14 +372,49 @@ async def test_mcp_server(
             "stdio servers cannot be tested from backend. Use native app to test."
         )
 
-    # TODO: Implement actual connection test with LiteLLM
-    # For now, return placeholder response
-    return McpServerTestResponse(
-        success=False,
-        error="Connection testing not yet implemented",
-        available_tools=None,
-        latency_ms=None,
-    )
+    # Build auth headers if configured
+    settings = get_mcp_settings()
+    encryptor = CredentialEncryption(settings)
+    headers: dict[str, str] | None = None
+
+    if server.auth_credentials:
+        try:
+            credentials = encryptor.decrypt(server.auth_credentials)
+            if server.auth_type == "bearer":
+                headers = {"Authorization": f"Bearer {credentials.get('token', '')}"}
+            elif server.auth_type == "api_key":
+                headers = {
+                    credentials.get("header_name", "X-API-Key"): credentials.get("api_key", "")
+                }
+        except Exception:
+            pass  # Continue without auth if decryption fails
+
+    try:
+        # Measure latency and load tools via MCP SDK
+        start_time = time.monotonic()
+
+        async with sse_client(url=server.server_url, headers=headers) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools_result = await session.list_tools()
+                tool_names = [tool.name for tool in tools_result.tools]
+
+        latency_ms = int((time.monotonic() - start_time) * 1000)
+
+        return McpServerTestResponse(
+            success=True,
+            error=None,
+            available_tools=tool_names,
+            latency_ms=latency_ms,
+        )
+
+    except Exception as e:
+        return McpServerTestResponse(
+            success=False,
+            error=str(e),
+            available_tools=None,
+            latency_ms=None,
+        )
 
 
 @router.get(
@@ -405,9 +443,73 @@ async def list_mcp_tools(
     if not server:
         raise NotFoundError("MCP server", server_id)
 
-    # TODO: Implement actual tool listing with LiteLLM/MCP protocol
-    # For now, return empty list
-    return []
+    # stdio servers cannot list tools from backend
+    if server.transport_type == "stdio":
+        # Return cached tools if available
+        if server.available_tools:
+            return [
+                McpToolSchema(
+                    name=tool_name,
+                    description=f"Tool: {tool_name}",
+                    input_schema={},
+                )
+                for tool_name in server.available_tools
+            ]
+        return []
+
+    try:
+        # Build auth headers if configured
+        settings = get_mcp_settings()
+        encryptor = CredentialEncryption(settings)
+        headers: dict[str, str] | None = None
+
+        if server.auth_credentials:
+            try:
+                credentials = encryptor.decrypt(server.auth_credentials)
+                if server.auth_type == "bearer":
+                    headers = {"Authorization": f"Bearer {credentials.get('token', '')}"}
+                elif server.auth_type == "api_key":
+                    headers = {
+                        credentials.get("header_name", "X-API-Key"): credentials.get("api_key", "")
+                    }
+            except Exception:
+                pass
+
+        # Load tools from MCP server via MCP SDK
+        async with sse_client(url=server.server_url, headers=headers) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools_result = await session.list_tools()
+
+        result = []
+        for tool in tools_result.tools:
+            result.append(
+                McpToolSchema(
+                    name=tool.name,
+                    description=tool.description or "",
+                    input_schema=tool.inputSchema if tool.inputSchema else {},
+                )
+            )
+
+        # Filter by available_tools if configured
+        if server.available_tools:
+            allowed_tools = set(server.available_tools)
+            result = [t for t in result if t.name in allowed_tools]
+
+        return result
+
+    except Exception:
+        # Return cached tools if MCP connection fails
+        if server.available_tools:
+            return [
+                McpToolSchema(
+                    name=tool_name,
+                    description=f"Tool: {tool_name}",
+                    input_schema={},
+                )
+                for tool_name in server.available_tools
+            ]
+        return []
 
 
 @router.get(
@@ -442,16 +544,18 @@ async def get_mcp_logs(
 
     if session_id:
         logs = await log_repo.get_by_session(session_id, limit, offset)
+        total = await log_repo.count_by_session(session_id)
     else:
         logs = await log_repo.get_by_user(user_id, limit, offset, status_filter, agent_type)
+        total = await log_repo.count_by_user(user_id, status_filter, agent_type)
 
     # Convert to response models
     items = [McpToolExecutionLogResponse.model_validate(log) for log in logs]
 
     return PaginatedResponse(
         items=items,
-        total=len(logs),  # TODO: Implement proper count query
+        total=total,
         limit=limit,
         offset=offset,
-        has_more=len(logs) == limit,
+        has_more=offset + len(logs) < total,
     )

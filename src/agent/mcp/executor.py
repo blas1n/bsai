@@ -16,9 +16,12 @@ import structlog
 from agent.api.config import get_mcp_settings
 from agent.api.schemas.websocket import WSMessage, WSMessageType
 from agent.db.models.mcp_server_config import McpServerConfig
+from agent.db.repository.mcp_tool_log_repo import McpToolLogRepository
 from agent.mcp.security import McpSecurityValidator
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from agent.api.websocket.manager import ConnectionManager
 
 logger = structlog.get_logger()
@@ -109,12 +112,18 @@ class McpToolExecutor:
         self,
         tool_call: McpToolCall,
         agent_type: str = "worker",
+        db_session: AsyncSession | None = None,
+        task_id: UUID | None = None,
+        milestone_id: UUID | None = None,
     ) -> McpToolResult:
         """Execute a tool call with approval check and logging.
 
         Args:
             tool_call: Tool call to execute
             agent_type: Agent type ("worker" or "qa")
+            db_session: Optional database session for logging
+            task_id: Optional task ID for logging
+            milestone_id: Optional milestone ID for logging
 
         Returns:
             Tool execution result
@@ -158,7 +167,17 @@ class McpToolExecutor:
             if not approved:
                 logger.warning("mcp_tool_rejected", tool_name=tool_call.tool_name)
                 # Log rejection
-                # TODO: Add logging when db session available
+                await self._log_execution(
+                    db_session=db_session,
+                    tool_call=tool_call,
+                    agent_type=agent_type,
+                    task_id=task_id,
+                    milestone_id=milestone_id,
+                    result=None,
+                    status="rejected",
+                    require_approval=require_approval,
+                    approved=False,
+                )
                 return McpToolResult(
                     success=False,
                     error="Tool execution rejected by user",
@@ -172,9 +191,82 @@ class McpToolExecutor:
             result = await self._execute_remote_tool(tool_call)
 
         # Log execution
-        # TODO: Add logging when db session available
+        await self._log_execution(
+            db_session=db_session,
+            tool_call=tool_call,
+            agent_type=agent_type,
+            task_id=task_id,
+            milestone_id=milestone_id,
+            result=result,
+            status="success" if result.success else "error",
+            require_approval=require_approval,
+            approved=approved if require_approval else None,
+        )
 
         return result
+
+    async def _log_execution(
+        self,
+        db_session: AsyncSession | None,
+        tool_call: McpToolCall,
+        agent_type: str,
+        task_id: UUID | None,
+        milestone_id: UUID | None,
+        result: McpToolResult | None,
+        status: str,
+        require_approval: bool,
+        approved: bool | None,
+    ) -> None:
+        """Log tool execution to database.
+
+        Args:
+            db_session: Database session (if None, logging is skipped)
+            tool_call: Tool call that was executed
+            agent_type: Agent type ("worker" or "qa")
+            task_id: Optional task ID
+            milestone_id: Optional milestone ID
+            result: Tool execution result (None if rejected)
+            status: Execution status ("success", "error", "rejected")
+            require_approval: Whether approval was required
+            approved: Whether user approved (None if not required)
+        """
+        if not db_session:
+            logger.debug(
+                "mcp_logging_skipped",
+                reason="no_db_session",
+                tool_name=tool_call.tool_name,
+            )
+            return
+
+        try:
+            log_repo = McpToolLogRepository(db_session)
+            await log_repo.log_execution(
+                user_id=self.user_id,
+                session_id=self.session_id,
+                mcp_server_id=tool_call.mcp_server.id,
+                tool_name=tool_call.tool_name,
+                tool_input=tool_call.tool_input,
+                agent_type=agent_type,
+                status=status,
+                required_approval=require_approval,
+                task_id=task_id,
+                milestone_id=milestone_id,
+                tool_output=result.output if result else None,
+                execution_time_ms=result.execution_time_ms if result else None,
+                error_message=result.error if result else "Rejected by user",
+                approved_by_user=approved,
+            )
+            logger.debug(
+                "mcp_execution_logged",
+                tool_name=tool_call.tool_name,
+                status=status,
+            )
+        except Exception as e:
+            logger.error(
+                "mcp_logging_failed",
+                tool_name=tool_call.tool_name,
+                error=str(e),
+            )
 
     def _should_require_approval(
         self,

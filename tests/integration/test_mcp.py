@@ -646,9 +646,16 @@ class TestGetMcpLogs:
         auth_headers: dict[str, str],
     ):
         """Test getting logs when user has none."""
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        db_session.execute = AsyncMock(return_value=mock_result)
+        # Mock for get_by_user (returns list)
+        mock_list_result = MagicMock()
+        mock_list_result.scalars.return_value.all.return_value = []
+
+        # Mock for count_by_user (returns int)
+        mock_count_result = MagicMock()
+        mock_count_result.scalar_one.return_value = 0
+
+        # Return different results for consecutive calls
+        db_session.execute = AsyncMock(side_effect=[mock_list_result, mock_count_result])
 
         response = client.get("/api/v1/mcp/logs", headers=auth_headers)
 
@@ -664,9 +671,16 @@ class TestGetMcpLogs:
         auth_headers: dict[str, str],
     ):
         """Test logs pagination parameters."""
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        db_session.execute = AsyncMock(return_value=mock_result)
+        # Mock for get_by_user (returns list)
+        mock_list_result = MagicMock()
+        mock_list_result.scalars.return_value.all.return_value = []
+
+        # Mock for count_by_user (returns int)
+        mock_count_result = MagicMock()
+        mock_count_result.scalar_one.return_value = 0
+
+        # Return different results for consecutive calls
+        db_session.execute = AsyncMock(side_effect=[mock_list_result, mock_count_result])
 
         response = client.get(
             "/api/v1/mcp/logs",

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.mcp_tool_execution_log import McpToolExecutionLog
@@ -187,6 +187,55 @@ class McpToolLogRepository(BaseRepository[McpToolExecutionLog]):
 
         if since:
             stmt = stmt.where(McpToolExecutionLog.created_at >= since)
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def count_by_user(
+        self,
+        user_id: str,
+        status_filter: str | None = None,
+        agent_type_filter: str | None = None,
+    ) -> int:
+        """Count tool execution logs for a user.
+
+        Args:
+            user_id: User identifier
+            status_filter: Optional status filter ("success" | "error" | "rejected")
+            agent_type_filter: Optional agent type filter ("worker" | "qa")
+
+        Returns:
+            Total count of matching logs
+        """
+        stmt = (
+            select(func.count())
+            .select_from(McpToolExecutionLog)
+            .where(McpToolExecutionLog.user_id == user_id)
+        )
+
+        if status_filter:
+            stmt = stmt.where(McpToolExecutionLog.status == status_filter)
+
+        if agent_type_filter:
+            stmt = stmt.where(McpToolExecutionLog.agent_type == agent_type_filter)
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def count_by_session(self, session_id: UUID) -> int:
+        """Count tool execution logs for a session.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Total count of logs for the session
+        """
+        stmt = (
+            select(func.count())
+            .select_from(McpToolExecutionLog)
+            .where(McpToolExecutionLog.session_id == session_id)
+        )
 
         result = await self.session.execute(stmt)
         return result.scalar_one()
