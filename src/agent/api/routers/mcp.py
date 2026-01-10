@@ -115,64 +115,6 @@ async def list_mcp_tools_from_server(
         ]
 
 
-def _get_user_friendly_error(e: Exception, server_url: str) -> str:
-    """Convert technical exceptions to user-friendly error messages.
-
-    Args:
-        e: The exception that occurred
-        server_url: The MCP server URL being tested
-
-    Returns:
-        User-friendly error message
-    """
-    error_str = str(e).lower()
-    error_type = type(e).__name__
-
-    # Handle ExceptionGroup (common in async code)
-    if error_type == "ExceptionGroup" or "exceptiongroup" in error_type.lower():
-        # Extract the actual error from the group
-        exceptions = getattr(e, "exceptions", None)
-        if exceptions:
-            inner_error: Exception = exceptions[0]
-            return _get_user_friendly_error(inner_error, server_url)
-        return f"Connection failed: Multiple errors occurred while connecting to {server_url}"
-
-    # Connection errors
-    if "connect" in error_str or "connection" in error_str:
-        if "refused" in error_str:
-            return f"Connection refused: The server at {server_url} is not accepting connections. Make sure the MCP server is running."
-        if "timeout" in error_str:
-            return f"Connection timeout: The server at {server_url} did not respond in time. Check if the URL is correct and the server is reachable."
-        return f"Connection failed: Unable to connect to {server_url}. Verify the URL and ensure the server is running."
-
-    # DNS/hostname errors
-    if "name or service not known" in error_str or "getaddrinfo" in error_str:
-        return f"DNS error: Cannot resolve hostname. Check if the URL {server_url} is correct."
-
-    # SSL/TLS errors
-    if "ssl" in error_str or "certificate" in error_str:
-        return f"SSL error: Cannot establish secure connection to {server_url}. Check the server's SSL certificate."
-
-    # HTTP errors
-    if "404" in error_str or "not found" in error_str:
-        return f"Not found: The MCP endpoint at {server_url} does not exist. Verify the URL path."
-    if "401" in error_str or "unauthorized" in error_str:
-        return "Authentication failed: Invalid or missing credentials. Check your authentication settings."
-    if "403" in error_str or "forbidden" in error_str:
-        return "Access denied: The server rejected the request. Check your permissions and credentials."
-    if "500" in error_str or "internal server error" in error_str:
-        return f"Server error: The MCP server at {server_url} encountered an internal error."
-
-    # MCP protocol errors
-    if "initialize" in error_str:
-        return f"Protocol error: Failed to initialize MCP session. The server at {server_url} may not support the MCP protocol."
-    if "json" in error_str or "parse" in error_str:
-        return f"Protocol error: Invalid response from {server_url}. The server may not be a valid MCP server."
-
-    # Generic fallback with the actual error
-    return f"Failed to connect to MCP server: {error_type} - {e}"
-
-
 async def _build_server_response(
     server: McpServerConfig, user_id: str, include_stdio_config: bool = False
 ) -> McpServerResponse | McpServerDetailResponse:
@@ -547,11 +489,9 @@ async def test_mcp_server(
         )
 
     except Exception as e:
-        # Convert technical errors to user-friendly messages
-        error_detail = _get_user_friendly_error(e, server.server_url or "")
         return McpServerTestResponse(
             success=False,
-            error=error_detail,
+            error=f"{type(e).__name__}: {e}",
             available_tools=None,
             latency_ms=None,
         )
