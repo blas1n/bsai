@@ -700,7 +700,15 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
 
     Returns:
         OAuth metadata dict or None if not found
+
+    Raises:
+        ValueError: If URL fails SSRF validation
     """
+    # Validate URL to prevent SSRF attacks
+    settings = get_mcp_settings()
+    validator = McpSecurityValidator(settings)
+    validator.validate_server_url(server_url)
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         # Try protected resource metadata first (RFC 9728)
         try:
@@ -712,6 +720,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
                 # Get authorization server URL
                 auth_server = resource_meta.get("authorization_servers", [None])[0]
                 if auth_server:
+                    # Validate auth server URL before making request
+                    validator.validate_server_url(auth_server)
                     # Fetch authorization server metadata
                     meta_response = await client.get(
                         urljoin(auth_server, "/.well-known/oauth-authorization-server")
@@ -719,6 +729,9 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
                     if meta_response.status_code == 200:
                         meta_result: dict[str, Any] = meta_response.json()
                         return meta_result
+        except ValueError:
+            # Re-raise validation errors
+            raise
         except Exception as e:
             logger.debug(
                 "oauth_protected_resource_discovery_failed", server_url=server_url, error=str(e)
@@ -765,7 +778,15 @@ async def _register_oauth_client(
 
     Returns:
         Client registration response with client_id and client_secret, or None
+
+    Raises:
+        ValueError: If registration endpoint fails SSRF validation
     """
+    # Validate registration endpoint URL to prevent SSRF attacks
+    settings = get_mcp_settings()
+    validator = McpSecurityValidator(settings)
+    validator.validate_server_url(registration_endpoint)
+
     registration_request = {
         "client_name": client_name,
         "redirect_uris": [redirect_uri],
@@ -784,6 +805,9 @@ async def _register_oauth_client(
             if response.status_code in (200, 201):
                 result: dict[str, Any] = response.json()
                 return result
+        except ValueError:
+            # Re-raise validation errors
+            raise
         except Exception as e:
             logger.debug(
                 "oauth_client_registration_failed", endpoint=registration_endpoint, error=str(e)
@@ -997,6 +1021,17 @@ async def oauth_callback(
         return McpOAuthCallbackResponse(
             success=False,
             error="OAuth metadata missing token_endpoint",
+        )
+
+    # Validate token endpoint URL to prevent SSRF attacks
+    settings = get_mcp_settings()
+    validator = McpSecurityValidator(settings)
+    try:
+        validator.validate_server_url(token_endpoint)
+    except ValueError as e:
+        return McpOAuthCallbackResponse(
+            success=False,
+            error=f"Invalid token endpoint URL: {e}",
         )
 
     # Exchange code for tokens - use registered client_id from oauth_data
