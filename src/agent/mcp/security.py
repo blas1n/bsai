@@ -66,9 +66,7 @@ class McpSecurityValidator:
 
         if base_cmd not in self.allowed_stdio_commands:
             allowed_list = ", ".join(sorted(self.allowed_stdio_commands))
-            raise ValueError(
-                f"Command '{base_cmd}' not allowed. " f"Allowed commands: {allowed_list}"
-            )
+            raise ValueError(f"Command '{base_cmd}' not allowed. Allowed commands: {allowed_list}")
 
     def validate_server_url(self, url: str) -> None:
         """Validate HTTP/SSE URL to prevent SSRF attacks.
@@ -236,7 +234,8 @@ class CredentialEncryption:
             decrypted_bytes = self.fernet.decrypt(encrypted_bytes)
 
             # Parse JSON
-            return json.loads(decrypted_bytes.decode())
+            result: dict[str, Any] = json.loads(decrypted_bytes.decode())
+            return result
         except Exception as e:
             raise ValueError(f"Failed to decrypt credentials: {e}") from e
 

@@ -60,7 +60,7 @@ def get_ws_manager(config: RunnableConfig) -> ConnectionManager:
         RuntimeError: If ws_manager not in config
     """
     configurable = config.get("configurable", {})
-    ws_manager = configurable.get("ws_manager")
+    ws_manager: ConnectionManager | None = configurable.get("ws_manager")
     if ws_manager is None:
         msg = "WebSocket manager not found in config. Ensure workflow is run with proper context."
         raise RuntimeError(msg)

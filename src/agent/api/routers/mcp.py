@@ -717,7 +717,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
                         urljoin(auth_server, "/.well-known/oauth-authorization-server")
                     )
                     if meta_response.status_code == 200:
-                        return meta_response.json()
+                        result: dict[str, Any] = meta_response.json()
+                        return result
         except Exception as e:
             logger.debug(
                 "oauth_protected_resource_discovery_failed", server_url=server_url, error=str(e)
@@ -729,7 +730,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
                 urljoin(server_url, "/.well-known/oauth-authorization-server")
             )
             if response.status_code == 200:
-                return response.json()
+                result: dict[str, Any] = response.json()
+                return result
         except Exception as e:
             logger.debug(
                 "oauth_authorization_server_discovery_failed", server_url=server_url, error=str(e)
@@ -739,7 +741,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
         try:
             response = await client.get(urljoin(server_url, "/.well-known/openid-configuration"))
             if response.status_code == 200:
-                return response.json()
+                result: dict[str, Any] = response.json()
+                return result
         except Exception as e:
             logger.debug(
                 "openid_configuration_discovery_failed", server_url=server_url, error=str(e)
@@ -779,7 +782,8 @@ async def _register_oauth_client(
                 headers={"Content-Type": "application/json"},
             )
             if response.status_code in (200, 201):
-                return response.json()
+                result: dict[str, Any] = response.json()
+                return result
         except Exception as e:
             logger.debug(
                 "oauth_client_registration_failed", endpoint=registration_endpoint, error=str(e)
