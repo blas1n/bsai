@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 import structlog
@@ -14,8 +14,32 @@ from agent.cache import SessionCache
 
 from ..schemas import WSMessage
 
-if TYPE_CHECKING:
-    from agent.mcp.executor import McpToolExecutor
+
+class McpToolExecutorProtocol(Protocol):
+    """Protocol for MCP tool executor to avoid circular imports."""
+
+    user_id: str
+    session_id: UUID
+
+    def handle_stdio_response(
+        self,
+        request_id: str,
+        success: bool,
+        output: dict[str, Any] | None = None,
+        error: str | None = None,
+        execution_time_ms: int | None = None,
+    ) -> None:
+        """Handle stdio tool execution response from frontend."""
+        ...
+
+    def handle_approval_response(
+        self,
+        request_id: str,
+        approved: bool,
+    ) -> None:
+        """Handle user approval response from frontend."""
+        ...
+
 
 logger = structlog.get_logger()
 
@@ -44,7 +68,7 @@ class ConnectionManager:
     cache: SessionCache
     _connections: dict[str, Connection] = field(default_factory=dict)
     _session_connections: dict[UUID, set[str]] = field(default_factory=dict)
-    _mcp_executors: dict[UUID, McpToolExecutor] = field(default_factory=dict)
+    _mcp_executors: dict[UUID, McpToolExecutorProtocol] = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def connect(
@@ -320,7 +344,7 @@ class ConnectionManager:
     def register_mcp_executor(
         self,
         session_id: UUID,
-        executor: McpToolExecutor,
+        executor: McpToolExecutorProtocol,
     ) -> None:
         """Register MCP tool executor for a session.
 
@@ -331,7 +355,7 @@ class ConnectionManager:
         self._mcp_executors[session_id] = executor
         logger.debug("mcp_executor_registered", session_id=str(session_id))
 
-    def get_mcp_executor(self, session_id: UUID) -> McpToolExecutor | None:
+    def get_mcp_executor(self, session_id: UUID) -> McpToolExecutorProtocol | None:
         """Get MCP tool executor for a session.
 
         Args:

@@ -320,3 +320,133 @@ class TestCredentialEncryption:
         decrypted = encryptor.decrypt(encrypted)
 
         assert decrypted == credentials
+
+
+class TestBuildMcpAuthHeaders:
+    """Tests for build_mcp_auth_headers function."""
+
+    from unittest.mock import MagicMock
+
+    from agent.mcp.security import build_mcp_auth_headers
+
+    def _create_mock_server(self, **kwargs):
+        """Create mock MCP server config."""
+        from unittest.mock import MagicMock
+
+        server = MagicMock()
+        server.name = kwargs.get("name", "test-server")
+        server.auth_type = kwargs.get("auth_type", "none")
+        server.auth_credentials = kwargs.get("auth_credentials")
+        return server
+
+    def test_no_credentials_returns_none(self):
+        """Test returns None when no credentials."""
+        from agent.mcp.security import build_mcp_auth_headers
+
+        server = self._create_mock_server(auth_credentials=None)
+        result = build_mcp_auth_headers(server)
+        assert result is None
+
+    def test_auth_type_none_returns_none(self):
+        """Test returns None when auth type is 'none'."""
+        from agent.mcp.security import build_mcp_auth_headers
+
+        server = self._create_mock_server(auth_type="none", auth_credentials="encrypted")
+        result = build_mcp_auth_headers(server)
+        assert result is None
+
+    def test_no_auth_type_returns_none(self):
+        """Test returns None when auth type is not set."""
+        from agent.mcp.security import build_mcp_auth_headers
+
+        server = self._create_mock_server(auth_type=None, auth_credentials="encrypted")
+        result = build_mcp_auth_headers(server)
+        assert result is None
+
+    def test_bearer_auth_builds_headers(self):
+        """Test bearer token authentication builds headers."""
+        from cryptography.fernet import Fernet
+
+        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+        encryptor = CredentialEncryption(settings)
+        encrypted = encryptor.encrypt({"token": "my-bearer-token"})
+
+        server = self._create_mock_server(auth_type="bearer", auth_credentials=encrypted)
+
+        result = build_mcp_auth_headers(server, settings=settings)
+        assert result == {"Authorization": "Bearer my-bearer-token"}
+
+    def test_api_key_auth_builds_headers(self):
+        """Test API key authentication builds headers."""
+        from cryptography.fernet import Fernet
+
+        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+        encryptor = CredentialEncryption(settings)
+        encrypted = encryptor.encrypt({"api_key": "my-api-key", "header_name": "X-Custom-Key"})
+
+        server = self._create_mock_server(auth_type="api_key", auth_credentials=encrypted)
+
+        result = build_mcp_auth_headers(server, settings=settings)
+        assert result == {"X-Custom-Key": "my-api-key"}
+
+    def test_api_key_auth_default_header_name(self):
+        """Test API key uses default header name."""
+        from cryptography.fernet import Fernet
+
+        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+        encryptor = CredentialEncryption(settings)
+        encrypted = encryptor.encrypt({"api_key": "my-api-key"})
+
+        server = self._create_mock_server(auth_type="api_key", auth_credentials=encrypted)
+
+        result = build_mcp_auth_headers(server, settings=settings)
+        assert result == {"X-API-Key": "my-api-key"}
+
+    def test_oauth2_auth_builds_headers(self):
+        """Test OAuth2 authentication builds headers."""
+        from cryptography.fernet import Fernet
+
+        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+        encryptor = CredentialEncryption(settings)
+        encrypted = encryptor.encrypt({"access_token": "oauth-token"})
+
+        server = self._create_mock_server(auth_type="oauth2", auth_credentials=encrypted)
+
+        result = build_mcp_auth_headers(server, settings=settings)
+        assert result == {"Authorization": "Bearer oauth-token"}
+
+    def test_decryption_failure_returns_none(self):
+        """Test returns None when decryption fails."""
+        from agent.mcp.security import build_mcp_auth_headers
+
+        server = self._create_mock_server(auth_type="bearer", auth_credentials="invalid-encrypted")
+        result = build_mcp_auth_headers(server)
+        assert result is None
+
+    def test_empty_token_returns_none(self):
+        """Test returns None when token is empty."""
+        from cryptography.fernet import Fernet
+
+        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+        encryptor = CredentialEncryption(settings)
+        encrypted = encryptor.encrypt({"token": ""})
+
+        server = self._create_mock_server(auth_type="bearer", auth_credentials=encrypted)
+
+        result = build_mcp_auth_headers(server, settings=settings)
+        assert result is None

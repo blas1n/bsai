@@ -1,7 +1,8 @@
 """Integration tests for MCP tool integration (Phase 2)."""
 
 import asyncio
-from typing import Any
+from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -29,7 +30,7 @@ def session_id() -> UUID:
 class MockWebSocketManager:
     """Mock WebSocket manager for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize mock WebSocket manager."""
         self.sent_messages: list[dict[str, Any]] = []
         self.approval_response: bool = True
@@ -59,7 +60,7 @@ class MockWebSocketManager:
 
 
 @pytest.fixture
-def mock_ws_manager() -> MockWebSocketManager:
+def mock_ws_manager() -> Any:
     """Create mock WebSocket manager."""
     return MockWebSocketManager()
 
@@ -68,7 +69,7 @@ class TestMcpToolExecutor:
     """Test MCP tool executor functionality."""
 
     @pytest.mark.asyncio
-    async def test_tool_call_creation(self, db_session: AsyncSession, user_id: str):
+    async def test_tool_call_creation(self, db_session: AsyncSession, user_id: str) -> None:
         """Test creating MCP tool call."""
         # Create MCP server
         repo = McpServerRepository(db_session)
@@ -107,7 +108,7 @@ class TestMcpToolExecutor:
         db_session: AsyncSession,
         user_id: str,
         session_id: UUID,
-    ):
+    ) -> None:
         """Test risk assessment for low-risk tools."""
         from agent.mcp.security import McpSecurityValidator
 
@@ -125,7 +126,7 @@ class TestMcpToolExecutor:
     async def test_risk_assessment_medium(
         self,
         db_session: AsyncSession,
-    ):
+    ) -> None:
         """Test risk assessment for medium-risk tools."""
         from agent.mcp.security import McpSecurityValidator
 
@@ -145,8 +146,8 @@ class TestMcpToolExecutor:
         db_session: AsyncSession,
         user_id: str,
         session_id: UUID,
-        mock_ws_manager: MockWebSocketManager,
-    ):
+        mock_ws_manager: Any,
+    ) -> None:
         """Test approval workflow for high-risk tools."""
         # Create MCP server with approval required
         repo = McpServerRepository(db_session)
@@ -177,35 +178,21 @@ class TestMcpToolExecutor:
         )
 
         # Create tool call
-        _ = McpToolCall(
+        tool_call = McpToolCall(
             tool_name="delete_file",
             tool_input={"path": "/tmp/test.txt"},
             mcp_server=server,
         )
 
-        # Mock approval response - immediately approve
-        async def mock_approval():
-            """Mock approval response."""
-            await asyncio.sleep(0.1)
-            # Find the approval request
-            for msg in mock_ws_manager.sent_messages:
-                if msg["type"] == "mcp_approval_request":
-                    request_id = msg["payload"]["request_id"]
-                    executor.handle_approval_response(request_id, approved=True)
+        # Verify tool call was created with correct properties
+        assert tool_call.tool_name == "delete_file"
+        assert tool_call.mcp_server.require_approval == "always"
 
-        # Start approval task in background
-        approval_task = asyncio.create_task(mock_approval())
+        # Verify executor was created with ws_manager
+        assert executor.ws_manager is mock_ws_manager
 
-        # Note: This test cannot fully execute without LiteLLM integration
-        # It tests the approval workflow structure
-
-        await approval_task
-
-        # Verify approval request was sent
-        approval_messages = [
-            msg for msg in mock_ws_manager.sent_messages if msg["type"] == "mcp_approval_request"
-        ]
-        assert len(approval_messages) == 0  # Not sent yet (needs full execution)
+        # Note: Full approval workflow requires actual tool execution
+        # which needs LiteLLM integration. This test verifies setup.
 
 
 class TestMcpServerRepository:
@@ -216,10 +203,8 @@ class TestMcpServerRepository:
         self,
         db_session: AsyncSession,
         user_id: str,
-    ):
+    ) -> None:
         """Test getting MCP servers enabled for worker agent."""
-        from unittest.mock import MagicMock
-
         repo = McpServerRepository(db_session)
 
         # Create servers with different enablement
@@ -255,7 +240,7 @@ class TestMcpServerRepository:
         mock_result.scalars = MagicMock(
             return_value=MagicMock(all=MagicMock(return_value=[worker_server, both_server]))
         )
-        db_session.execute.return_value = mock_result
+        cast(AsyncMock, db_session.execute).return_value = mock_result
 
         # Get worker servers
         worker_servers = await repo.get_enabled_for_agent(user_id, "worker")
@@ -269,10 +254,8 @@ class TestMcpServerRepository:
         self,
         db_session: AsyncSession,
         user_id: str,
-    ):
+    ) -> None:
         """Test getting MCP servers enabled for QA agent."""
-        from unittest.mock import MagicMock
-
         repo = McpServerRepository(db_session)
 
         # Create servers
@@ -299,7 +282,7 @@ class TestMcpServerRepository:
         mock_result.scalars = MagicMock(
             return_value=MagicMock(all=MagicMock(return_value=[qa_only]))
         )
-        db_session.execute.return_value = mock_result
+        cast(AsyncMock, db_session.execute).return_value = mock_result
 
         # Get QA servers
         qa_servers = await repo.get_enabled_for_agent(user_id, "qa")
@@ -317,10 +300,9 @@ class TestWorkerAgentMcp:
         db_session: AsyncSession,
         user_id: str,
         session_id: UUID,
-        mock_ws_manager: MockWebSocketManager,
-    ):
+        mock_ws_manager: Any,
+    ) -> None:
         """Test Worker Agent loads MCP servers correctly."""
-        from unittest.mock import MagicMock
 
         # Create MCP server for worker
         repo = McpServerRepository(db_session)
@@ -347,7 +329,7 @@ class TestWorkerAgentMcp:
         mock_result.scalars = MagicMock(
             return_value=MagicMock(all=MagicMock(return_value=[server]))
         )
-        db_session.execute.return_value = mock_result
+        cast(AsyncMock, db_session.execute).return_value = mock_result
 
         # Create Worker Agent with mocked dependencies
         llm_client = LiteLLMClient()
@@ -381,10 +363,9 @@ class TestQAAgentMcp:
         db_session: AsyncSession,
         user_id: str,
         session_id: UUID,
-        mock_ws_manager: MockWebSocketManager,
-    ):
+        mock_ws_manager: Any,
+    ) -> None:
         """Test QA Agent loads MCP servers correctly."""
-        from unittest.mock import MagicMock
 
         # Create MCP server for QA
         repo = McpServerRepository(db_session)
@@ -411,7 +392,7 @@ class TestQAAgentMcp:
         mock_result.scalars = MagicMock(
             return_value=MagicMock(all=MagicMock(return_value=[server]))
         )
-        db_session.execute.return_value = mock_result
+        cast(AsyncMock, db_session.execute).return_value = mock_result
 
         # Create QA Agent with mocked dependencies
         llm_client = LiteLLMClient()
@@ -444,10 +425,8 @@ class TestMcpToolCallLoop:
         self,
         db_session: AsyncSession,
         user_id: str,
-    ):
+    ) -> None:
         """Test building tool schemas from MCP servers."""
-        from unittest.mock import MagicMock
-
         # Create a mock MCP server config with tools
         server = MagicMock()
         server.name = "tools-server"
@@ -499,7 +478,7 @@ class TestMcpToolCallLoop:
         self,
         db_session: AsyncSession,
         user_id: str,
-    ):
+    ) -> None:
         """Test that chat_completion handles both tool and non-tool modes."""
         from agent.llm import LLMRequest
 
@@ -539,10 +518,8 @@ class TestMcpToolCallLoop:
         self,
         db_session: AsyncSession,
         user_id: str,
-    ):
+    ) -> None:
         """Test finding MCP server for a specific tool via tool_to_server mapping."""
-        from unittest.mock import MagicMock
-        from uuid import uuid4
 
         # Create mock servers
         server1 = MagicMock()
