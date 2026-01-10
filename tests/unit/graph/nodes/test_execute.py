@@ -28,7 +28,13 @@ class TestExecuteWorkerNode:
             patch("agent.graph.nodes.execute.broadcast_agent_started", new_callable=AsyncMock),
             patch("agent.graph.nodes.execute.broadcast_agent_completed", new_callable=AsyncMock),
             patch("agent.graph.nodes.execute.MilestoneRepository") as MockMilestoneRepo,
+            patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
             patch("agent.graph.nodes.execute.extract_artifacts", return_value=[]),
+            patch(
+                "agent.graph.nodes.execute.check_task_cancelled",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             mock_worker = AsyncMock()
             mock_response = LLMResponse(
@@ -44,6 +50,10 @@ class TestExecuteWorkerNode:
             mock_milestone_repo.update_llm_usage = AsyncMock()
             mock_milestone_repo.update = AsyncMock()
             MockMilestoneRepo.return_value = mock_milestone_repo
+
+            mock_artifact_repo = MagicMock()
+            mock_artifact_repo.create_artifact = AsyncMock()
+            MockArtifactRepo.return_value = mock_artifact_repo
 
             result = await execute_worker_node(state_with_milestone, mock_config, mock_session)
 
@@ -90,7 +100,13 @@ class TestExecuteWorkerNode:
             patch("agent.graph.nodes.execute.broadcast_agent_started", new_callable=AsyncMock),
             patch("agent.graph.nodes.execute.broadcast_agent_completed", new_callable=AsyncMock),
             patch("agent.graph.nodes.execute.MilestoneRepository") as MockMilestoneRepo,
+            patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
             patch("agent.graph.nodes.execute.extract_artifacts", return_value=[]),
+            patch(
+                "agent.graph.nodes.execute.check_task_cancelled",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             mock_worker = AsyncMock()
             mock_response = LLMResponse(
@@ -106,6 +122,10 @@ class TestExecuteWorkerNode:
             mock_milestone_repo.update_llm_usage = AsyncMock()
             mock_milestone_repo.update = AsyncMock()
             MockMilestoneRepo.return_value = mock_milestone_repo
+
+            mock_artifact_repo = MagicMock()
+            mock_artifact_repo.create_artifact = AsyncMock()
+            MockArtifactRepo.return_value = mock_artifact_repo
 
             result = await execute_worker_node(state, mock_config, mock_session)
 

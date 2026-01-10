@@ -50,6 +50,11 @@ class TestVerifyQaNode:
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch("agent.graph.nodes.qa.broadcast_agent_started", new_callable=AsyncMock),
             patch("agent.graph.nodes.qa.broadcast_agent_completed", new_callable=AsyncMock),
+            patch(
+                "agent.graph.nodes.qa.check_task_cancelled",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             mock_qa = AsyncMock()
             mock_qa.validate_output.return_value = (QADecision.PASS, "Looks good")

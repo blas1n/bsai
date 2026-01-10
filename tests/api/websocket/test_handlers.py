@@ -158,13 +158,25 @@ class TestHandleMessage:
         """Subscribes to session on subscribe message."""
         session_id = uuid4()
 
-        await handler._handle_message(
-            mock_connection,
-            {
-                "type": "subscribe",
-                "payload": {"session_id": str(session_id)},
-            },
-        )
+        # Mock the database session for ownership verification using async generator
+        async def mock_get_db():
+            mock_db = AsyncMock()
+            yield mock_db
+
+        with patch("agent.api.websocket.handlers.get_db_session", mock_get_db):
+            # Mock SessionRepository.verify_ownership to return True
+            with patch("agent.api.websocket.handlers.SessionRepository") as MockSessionRepo:
+                mock_repo = MagicMock()
+                mock_repo.verify_ownership = AsyncMock(return_value=True)
+                MockSessionRepo.return_value = mock_repo
+
+                await handler._handle_message(
+                    mock_connection,
+                    {
+                        "type": "subscribe",
+                        "payload": {"session_id": str(session_id)},
+                    },
+                )
 
         mock_manager.subscribe_to_session.assert_called_once_with(mock_connection, session_id)
 

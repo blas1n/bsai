@@ -446,41 +446,43 @@ class TestMcpToolCallLoop:
         user_id: str,
     ):
         """Test building tool schemas from MCP servers."""
-        # Create MCP server with tools
-        repo = McpServerRepository(db_session)
-        server = await repo.create(
-            user_id=user_id,
-            name="tools-server",
-            transport_type="http",
-            server_url="https://tools.example.com",
-            available_tools=[
-                {
-                    "name": "calculator",
-                    "description": "Perform calculations",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "expression": {"type": "string"},
-                        },
-                        "required": ["expression"],
-                    },
-                },
-                {
-                    "name": "weather",
-                    "description": "Get weather",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "city": {"type": "string"},
-                        },
-                    },
-                },
-            ],
-        )
+        from unittest.mock import MagicMock
 
-        # Build tools using LiteLLM client (internal method for testing)
+        # Create a mock MCP server config with tools
+        server = MagicMock()
+        server.name = "tools-server"
+        server.transport_type = "http"
+        server.server_url = "https://tools.example.com"
+        server.available_tools = [
+            {
+                "name": "calculator",
+                "description": "Perform calculations",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "expression": {"type": "string"},
+                    },
+                    "required": ["expression"],
+                },
+            },
+            {
+                "name": "weather",
+                "description": "Get weather",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string"},
+                    },
+                },
+            },
+        ]
+
+        # Build tools using LiteLLM client with pre-loaded tool schemas
         llm_client = LiteLLMClient()
-        tools = llm_client._build_tools_from_mcp_servers([server])
+        tool_schemas = {server.name: server.available_tools}
+        tools, tool_to_server = await llm_client._build_tools_from_mcp_servers(
+            [server], tool_schemas=tool_schemas
+        )
 
         assert len(tools) == 2
         tool_names = {tool["function"]["name"] for tool in tools}
@@ -529,7 +531,8 @@ class TestMcpToolCallLoop:
         # mcp_servers is required (no default) - must pass empty list if no tools
         assert params["mcp_servers"].default is inspect.Parameter.empty
         assert params["tool_executor"].default is None
-        assert params["max_tool_iterations"].default == 5
+        # max_tool_iterations defaults to None (uses settings default at runtime)
+        assert params["max_tool_iterations"].default is None
 
     @pytest.mark.asyncio
     async def test_find_mcp_server_for_tool(
@@ -537,36 +540,43 @@ class TestMcpToolCallLoop:
         db_session: AsyncSession,
         user_id: str,
     ):
-        """Test finding MCP server for a specific tool."""
-        # Create multiple servers
-        repo = McpServerRepository(db_session)
+        """Test finding MCP server for a specific tool via tool_to_server mapping."""
+        from unittest.mock import MagicMock
+        from uuid import uuid4
 
-        server1 = await repo.create(
-            user_id=user_id,
-            name="server1",
-            transport_type="http",
-            server_url="https://server1.example.com",
-            available_tools=[{"name": "tool_a", "description": "Tool A", "inputSchema": {}}],
-        )
+        # Create mock servers
+        server1 = MagicMock()
+        server1.id = uuid4()
+        server1.name = "server1"
+        server1.transport_type = "http"
+        server1.server_url = "https://server1.example.com"
+        server1.available_tools = [{"name": "tool_a", "description": "Tool A", "inputSchema": {}}]
 
-        server2 = await repo.create(
-            user_id=user_id,
-            name="server2",
-            transport_type="http",
-            server_url="https://server2.example.com",
-            available_tools=[{"name": "tool_b", "description": "Tool B", "inputSchema": {}}],
-        )
+        server2 = MagicMock()
+        server2.id = uuid4()
+        server2.name = "server2"
+        server2.transport_type = "http"
+        server2.server_url = "https://server2.example.com"
+        server2.available_tools = [{"name": "tool_b", "description": "Tool B", "inputSchema": {}}]
 
-        # Find servers
+        # Build tools and get tool_to_server mapping with pre-loaded schemas
         llm_client = LiteLLMClient()
+        tool_schemas = {
+            server1.name: server1.available_tools,
+            server2.name: server2.available_tools,
+        }
+        tools, tool_to_server = await llm_client._build_tools_from_mcp_servers(
+            [server1, server2], tool_schemas=tool_schemas
+        )
 
-        found_server1 = llm_client._find_mcp_server_for_tool([server1, server2], "tool_a")
+        # Find servers via the mapping
+        found_server1 = tool_to_server.get("tool_a")
         assert found_server1 is not None
         assert found_server1.id == server1.id
 
-        found_server2 = llm_client._find_mcp_server_for_tool([server1, server2], "tool_b")
+        found_server2 = tool_to_server.get("tool_b")
         assert found_server2 is not None
         assert found_server2.id == server2.id
 
-        not_found = llm_client._find_mcp_server_for_tool([server1, server2], "tool_c")
+        not_found = tool_to_server.get("tool_c")
         assert not_found is None

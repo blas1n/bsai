@@ -59,6 +59,7 @@ def mock_ws_manager() -> MagicMock:
     """Create mock WebSocket manager."""
     manager = MagicMock()
     manager.send_message = AsyncMock()
+    manager.register_mcp_executor = MagicMock()
     return manager
 
 
@@ -130,11 +131,13 @@ class TestQAAgent:
         assert decision == QADecision.PASS
         assert "meets criteria" in feedback.lower()
 
-        # Check milestone status was updated to "pass" (enum value)
+        # Check milestone status was updated to "passed" (MilestoneStatus enum value)
+        from agent.db.models.enums import MilestoneStatus
+
         mock_repo = cast(MagicMock, qa_agent.milestone_repo)
         mock_repo.update.assert_called_once()
         update_call = mock_repo.update.call_args
-        assert update_call.kwargs["status"] == QADecision.PASS.value
+        assert update_call.kwargs["status"] == MilestoneStatus.PASSED.value
 
     @pytest.mark.asyncio
     async def test_validate_output_retry(
@@ -257,11 +260,13 @@ class TestQAAgent:
         assert decision == QADecision.RETRY
         assert "wrong implementation" in feedback.lower()
 
-        # Check milestone status was updated to "retry" (enum value)
+        # Check milestone status was updated to "in_progress" (MilestoneStatus for RETRY)
+        from agent.db.models.enums import MilestoneStatus
+
         mock_repo = cast(MagicMock, qa_agent.milestone_repo)
         mock_repo.update.assert_called()
         update_call = mock_repo.update.call_args
-        assert update_call.kwargs["status"] == QADecision.RETRY.value
+        assert update_call.kwargs["status"] == MilestoneStatus.IN_PROGRESS.value
 
     @pytest.mark.asyncio
     async def test_validate_output_invalid_decision_raises_error(

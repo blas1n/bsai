@@ -17,6 +17,7 @@ def mock_ws_manager() -> MagicMock:
     """Create mock WebSocket manager."""
     manager = MagicMock()
     manager.send_message = AsyncMock()
+    manager.register_mcp_executor = MagicMock()
     return manager
 
 
