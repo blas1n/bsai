@@ -8,7 +8,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urlencode, urljoin, urlparse
 from uuid import UUID
 
 import httpx
@@ -677,11 +677,16 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
     validator = McpSecurityValidator(settings)
     validator.validate_server_url(server_url)
 
+    # Normalize to origin-only URL (scheme + host[:port]) to avoid using any
+    # user-controlled path/query/fragment when building well-known URLs.
+    parsed = urlparse(server_url)
+    normalized_base_url = f"{parsed.scheme}://{parsed.netloc}"
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         # Try protected resource metadata first (RFC 9728)
         try:
             protected_resource_url = _build_wellknown_url(
-                server_url, "/.well-known/oauth-protected-resource"
+                normalized_base_url, "/.well-known/oauth-protected-resource"
             )
             response = await client.get(protected_resource_url)
             if response.status_code == 200:
