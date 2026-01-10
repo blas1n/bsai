@@ -63,6 +63,19 @@ class TaskRepository(BaseRepository[Task]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_with_session(self, task_id: UUID) -> Task | None:
+        """Get task with session eagerly loaded.
+
+        Args:
+            task_id: Task UUID
+
+        Returns:
+            Task with session or None if not found
+        """
+        stmt = select(Task).where(Task.id == task_id).options(selectinload(Task.session))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_pending_tasks(self, session_id: UUID | None = None) -> list[Task]:
         """Get all pending tasks, optionally filtered by session.
 

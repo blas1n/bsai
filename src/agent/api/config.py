@@ -1,7 +1,6 @@
 """API configuration settings.
 
 Provides settings for authentication, caching, and API behavior.
-Note: Environment variables are loaded via load_dotenv() in main.py
 """
 
 from functools import lru_cache
@@ -18,7 +17,7 @@ class DatabaseSettings(BaseSettings):
         description="PostgreSQL connection URL (must use asyncpg driver)",
     )
 
-    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
 
 
 class AuthSettings(BaseSettings):
@@ -45,7 +44,7 @@ class AuthSettings(BaseSettings):
         description="Enable Keycloak authentication. Set to False for testing.",
     )
 
-    model_config = SettingsConfigDict(env_prefix="AUTH_", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="AUTH_", extra="ignore")
 
 
 class CacheSettings(BaseSettings):
@@ -66,7 +65,7 @@ class CacheSettings(BaseSettings):
     task_progress_ttl: int = Field(default=900, description="Task progress TTL")
     user_sessions_ttl: int = Field(default=600, description="User sessions TTL")
 
-    model_config = SettingsConfigDict(env_prefix="CACHE_", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="CACHE_", extra="ignore")
 
 
 class APISettings(BaseSettings):
@@ -101,7 +100,7 @@ class APISettings(BaseSettings):
         description="Maximum request body size",
     )
 
-    model_config = SettingsConfigDict(env_prefix="API_", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="API_", extra="ignore")
 
 
 @lru_cache
@@ -148,6 +147,12 @@ class AgentSettings(BaseSettings):
         le=2.0,
         description="Worker agent temperature for task execution",
     )
+    worker_max_tokens: int = Field(
+        default=16000,
+        ge=1000,
+        le=128000,
+        description="Worker agent max output tokens (increase for large content)",
+    )
     qa_temperature: float = Field(
         default=0.1,
         ge=0.0,
@@ -161,7 +166,21 @@ class AgentSettings(BaseSettings):
         description="Summarizer temperature for context compression",
     )
 
-    model_config = SettingsConfigDict(env_prefix="AGENT_", extra="ignore")
+    # Workflow control settings
+    max_milestone_retries: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum retry attempts per milestone before failing",
+    )
+    max_tool_iterations: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum tool calling iterations in LLM completion",
+    )
+
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="AGENT_", extra="ignore")
 
 
 @lru_cache
@@ -264,7 +283,7 @@ class McpSettings(BaseSettings):
         description="Keywords that indicate medium-risk tool operations",
     )
 
-    model_config = SettingsConfigDict(env_prefix="MCP_", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="MCP_", extra="ignore")
 
 
 @lru_cache

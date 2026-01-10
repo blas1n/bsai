@@ -125,24 +125,6 @@ class WorkerAgent:
             messages.extend(context_messages)
         messages.append(ChatMessage(role="user", content=prompt))
 
-        # Execute task with structured output
-        settings = get_agent_settings()
-        request = LLMRequest(
-            model=model.name,
-            messages=messages,
-            temperature=settings.worker_temperature,
-            api_base=model.api_base,
-            api_key=model.api_key,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "worker_output",
-                    "strict": True,
-                    "schema": WorkerOutput.model_json_schema(),
-                },
-            },
-        )
-
         # Load MCP servers if enabled
         mcp_servers: list[McpServerConfig] = []
         tool_executor: McpToolExecutor | None = None
@@ -168,10 +150,27 @@ class WorkerAgent:
                     mcp_server_count=len(mcp_servers),
                 )
 
-        # Execute with or without tools (unified interface)
+        settings = get_agent_settings()
+        request = LLMRequest(
+            model=model.name,
+            messages=messages,
+            temperature=settings.worker_temperature,
+            max_tokens=settings.worker_max_tokens,
+            api_base=model.api_base,
+            api_key=model.api_key,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "worker_output",
+                    "strict": True,
+                    "schema": WorkerOutput.model_json_schema(),
+                },
+            },
+        )
+
         response = await self.llm_client.chat_completion(
             request=request,
-            mcp_servers=mcp_servers if tool_executor else None,
+            mcp_servers=mcp_servers,
             tool_executor=tool_executor,
         )
 

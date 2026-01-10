@@ -17,7 +17,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.api.config import get_agent_settings
-from agent.db.models.enums import TaskComplexity
+from agent.db.models.enums import MilestoneStatus, TaskComplexity
 from agent.db.repository.mcp_server_repo import McpServerRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
@@ -171,7 +171,7 @@ class QAAgent:
         # Execute with or without tools (unified interface)
         response = await self.llm_client.chat_completion(
             request=request,
-            mcp_servers=mcp_servers if tool_executor else None,
+            mcp_servers=mcp_servers if tool_executor else [],
             tool_executor=tool_executor,
         )
 
@@ -275,17 +275,21 @@ class QAAgent:
             milestone_id: Milestone ID
             decision: QA decision
         """
-        milestone = await self.milestone_repo.get_by_id(milestone_id)
-        if not milestone:
-            return
+        # Map QADecision to MilestoneStatus
+        status_mapping = {
+            QADecision.PASS: MilestoneStatus.PASSED,
+            QADecision.RETRY: MilestoneStatus.IN_PROGRESS,
+            QADecision.FAIL: MilestoneStatus.FAILED,
+        }
+        milestone_status = status_mapping.get(decision, MilestoneStatus.IN_PROGRESS)
 
         await self.milestone_repo.update(
             milestone_id,
-            status=decision.value,
+            status=milestone_status.value,
         )
 
         logger.debug(
             "milestone_status_updated",
             milestone_id=str(milestone_id),
-            status=decision.value,
+            status=milestone_status.value,
         )

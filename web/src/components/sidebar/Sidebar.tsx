@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Plus, MessageSquare, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, MessageSquare, BarChart3, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from './ConversationList';
 import { SessionStats } from './SessionStats';
@@ -112,6 +112,15 @@ export function Sidebar({ currentSessionId, onNewChat, stats }: SidebarProps) {
           >
             <MessageSquare className="h-4 w-4" />
             {!isCollapsed && <span>All Sessions</span>}
+          </Button>
+        </Link>
+        <Link href="/settings/mcp">
+          <Button
+            variant={pathname === '/settings/mcp' ? 'secondary' : 'ghost'}
+            className={cn('w-full justify-start gap-2', isCollapsed && 'justify-center px-2')}
+          >
+            <Settings className="h-4 w-4" />
+            {!isCollapsed && <span>MCP Settings</span>}
           </Button>
         </Link>
       </div>

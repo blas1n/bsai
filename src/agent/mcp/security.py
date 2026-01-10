@@ -1,14 +1,20 @@
 """Security validators and encryption for MCP integration."""
 
+from __future__ import annotations
+
 import json
 import re
 import shlex
 from base64 import b64decode, b64encode
 from typing import Any
 
+import structlog
 from cryptography.fernet import Fernet
 
 from ..api.config import McpSettings
+from ..db.models.mcp_server_config import McpServerConfig
+
+logger = structlog.get_logger()
 
 
 class McpSecurityValidator:
@@ -239,3 +245,62 @@ class CredentialEncryption:
             return json.loads(decrypted_bytes.decode())
         except Exception as e:
             raise ValueError(f"Failed to decrypt credentials: {e}") from e
+
+
+def build_mcp_auth_headers(
+    server: McpServerConfig,
+    settings: McpSettings | None = None,
+) -> dict[str, str] | None:
+    """Build authentication headers for MCP server requests.
+
+    Decrypts stored credentials and constructs appropriate headers based on auth type.
+
+    Args:
+        server: MCP server configuration
+        settings: MCP settings for decryption (uses default if None)
+
+    Returns:
+        Dictionary of headers or None if no auth configured/decryption fails
+    """
+    if not server.auth_credentials:
+        return None
+
+    if not server.auth_type or server.auth_type == "none":
+        return None
+
+    settings = settings or McpSettings()
+    encryptor = CredentialEncryption(settings)
+
+    try:
+        credentials = encryptor.decrypt(server.auth_credentials)
+    except Exception as e:
+        logger.warning(
+            "mcp_credential_decrypt_failed",
+            server_name=server.name,
+            error=str(e),
+        )
+        return None
+
+    headers: dict[str, str] | None = None
+
+    if server.auth_type == "bearer":
+        token = credentials.get("token", "")
+        if token:
+            headers = {"Authorization": f"Bearer {token}"}
+    elif server.auth_type == "api_key":
+        api_key = credentials.get("api_key", "")
+        if api_key:
+            headers = {credentials.get("header_name", "X-API-Key"): api_key}
+    elif server.auth_type == "oauth2":
+        access_token = credentials.get("access_token", "")
+        if access_token:
+            headers = {"Authorization": f"Bearer {access_token}"}
+
+    if not headers and server.auth_type and server.auth_type != "none":
+        logger.warning(
+            "mcp_auth_headers_empty",
+            server_name=server.name,
+            auth_type=server.auth_type,
+        )
+
+    return headers

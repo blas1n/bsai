@@ -8,6 +8,9 @@ from uuid import UUID
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
+from agent.db.repository.session_repo import SessionRepository
+from agent.db.session import get_db_session
+
 from ..auth import authenticate_websocket
 from ..schemas import (
     WSMessage,
@@ -196,7 +199,22 @@ class WebSocketHandler:
             await self._send_error(connection, "Invalid session_id")
             return
 
-        # TODO: Verify user owns session
+        # Verify user owns the session before allowing subscription
+        if connection.user_id:
+            async for db in get_db_session():
+                repo = SessionRepository(db)
+                is_owner = await repo.verify_ownership(session_id, connection.user_id)
+                if not is_owner:
+                    logger.warning(
+                        "ws_subscribe_unauthorized",
+                        connection_id=connection.id,
+                        user_id=connection.user_id,
+                        session_id=str(session_id),
+                    )
+                    await self._send_error(connection, "Not authorized to access this session")
+                    return
+                break
+
         await self.manager.subscribe_to_session(connection, session_id)
 
         await self.manager.send_message(

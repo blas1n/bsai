@@ -1,20 +1,37 @@
 """MCP (Model Context Protocol) server management endpoints."""
 
+import base64
+import hashlib
+import json
+import secrets
 import time
+from urllib.parse import urlencode, urljoin
 from uuid import UUID
 
+import httpx
+import structlog
 from fastapi import APIRouter, status
 from mcp import ClientSession
 from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamable_http_client
 
 from agent.api.config import get_mcp_settings
 from agent.api.exceptions import ConflictError, NotFoundError, ValidationError
+from agent.cache.redis_client import get_redis
 from agent.db.repository.mcp_server_repo import McpServerRepository
 from agent.db.repository.mcp_tool_log_repo import McpToolLogRepository
-from agent.mcp.security import CredentialEncryption, McpSecurityValidator
+from agent.mcp.security import (
+    CredentialEncryption,
+    McpSecurityValidator,
+    build_mcp_auth_headers,
+)
 
 from ..dependencies import CurrentUserId, DBSession
 from ..schemas.mcp import (
+    McpOAuthCallbackRequest,
+    McpOAuthCallbackResponse,
+    McpOAuthStartRequest,
+    McpOAuthStartResponse,
     McpServerCreateRequest,
     McpServerDetailResponse,
     McpServerResponse,
@@ -26,7 +43,66 @@ from ..schemas.mcp import (
     PaginatedResponse,
 )
 
+logger = structlog.get_logger()
+
 router = APIRouter(prefix="/mcp", tags=["mcp"])
+
+
+def _get_user_friendly_error(e: Exception, server_url: str) -> str:
+    """Convert technical exceptions to user-friendly error messages.
+
+    Args:
+        e: The exception that occurred
+        server_url: The MCP server URL being tested
+
+    Returns:
+        User-friendly error message
+    """
+    error_str = str(e).lower()
+    error_type = type(e).__name__
+
+    # Handle ExceptionGroup (common in async code)
+    if error_type == "ExceptionGroup" or "exceptiongroup" in error_type.lower():
+        # Extract the actual error from the group
+        if hasattr(e, "exceptions") and e.exceptions:
+            inner_error = e.exceptions[0]
+            return _get_user_friendly_error(inner_error, server_url)
+        return f"Connection failed: Multiple errors occurred while connecting to {server_url}"
+
+    # Connection errors
+    if "connect" in error_str or "connection" in error_str:
+        if "refused" in error_str:
+            return f"Connection refused: The server at {server_url} is not accepting connections. Make sure the MCP server is running."
+        if "timeout" in error_str:
+            return f"Connection timeout: The server at {server_url} did not respond in time. Check if the URL is correct and the server is reachable."
+        return f"Connection failed: Unable to connect to {server_url}. Verify the URL and ensure the server is running."
+
+    # DNS/hostname errors
+    if "name or service not known" in error_str or "getaddrinfo" in error_str:
+        return f"DNS error: Cannot resolve hostname. Check if the URL {server_url} is correct."
+
+    # SSL/TLS errors
+    if "ssl" in error_str or "certificate" in error_str:
+        return f"SSL error: Cannot establish secure connection to {server_url}. Check the server's SSL certificate."
+
+    # HTTP errors
+    if "404" in error_str or "not found" in error_str:
+        return f"Not found: The MCP endpoint at {server_url} does not exist. Verify the URL path."
+    if "401" in error_str or "unauthorized" in error_str:
+        return "Authentication failed: Invalid or missing credentials. Check your authentication settings."
+    if "403" in error_str or "forbidden" in error_str:
+        return "Access denied: The server rejected the request. Check your permissions and credentials."
+    if "500" in error_str or "internal server error" in error_str:
+        return f"Server error: The MCP server at {server_url} encountered an internal error."
+
+    # MCP protocol errors
+    if "initialize" in error_str:
+        return f"Protocol error: Failed to initialize MCP session. The server at {server_url} may not support the MCP protocol."
+    if "json" in error_str or "parse" in error_str:
+        return f"Protocol error: Invalid response from {server_url}. The server may not be a valid MCP server."
+
+    # Generic fallback with the actual error
+    return f"Failed to connect to MCP server: {error_type} - {e}"
 
 
 async def _build_server_response(
@@ -374,30 +450,40 @@ async def test_mcp_server(
 
     # Build auth headers if configured
     settings = get_mcp_settings()
-    encryptor = CredentialEncryption(settings)
-    headers: dict[str, str] | None = None
+    headers = build_mcp_auth_headers(server, settings)
 
-    if server.auth_credentials:
-        try:
-            credentials = encryptor.decrypt(server.auth_credentials)
-            if server.auth_type == "bearer":
-                headers = {"Authorization": f"Bearer {credentials.get('token', '')}"}
-            elif server.auth_type == "api_key":
-                headers = {
-                    credentials.get("header_name", "X-API-Key"): credentials.get("api_key", "")
-                }
-        except Exception:
-            pass  # Continue without auth if decryption fails
+    # Check if auth is required but headers are missing
+    if server.auth_type and server.auth_type != "none" and not headers:
+        return McpServerTestResponse(
+            success=False,
+            error="Authentication credentials are not configured or could not be decrypted. "
+            "Please update your authentication settings.",
+            available_tools=None,
+            latency_ms=None,
+        )
 
     try:
         # Measure latency and load tools via MCP SDK
         start_time = time.monotonic()
+        tool_names: list[str] = []
 
-        async with sse_client(url=server.server_url, headers=headers) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                tools_result = await session.list_tools()
-                tool_names = [tool.name for tool in tools_result.tools]
+        # Use appropriate client based on transport type
+        if server.transport_type == "sse":
+            async with sse_client(url=server.server_url, headers=headers) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    tools_result = await session.list_tools()
+                    tool_names = [tool.name for tool in tools_result.tools]
+        else:  # http
+            async with streamable_http_client(url=server.server_url, headers=headers) as (
+                read,
+                write,
+                _,
+            ):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    tools_result = await session.list_tools()
+                    tool_names = [tool.name for tool in tools_result.tools]
 
         latency_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -409,9 +495,11 @@ async def test_mcp_server(
         )
 
     except Exception as e:
+        # Convert technical errors to user-friendly messages
+        error_detail = _get_user_friendly_error(e, server.server_url or "")
         return McpServerTestResponse(
             success=False,
-            error=str(e),
+            error=error_detail,
             available_tools=None,
             latency_ms=None,
         )
@@ -459,27 +547,24 @@ async def list_mcp_tools(
 
     try:
         # Build auth headers if configured
-        settings = get_mcp_settings()
-        encryptor = CredentialEncryption(settings)
-        headers: dict[str, str] | None = None
-
-        if server.auth_credentials:
-            try:
-                credentials = encryptor.decrypt(server.auth_credentials)
-                if server.auth_type == "bearer":
-                    headers = {"Authorization": f"Bearer {credentials.get('token', '')}"}
-                elif server.auth_type == "api_key":
-                    headers = {
-                        credentials.get("header_name", "X-API-Key"): credentials.get("api_key", "")
-                    }
-            except Exception:
-                pass
+        headers = build_mcp_auth_headers(server)
 
         # Load tools from MCP server via MCP SDK
-        async with sse_client(url=server.server_url, headers=headers) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                tools_result = await session.list_tools()
+        # Use appropriate client based on transport type
+        if server.transport_type == "sse":
+            async with sse_client(url=server.server_url, headers=headers) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    tools_result = await session.list_tools()
+        else:  # http
+            async with streamable_http_client(url=server.server_url, headers=headers) as (
+                read,
+                write,
+                _,
+            ):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    tools_result = await session.list_tools()
 
         result = []
         for tool in tools_result.tools:
@@ -558,4 +643,466 @@ async def get_mcp_logs(
         limit=limit,
         offset=offset,
         has_more=offset + len(logs) < total,
+    )
+
+
+# OAuth2 Flow Endpoints
+
+OAUTH_STATE_PREFIX = "mcp_oauth_state:"
+OAUTH_STATE_TTL = 600  # 10 minutes
+
+
+async def _discover_oauth_metadata(server_url: str) -> dict | None:
+    """Discover OAuth metadata from MCP server.
+
+    Tries standard OAuth discovery endpoints.
+
+    Args:
+        server_url: MCP server URL
+
+    Returns:
+        OAuth metadata dict or None if not found
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # Try protected resource metadata first (RFC 9728)
+        try:
+            response = await client.get(
+                urljoin(server_url, "/.well-known/oauth-protected-resource")
+            )
+            if response.status_code == 200:
+                resource_meta = response.json()
+                # Get authorization server URL
+                auth_server = resource_meta.get("authorization_servers", [None])[0]
+                if auth_server:
+                    # Fetch authorization server metadata
+                    meta_response = await client.get(
+                        urljoin(auth_server, "/.well-known/oauth-authorization-server")
+                    )
+                    if meta_response.status_code == 200:
+                        return meta_response.json()
+        except Exception:
+            pass
+
+        # Try standard OAuth metadata discovery (RFC 8414)
+        try:
+            response = await client.get(
+                urljoin(server_url, "/.well-known/oauth-authorization-server")
+            )
+            if response.status_code == 200:
+                return response.json()
+        except Exception:
+            pass
+
+        # Try OpenID Connect discovery
+        try:
+            response = await client.get(urljoin(server_url, "/.well-known/openid-configuration"))
+            if response.status_code == 200:
+                return response.json()
+        except Exception:
+            pass
+
+    return None
+
+
+async def _register_oauth_client(
+    registration_endpoint: str,
+    redirect_uri: str,
+    client_name: str = "BSAI MCP Client",
+) -> dict | None:
+    """Dynamically register an OAuth client (RFC 7591).
+
+    Args:
+        registration_endpoint: OAuth registration endpoint URL
+        redirect_uri: Redirect URI for the client
+        client_name: Name for the client
+
+    Returns:
+        Client registration response with client_id and client_secret, or None
+    """
+    registration_request = {
+        "client_name": client_name,
+        "redirect_uris": [redirect_uri],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "none",  # Public client
+    }
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.post(
+                registration_endpoint,
+                json=registration_request,
+                headers={"Content-Type": "application/json"},
+            )
+            if response.status_code in (200, 201):
+                return response.json()
+        except Exception:
+            pass
+
+    return None
+
+
+async def _initiate_oauth_flow(
+    server_url: str,
+    callback_url: str,
+    user_id: str,
+    extra_state_data: dict | None = None,
+) -> McpOAuthStartResponse:
+    """Common OAuth flow initiation logic.
+
+    Discovers OAuth metadata, registers client if needed, generates PKCE parameters,
+    stores state in Redis, and returns authorization URL.
+
+    Args:
+        server_url: MCP server URL for OAuth discovery
+        callback_url: URL to redirect after OAuth completion
+        user_id: Current user ID
+        extra_state_data: Additional data to store in OAuth state (e.g., server_id)
+
+    Returns:
+        OAuth start response with authorization URL and state
+
+    Raises:
+        ValidationError: If OAuth discovery or setup fails
+    """
+    # Discover OAuth metadata
+    try:
+        metadata = await _discover_oauth_metadata(server_url)
+    except Exception as e:
+        raise ValidationError(
+            f"Failed to discover OAuth configuration: {type(e).__name__} - {e}"
+        ) from e
+
+    if not metadata:
+        raise ValidationError(
+            f"Could not discover OAuth configuration for {server_url}. "
+            "The server may not support OAuth2 authentication."
+        )
+
+    auth_endpoint = metadata.get("authorization_endpoint")
+    if not auth_endpoint:
+        raise ValidationError("OAuth metadata missing authorization_endpoint")
+
+    # Dynamic client registration if registration_endpoint is available
+    client_id = metadata.get("client_id")
+    client_secret = None
+    registration_endpoint = metadata.get("registration_endpoint")
+
+    if not client_id and registration_endpoint:
+        client_info = await _register_oauth_client(
+            registration_endpoint,
+            callback_url,
+        )
+        if client_info:
+            client_id = client_info.get("client_id")
+            client_secret = client_info.get("client_secret")
+
+    if not client_id:
+        raise ValidationError(
+            "OAuth server requires client registration but dynamic registration failed. "
+            "Please register a client manually with the OAuth provider."
+        )
+
+    # Generate PKCE parameters
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+        .decode()
+        .rstrip("=")
+    )
+
+    # Generate state
+    state = secrets.token_urlsafe(32)
+
+    # Store OAuth state in Redis
+    try:
+        redis_client = get_redis().client
+        oauth_data = {
+            "user_id": user_id,
+            "server_url": server_url,
+            "callback_url": callback_url,
+            "code_verifier": code_verifier,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "metadata": metadata,
+        }
+        # Merge extra state data if provided
+        if extra_state_data:
+            oauth_data.update(extra_state_data)
+
+        await redis_client.setex(
+            f"{OAUTH_STATE_PREFIX}{state}",
+            OAUTH_STATE_TTL,
+            json.dumps(oauth_data),
+        )
+    except Exception as e:
+        raise ValidationError(f"Failed to store OAuth state: {type(e).__name__} - {e}") from e
+
+    # Build authorization URL
+    auth_params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": callback_url,
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+    }
+
+    if "scopes_supported" in metadata:
+        auth_params["scope"] = " ".join(metadata["scopes_supported"][:5])
+
+    authorization_url = f"{auth_endpoint}?{urlencode(auth_params)}"
+
+    return McpOAuthStartResponse(
+        authorization_url=authorization_url,
+        state=state,
+    )
+
+
+@router.post(
+    "/oauth/start",
+    response_model=McpOAuthStartResponse,
+    summary="Start OAuth flow for MCP server",
+)
+async def start_oauth_flow(
+    request: McpOAuthStartRequest,
+    user_id: CurrentUserId,
+) -> McpOAuthStartResponse:
+    """Start OAuth authorization flow for an MCP server.
+
+    Discovers OAuth endpoints and returns authorization URL.
+
+    Args:
+        request: OAuth start request with server URL
+        user_id: Current user ID
+
+    Returns:
+        Authorization URL and state parameter
+    """
+    return await _initiate_oauth_flow(
+        server_url=request.server_url,
+        callback_url=request.callback_url,
+        user_id=user_id,
+    )
+
+
+@router.post(
+    "/oauth/callback",
+    response_model=McpOAuthCallbackResponse,
+    summary="Complete OAuth flow with authorization code",
+)
+async def oauth_callback(
+    request: McpOAuthCallbackRequest,
+    db: DBSession,
+    user_id: CurrentUserId,
+) -> McpOAuthCallbackResponse:
+    """Complete OAuth flow by exchanging authorization code for tokens.
+
+    Args:
+        request: Callback request with code and state
+        db: Database session
+        user_id: Current user ID
+
+    Returns:
+        Success/failure response
+    """
+    redis_client = get_redis().client
+    settings = get_mcp_settings()
+    encryptor = CredentialEncryption(settings)
+
+    # Verify state and get stored OAuth data
+    state_key = f"{OAUTH_STATE_PREFIX}{request.state}"
+    oauth_data_str = await redis_client.get(state_key)
+
+    if not oauth_data_str:
+        return McpOAuthCallbackResponse(
+            success=False,
+            error="Invalid or expired OAuth state. Please try again.",
+        )
+
+    # Parse stored data
+    try:
+        oauth_data = json.loads(oauth_data_str)
+    except json.JSONDecodeError:
+        return McpOAuthCallbackResponse(
+            success=False,
+            error="Corrupted OAuth state data.",
+        )
+
+    # Verify user
+    if oauth_data.get("user_id") != user_id:
+        return McpOAuthCallbackResponse(
+            success=False,
+            error="OAuth state does not match current user.",
+        )
+
+    # Delete state (one-time use)
+    await redis_client.delete(state_key)
+
+    # Get token endpoint
+    metadata = oauth_data.get("metadata", {})
+    token_endpoint = metadata.get("token_endpoint")
+
+    if not token_endpoint:
+        return McpOAuthCallbackResponse(
+            success=False,
+            error="OAuth metadata missing token_endpoint",
+        )
+
+    # Exchange code for tokens - use registered client_id from oauth_data
+    client_id = oauth_data.get("client_id")
+    client_secret = oauth_data.get("client_secret")
+
+    if not client_id:
+        return McpOAuthCallbackResponse(
+            success=False,
+            error="Missing client_id in OAuth state",
+        )
+
+    token_data = {
+        "grant_type": "authorization_code",
+        "code": request.code,
+        "redirect_uri": oauth_data.get("callback_url"),
+        "client_id": client_id,
+        "code_verifier": oauth_data.get("code_verifier"),
+    }
+
+    # Add client_secret if available (for confidential clients)
+    if client_secret:
+        token_data["client_secret"] = client_secret
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                token_endpoint,
+                data=token_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+
+            if response.status_code != 200:
+                error_detail = response.text[:200] if response.text else "Unknown error"
+                return McpOAuthCallbackResponse(
+                    success=False,
+                    error=f"Token exchange failed: {error_detail}",
+                )
+
+            tokens = response.json()
+
+    except Exception as e:
+        return McpOAuthCallbackResponse(
+            success=False,
+            error=f"Failed to exchange authorization code: {e}",
+        )
+
+    # Store tokens in MCP server configuration
+    repo = McpServerRepository(db)
+    server = await repo.get_by_id_and_user(request.server_id, user_id)
+
+    if not server:
+        return McpOAuthCallbackResponse(
+            success=False,
+            error="MCP server not found",
+        )
+
+    # Encrypt and store tokens
+    credentials = {
+        "access_token": tokens.get("access_token", ""),
+        "refresh_token": tokens.get("refresh_token", ""),
+        "token_type": tokens.get("token_type", "Bearer"),
+        "expires_in": str(tokens.get("expires_in", "")),
+        "scope": tokens.get("scope", ""),
+    }
+
+    encrypted_credentials = encryptor.encrypt(credentials)
+
+    await repo.update_by_user(
+        server.id,
+        user_id,
+        auth_type="oauth2",
+        auth_credentials=encrypted_credentials,
+    )
+    await db.commit()
+
+    return McpOAuthCallbackResponse(success=True, error=None)
+
+
+@router.get(
+    "/oauth/status/{server_id}",
+    summary="Check OAuth authentication status",
+)
+async def check_oauth_status(
+    server_id: UUID,
+    db: DBSession,
+    user_id: CurrentUserId,
+) -> dict:
+    """Check if OAuth tokens are configured for an MCP server.
+
+    Args:
+        server_id: MCP server UUID
+        db: Database session
+        user_id: Current user ID
+
+    Returns:
+        OAuth status information
+    """
+    repo = McpServerRepository(db)
+    server = await repo.get_by_id_and_user(server_id, user_id)
+
+    if not server:
+        raise NotFoundError("MCP server", server_id)
+
+    return {
+        "has_oauth_tokens": server.auth_type == "oauth2" and bool(server.auth_credentials),
+        "auth_type": server.auth_type,
+    }
+
+
+@router.post(
+    "/servers/{server_id}/reauth",
+    response_model=McpOAuthStartResponse,
+    summary="Re-authenticate MCP server (clear credentials and start OAuth)",
+)
+async def reauth_mcp_server(
+    server_id: UUID,
+    request: McpOAuthStartRequest,
+    db: DBSession,
+    user_id: CurrentUserId,
+) -> McpOAuthStartResponse:
+    """Clear existing credentials and start a new OAuth flow.
+
+    This endpoint allows re-authentication without deleting the server.
+
+    Args:
+        server_id: MCP server UUID
+        request: OAuth start request with callback URL
+        db: Database session
+        user_id: Current user ID
+
+    Returns:
+        Authorization URL and state for new OAuth flow
+    """
+    repo = McpServerRepository(db)
+    server = await repo.get_by_id_and_user(server_id, user_id)
+
+    if not server:
+        raise NotFoundError("MCP server", server_id)
+
+    # Clear existing credentials
+    await repo.update_by_user(
+        server_id,
+        user_id,
+        auth_credentials=None,
+    )
+    await db.commit()
+
+    # Use the server's URL for OAuth discovery
+    server_url = request.server_url or server.server_url
+    if not server_url:
+        raise ValidationError("Server URL is required for OAuth re-authentication")
+
+    return await _initiate_oauth_flow(
+        server_url=server_url,
+        callback_url=request.callback_url,
+        user_id=user_id,
+        extra_state_data={"server_id": str(server_id)},
     )

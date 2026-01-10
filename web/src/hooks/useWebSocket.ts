@@ -42,10 +42,22 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  const previousTokenRef = useRef<string | undefined>(token);
   const isConnectingRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<WSMessage | null>(null);
+
+  // Store current values in refs to avoid dependency issues
+  const tokenRef = useRef(token);
+  const sessionIdRef = useRef(sessionId);
+
+  // Update refs when values change
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
   // Use refs for callbacks to avoid reconnection on callback changes
   const onMessageRef = useRef(onMessage);
@@ -71,8 +83,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
   }, [onError]);
 
   const connect = useCallback(() => {
+    const currentToken = tokenRef.current;
+    const currentSessionId = sessionIdRef.current;
+
     // Don't connect without a token (authentication required)
-    if (!token) {
+    if (!currentToken) {
       console.log('[useWebSocket] No token, skipping connection');
       return;
     }
@@ -99,10 +114,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     isConnectingRef.current = true;
 
     let url = `${WS_URL}/api/v1/ws`;
-    if (sessionId) {
-      url += `/${sessionId}`;
+    if (currentSessionId) {
+      url += `/${currentSessionId}`;
     }
-    url += `?token=${encodeURIComponent(token)}`;
+    url += `?token=${encodeURIComponent(currentToken)}`;
 
     console.log('[useWebSocket] Connecting to:', url.replace(/token=[^&]+/, 'token=***'));
     const ws = new WebSocket(url);
@@ -129,7 +144,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       onDisconnectRef.current?.();
 
       // Auto reconnect with exponential backoff (only if we have a token)
-      if (autoReconnect && token && !reconnectTimeoutRef.current) {
+      // Use ref to get current token value
+      if (autoReconnect && tokenRef.current && !reconnectTimeoutRef.current) {
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           const delay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current);
           reconnectAttemptsRef.current++;
@@ -162,7 +178,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     };
 
     wsRef.current = ws;
-  }, [sessionId, token, autoReconnect, reconnectInterval, maxReconnectAttempts]);
+  }, [autoReconnect, reconnectInterval, maxReconnectAttempts]); // Removed token and sessionId from deps
 
   const disconnect = useCallback(() => {
     console.log('[useWebSocket] Disconnecting...');
@@ -213,56 +229,58 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     setTimeout(() => connect(), 100);
   }, [disconnect, connect]);
 
-  // Handle token changes - reconnect with new token
-  useEffect(() => {
-    if (previousTokenRef.current !== token) {
-      console.log('[useWebSocket] Token changed, reconnecting...');
-      previousTokenRef.current = token;
-
-      // Disconnect old connection
-      disconnect();
-
-      // Connect with new token (if available)
-      if (token) {
-        // Small delay to ensure clean disconnect
-        setTimeout(() => connect(), 100);
-      }
-    }
-  }, [token, disconnect, connect]);
-
-  // Track if component is mounted
+  // Track previous values for change detection
+  const prevTokenRef = useRef<string | undefined>(undefined);
+  const prevSessionIdRef = useRef<string | undefined>(undefined);
   const isMountedRef = useRef(false);
 
-  // Initial connection (only when token is available)
+  // Single effect to handle connection lifecycle
   useEffect(() => {
-    if (!isMountedRef.current) {
-      isMountedRef.current = true;
-      if (token) {
+    const tokenChanged = prevTokenRef.current !== token;
+    const sessionIdChanged = prevSessionIdRef.current !== sessionId;
+    const isFirstMount = !isMountedRef.current;
+
+    // Update previous values
+    prevTokenRef.current = token;
+    prevSessionIdRef.current = sessionId;
+    isMountedRef.current = true;
+
+    // Handle initial connection or reconnection due to changes
+    if (token) {
+      if (isFirstMount) {
+        // Initial connection
+        console.log('[useWebSocket] Initial connection');
         connect();
+      } else if (tokenChanged) {
+        // Token changed - need full reconnect
+        console.log('[useWebSocket] Token changed, reconnecting...');
+        disconnect();
+        setTimeout(() => connect(), 100);
+      } else if (sessionIdChanged && isConnected) {
+        // Session changed while connected - need to reconnect
+        console.log('[useWebSocket] Session changed, reconnecting...');
+        disconnect();
+        setTimeout(() => connect(), 100);
       }
+    } else if (!token && !isFirstMount) {
+      // Token removed - disconnect
+      console.log('[useWebSocket] Token removed, disconnecting...');
+      disconnect();
     }
+
+    // Cleanup on unmount
     return () => {
-      isMountedRef.current = false;
+      if (!token) return; // Don't run cleanup logic if no token
+    };
+  }, [token, sessionId, isConnected, connect, disconnect]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
       disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty deps - only run on mount/unmount
-
-  // Track previous sessionId to detect changes
-  const previousSessionIdRef = useRef<string | undefined>(sessionId);
-
-  // Reconnect when sessionId changes (if already connected)
-  useEffect(() => {
-    if (previousSessionIdRef.current !== sessionId) {
-      previousSessionIdRef.current = sessionId;
-      if (token && sessionId && isConnected) {
-        // Session changed, need to reconnect to subscribe to new session
-        console.log('[useWebSocket] Session changed, reconnecting...');
-        reconnect();
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]); // Only react to sessionId changes
+  }, []);
 
   return {
     isConnected,

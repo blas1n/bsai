@@ -4,7 +4,6 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import structlog
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -30,7 +29,6 @@ from .routers import (
 )
 from .websocket import ConnectionManager
 
-load_dotenv()
 logger = structlog.get_logger()
 
 

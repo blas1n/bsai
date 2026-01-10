@@ -5,7 +5,11 @@ Extracts file artifacts from structured LLM output.
 
 from dataclasses import dataclass
 
+import structlog
+
 from agent.llm.schemas import WorkerOutput
+
+logger = structlog.get_logger()
 
 
 @dataclass
@@ -29,9 +33,18 @@ def extract_artifacts(response_content: str) -> list[ExtractedArtifact]:
         response_content: JSON string from Worker LLM response
 
     Returns:
-        List of extracted artifacts
+        List of extracted artifacts (empty list if parsing fails)
     """
-    output = WorkerOutput.model_validate_json(response_content)
+    try:
+        output = WorkerOutput.model_validate_json(response_content)
+    except Exception as e:
+        logger.warning(
+            "artifact_extraction_failed",
+            error=str(e),
+            content_length=len(response_content),
+            content_preview=response_content[:200] if response_content else "",
+        )
+        return []
 
     artifacts: list[ExtractedArtifact] = []
 
@@ -63,7 +76,16 @@ def get_explanation(response_content: str) -> str:
         response_content: JSON string from Worker LLM response
 
     Returns:
-        Explanation text for the user
+        Explanation text for the user (raw content if parsing fails)
     """
-    output = WorkerOutput.model_validate_json(response_content)
-    return output.explanation
+    try:
+        output = WorkerOutput.model_validate_json(response_content)
+        return output.explanation
+    except Exception as e:
+        logger.warning(
+            "explanation_extraction_failed",
+            error=str(e),
+            content_length=len(response_content),
+        )
+        # Return raw content if JSON parsing fails
+        return response_content

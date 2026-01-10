@@ -194,3 +194,33 @@ class PaginatedResponse(BaseModel):
     limit: int = Field(..., description="Items per page")
     offset: int = Field(..., description="Number of items skipped")
     has_more: bool = Field(..., description="Whether more items are available")
+
+
+# OAuth2 related schemas
+class McpOAuthStartRequest(BaseModel):
+    """Request to start OAuth flow for an MCP server."""
+
+    server_url: str = Field(..., description="MCP server URL to authenticate with")
+    callback_url: str = Field(..., description="URL to redirect after OAuth completion")
+
+
+class McpOAuthStartResponse(BaseModel):
+    """Response containing OAuth authorization URL."""
+
+    authorization_url: str = Field(..., description="URL to redirect user for authorization")
+    state: str = Field(..., description="State parameter for CSRF protection")
+
+
+class McpOAuthCallbackRequest(BaseModel):
+    """Request to complete OAuth flow with authorization code."""
+
+    code: str = Field(..., description="Authorization code from OAuth provider")
+    state: str = Field(..., description="State parameter for verification")
+    server_id: UUID = Field(..., description="MCP server ID to store tokens for")
+
+
+class McpOAuthCallbackResponse(BaseModel):
+    """Response after successful OAuth token exchange."""
+
+    success: bool = Field(..., description="Whether OAuth flow completed successfully")
+    error: str | None = Field(None, description="Error message if failed")

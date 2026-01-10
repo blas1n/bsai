@@ -8,16 +8,21 @@ This module handles the execution of MCP tools, routing them appropriately:
 from __future__ import annotations
 
 import asyncio
+import time
+import traceback
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import structlog
+from mcp import ClientSession
+from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamable_http_client
 
 from agent.api.config import get_mcp_settings
 from agent.api.schemas.websocket import WSMessage, WSMessageType
 from agent.db.models.mcp_server_config import McpServerConfig
 from agent.db.repository.mcp_tool_log_repo import McpToolLogRepository
-from agent.mcp.security import McpSecurityValidator
+from agent.mcp.security import McpSecurityValidator, build_mcp_auth_headers
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -419,10 +424,9 @@ class McpToolExecutor:
         self,
         tool_call: McpToolCall,
     ) -> McpToolResult:
-        """Execute HTTP/SSE tool (handled by LiteLLM).
+        """Execute HTTP/SSE tool via MCP client.
 
-        Note: This is a placeholder. Actual execution is handled by LiteLLM
-        when tools are passed to completion API.
+        Connects to the MCP server and executes the tool call directly.
 
         Args:
             tool_call: Tool call to execute
@@ -436,12 +440,118 @@ class McpToolExecutor:
             server=tool_call.mcp_server.name,
         )
 
-        # This shouldn't be called directly - LiteLLM handles HTTP/SSE tools
-        # This is just a placeholder for logging/error handling
-        return McpToolResult(
-            success=False,
-            error="Remote tools should be handled by LiteLLM directly",
-        )
+        server = tool_call.mcp_server
+        start_time = time.time()
+
+        # Check server URL
+        if not server.server_url:
+            return McpToolResult(
+                success=False,
+                error=f"No server URL configured for {server.name}",
+            )
+
+        # Build auth headers if configured
+        headers = build_mcp_auth_headers(server, self.settings)
+
+        # Check if auth is required but headers are missing
+        if server.auth_type and server.auth_type != "none" and not headers:
+            return McpToolResult(
+                success=False,
+                error="Authentication credentials are not configured or could not be decrypted.",
+            )
+
+        try:
+            if server.transport_type == "sse":
+                async with sse_client(url=server.server_url, headers=headers) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        result = await session.call_tool(
+                            tool_call.tool_name,
+                            tool_call.tool_input,
+                        )
+                        execution_time_ms = int((time.time() - start_time) * 1000)
+
+                        # Extract content from result
+                        output = self._extract_tool_output(result)
+
+                        logger.info(
+                            "mcp_remote_tool_success",
+                            tool_name=tool_call.tool_name,
+                            execution_time_ms=execution_time_ms,
+                        )
+
+                        return McpToolResult(
+                            success=True,
+                            output=output,
+                            execution_time_ms=execution_time_ms,
+                        )
+            else:  # http
+                async with streamable_http_client(url=server.server_url, headers=headers) as (
+                    read,
+                    write,
+                    _,
+                ):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        result = await session.call_tool(
+                            tool_call.tool_name,
+                            tool_call.tool_input,
+                        )
+                        execution_time_ms = int((time.time() - start_time) * 1000)
+
+                        # Extract content from result
+                        output = self._extract_tool_output(result)
+
+                        logger.info(
+                            "mcp_remote_tool_success",
+                            tool_name=tool_call.tool_name,
+                            execution_time_ms=execution_time_ms,
+                        )
+
+                        return McpToolResult(
+                            success=True,
+                            output=output,
+                            execution_time_ms=execution_time_ms,
+                        )
+
+        except Exception as e:
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "mcp_remote_tool_error",
+                tool_name=tool_call.tool_name,
+                server=server.name,
+                error=str(e),
+                traceback=traceback.format_exc(),
+            )
+            return McpToolResult(
+                success=False,
+                error=str(e),
+                execution_time_ms=execution_time_ms,
+            )
+
+    def _extract_tool_output(self, result: Any) -> dict[str, Any]:
+        """Extract output from MCP tool result.
+
+        Args:
+            result: MCP CallToolResult
+
+        Returns:
+            Dictionary with tool output
+        """
+        # MCP result has content list with TextContent, ImageContent, etc.
+        if hasattr(result, "content") and result.content:
+            # Combine all text content
+            text_parts = []
+            for content in result.content:
+                if hasattr(content, "text"):
+                    text_parts.append(content.text)
+                elif hasattr(content, "data"):
+                    # Binary/image data - return as base64
+                    text_parts.append(f"[Binary data: {content.mimeType}]")
+
+            return {"result": "\n".join(text_parts) if text_parts else str(result)}
+
+        return {"result": str(result)}
 
     def handle_stdio_response(
         self,

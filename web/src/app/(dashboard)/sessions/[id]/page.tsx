@@ -4,6 +4,7 @@ import { TaskProgress } from '@/components/tasks/TaskProgress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuth } from '@/hooks/useAuth';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { api, SessionDetailResponse } from '@/lib/api';
 import { formatCurrency, formatNumber, formatRelativeTime } from '@/lib/utils';
@@ -16,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 export default function SessionDetailPage() {
   const params = useParams();
   const sessionId = params.id as string;
+  const { accessToken } = useAuth();
 
   const [session, setSession] = useState<SessionDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,6 +68,7 @@ export default function SessionDetailPage() {
 
   const { isConnected } = useWebSocket({
     sessionId,
+    token: accessToken,
     onMessage: handleWebSocketMessage,
   });
 
