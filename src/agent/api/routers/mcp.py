@@ -630,6 +630,34 @@ OAUTH_STATE_PREFIX = "mcp_oauth_state:"
 OAUTH_STATE_TTL = 600  # 10 minutes
 
 
+def _build_wellknown_url(base_url: str, wellknown_path: str) -> str:
+    """Build well-known URL safely from validated base URL.
+
+    Only appends well-known paths to the already-validated base URL.
+    This prevents SSRF by ensuring we only request from the same origin.
+
+    Args:
+        base_url: Already-validated base URL
+        wellknown_path: Well-known path (must start with /.well-known/)
+
+    Returns:
+        Full well-known URL
+
+    Raises:
+        ValueError: If wellknown_path is not a valid well-known path
+    """
+    # Only allow specific well-known paths
+    allowed_paths = {
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/openid-configuration",
+    }
+    if wellknown_path not in allowed_paths:
+        raise ValueError(f"Invalid well-known path: {wellknown_path}")
+
+    return urljoin(base_url, wellknown_path)
+
+
 async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
     """Discover OAuth metadata from MCP server.
 
@@ -652,9 +680,10 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
     async with httpx.AsyncClient(timeout=10.0) as client:
         # Try protected resource metadata first (RFC 9728)
         try:
-            response = await client.get(
-                urljoin(server_url, "/.well-known/oauth-protected-resource")
+            protected_resource_url = _build_wellknown_url(
+                server_url, "/.well-known/oauth-protected-resource"
             )
+            response = await client.get(protected_resource_url)
             if response.status_code == 200:
                 resource_meta = response.json()
                 # Get authorization server URL
@@ -662,10 +691,12 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
                 if auth_server:
                     # Validate auth server URL before making request
                     validator.validate_server_url(auth_server)
-                    # Fetch authorization server metadata
-                    meta_response = await client.get(
-                        urljoin(auth_server, "/.well-known/oauth-authorization-server")
+                    # Build well-known URL from validated auth server
+                    auth_server_meta_url = _build_wellknown_url(
+                        auth_server, "/.well-known/oauth-authorization-server"
                     )
+                    # Fetch authorization server metadata
+                    meta_response = await client.get(auth_server_meta_url)
                     if meta_response.status_code == 200:
                         meta_result: dict[str, Any] = meta_response.json()
                         return meta_result
@@ -679,9 +710,10 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
 
         # Try standard OAuth metadata discovery (RFC 8414)
         try:
-            response = await client.get(
-                urljoin(server_url, "/.well-known/oauth-authorization-server")
+            oauth_server_url = _build_wellknown_url(
+                server_url, "/.well-known/oauth-authorization-server"
             )
+            response = await client.get(oauth_server_url)
             if response.status_code == 200:
                 standard_result: dict[str, Any] = response.json()
                 return standard_result
@@ -692,7 +724,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
 
         # Try OpenID Connect discovery
         try:
-            response = await client.get(urljoin(server_url, "/.well-known/openid-configuration"))
+            openid_url = _build_wellknown_url(server_url, "/.well-known/openid-configuration")
+            response = await client.get(openid_url)
             if response.status_code == 200:
                 openid_result: dict[str, Any] = response.json()
                 return openid_result
@@ -797,12 +830,26 @@ async def _initiate_oauth_flow(
     if not auth_endpoint:
         raise ValidationError("OAuth metadata missing authorization_endpoint")
 
+    # Validate authorization endpoint URL to prevent SSRF
+    settings = get_mcp_settings()
+    validator = McpSecurityValidator(settings)
+    try:
+        validator.validate_server_url(auth_endpoint)
+    except ValueError as e:
+        raise ValidationError(f"Invalid authorization endpoint URL: {e}") from e
+
     # Dynamic client registration if registration_endpoint is available
     client_id = metadata.get("client_id")
     client_secret = None
     registration_endpoint = metadata.get("registration_endpoint")
 
     if not client_id and registration_endpoint:
+        # Validate registration endpoint URL
+        try:
+            validator.validate_server_url(registration_endpoint)
+        except ValueError as e:
+            raise ValidationError(f"Invalid registration endpoint URL: {e}") from e
+
         client_info = await _register_oauth_client(
             registration_endpoint,
             callback_url,
