@@ -43,9 +43,9 @@ async def list_artifacts(
     Returns:
         Paginated list of artifacts
     """
-    # Verify task exists and belongs to user
+    # Verify task exists and belongs to user (eagerly load session for user_id check)
     task_repo = TaskRepository(db)
-    task = await task_repo.get_by_id(task_id)
+    task = await task_repo.get_with_session(task_id)
     if not task or task.session_id != session_id:
         raise NotFoundError("Task", task_id)
     if task.session.user_id != user_id:
@@ -91,9 +91,9 @@ async def get_artifact(
     Returns:
         Artifact details
     """
-    # Verify task exists and belongs to user
+    # Verify task exists and belongs to user (eagerly load session for user_id check)
     task_repo = TaskRepository(db)
-    task = await task_repo.get_by_id(task_id)
+    task = await task_repo.get_with_session(task_id)
     if not task or task.session_id != session_id:
         raise NotFoundError("Task", task_id)
     if task.session.user_id != user_id:
@@ -138,9 +138,9 @@ async def download_artifacts_zip(
     Returns:
         ZIP file as streaming response
     """
-    # Verify task exists and belongs to user
+    # Verify task exists and belongs to user (eagerly load session for user_id check)
     task_repo = TaskRepository(db)
-    task = await task_repo.get_by_id(task_id)
+    task = await task_repo.get_with_session(task_id)
     if not task or task.session_id != session_id:
         raise NotFoundError("Task", task_id)
     if task.session.user_id != user_id:

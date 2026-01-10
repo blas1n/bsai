@@ -25,7 +25,7 @@ class LLMRequest(BaseModel):
     stream: bool = False
     api_base: str | None = None
     api_key: str | None = None
-    response_format: dict[str, Any] = Field(default_factory=dict)
+    response_format: dict[str, Any] | None = None
 
 
 # =============================================================================

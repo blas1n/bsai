@@ -111,7 +111,7 @@ class SummarizerAgent:
             api_key=model.api_key,
         )
 
-        response = await self.llm_client.chat_completion(request)
+        response = await self.llm_client.chat_completion(request, mcp_servers=[])
         summary = response.content.strip()
 
         # Persist snapshot
@@ -171,7 +171,7 @@ class SummarizerAgent:
             api_key=model.api_key,
         )
 
-        response = await self.llm_client.chat_completion(request)
+        response = await self.llm_client.chat_completion(request, mcp_servers=[])
         summary = response.content.strip()
 
         # Persist snapshot with manual type

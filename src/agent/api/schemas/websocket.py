@@ -52,6 +52,12 @@ class WSMessageType(StrEnum):
     # Errors
     ERROR = "error"
 
+    # MCP Tool Execution
+    MCP_TOOL_CALL_REQUEST = "mcp_tool_call_request"
+    MCP_TOOL_CALL_RESPONSE = "mcp_tool_call_response"
+    MCP_APPROVAL_REQUEST = "mcp_approval_request"
+    MCP_APPROVAL_RESPONSE = "mcp_approval_response"
+
 
 class WSMessage(BaseModel):
     """WebSocket message envelope."""

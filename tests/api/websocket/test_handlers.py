@@ -158,13 +158,25 @@ class TestHandleMessage:
         """Subscribes to session on subscribe message."""
         session_id = uuid4()
 
-        await handler._handle_message(
-            mock_connection,
-            {
-                "type": "subscribe",
-                "payload": {"session_id": str(session_id)},
-            },
-        )
+        # Mock the database session for ownership verification using async generator
+        async def mock_get_db():
+            mock_db = AsyncMock()
+            yield mock_db
+
+        with patch("agent.api.websocket.handlers.get_db_session", mock_get_db):
+            # Mock SessionRepository.verify_ownership to return True
+            with patch("agent.api.websocket.handlers.SessionRepository") as MockSessionRepo:
+                mock_repo = MagicMock()
+                mock_repo.verify_ownership = AsyncMock(return_value=True)
+                MockSessionRepo.return_value = mock_repo
+
+                await handler._handle_message(
+                    mock_connection,
+                    {
+                        "type": "subscribe",
+                        "payload": {"session_id": str(session_id)},
+                    },
+                )
 
         mock_manager.subscribe_to_session.assert_called_once_with(mock_connection, session_id)
 
@@ -337,3 +349,343 @@ class TestSendHelpers:
         call_args = mock_manager.send_message.call_args
         message = call_args[0][1]
         assert message.type == "pong"
+
+
+class TestHandleMcpToolResponse:
+    """Tests for _handle_mcp_tool_response method."""
+
+    @pytest.mark.asyncio
+    async def test_requires_authentication(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Requires authenticated connection."""
+        mock_connection.authenticated = False
+
+        await handler._handle_mcp_tool_response(
+            mock_connection,
+            {"type": "mcp_tool_call_response", "payload": {"request_id": "123"}},
+        )
+
+        mock_manager.send_message.assert_called_once()
+        call_args = mock_manager.send_message.call_args
+        message = call_args[0][1]
+        assert message.type == "error"
+        assert "Authentication required" in message.payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_requires_session(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Requires subscribed session."""
+        mock_connection.authenticated = True
+        mock_connection.session_id = None
+
+        await handler._handle_mcp_tool_response(
+            mock_connection,
+            {"type": "mcp_tool_call_response", "payload": {"request_id": "123"}},
+        )
+
+        mock_manager.send_message.assert_called_once()
+        call_args = mock_manager.send_message.call_args
+        message = call_args[0][1]
+        assert message.type == "error"
+        assert "No session subscribed" in message.payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_requires_request_id(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Requires request_id in payload."""
+        mock_connection.authenticated = True
+        mock_connection.session_id = uuid4()
+
+        await handler._handle_mcp_tool_response(
+            mock_connection,
+            {"type": "mcp_tool_call_response", "payload": {}},
+        )
+
+        # Should not send error message, just log warning
+        mock_manager.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handles_no_executor(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Handles case when no executor found."""
+        mock_connection.authenticated = True
+        mock_connection.session_id = uuid4()
+        mock_manager.get_mcp_executor.return_value = None
+
+        await handler._handle_mcp_tool_response(
+            mock_connection,
+            {"type": "mcp_tool_call_response", "payload": {"request_id": "123"}},
+        )
+
+        mock_manager.get_mcp_executor.assert_called_once_with(mock_connection.session_id)
+
+    @pytest.mark.asyncio
+    async def test_forwards_to_executor(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Forwards response to executor."""
+        mock_connection.authenticated = True
+        mock_connection.session_id = uuid4()
+
+        mock_executor = MagicMock()
+        mock_manager.get_mcp_executor.return_value = mock_executor
+
+        payload = {
+            "request_id": "test-123",
+            "success": True,
+            "output": {"result": "data"},
+            "execution_time_ms": 100,
+        }
+
+        await handler._handle_mcp_tool_response(
+            mock_connection,
+            {"type": "mcp_tool_call_response", "payload": payload},
+        )
+
+        mock_executor.handle_stdio_response.assert_called_once_with(
+            request_id="test-123",
+            success=True,
+            output={"result": "data"},
+            error=None,
+            execution_time_ms=100,
+        )
+
+
+class TestHandleMcpApprovalResponse:
+    """Tests for _handle_mcp_approval_response method."""
+
+    @pytest.mark.asyncio
+    async def test_requires_authentication(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Requires authenticated connection."""
+        mock_connection.authenticated = False
+
+        await handler._handle_mcp_approval_response(
+            mock_connection,
+            {"type": "mcp_approval_response", "payload": {"request_id": "123", "approved": True}},
+        )
+
+        mock_manager.send_message.assert_called_once()
+        call_args = mock_manager.send_message.call_args
+        message = call_args[0][1]
+        assert message.type == "error"
+        assert "Authentication required" in message.payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_requires_session(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Requires subscribed session."""
+        mock_connection.authenticated = True
+        mock_connection.session_id = None
+
+        await handler._handle_mcp_approval_response(
+            mock_connection,
+            {"type": "mcp_approval_response", "payload": {"request_id": "123", "approved": True}},
+        )
+
+        mock_manager.send_message.assert_called_once()
+        call_args = mock_manager.send_message.call_args
+        message = call_args[0][1]
+        assert message.type == "error"
+        assert "No session subscribed" in message.payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_requires_request_id(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Requires request_id in payload."""
+        mock_connection.authenticated = True
+        mock_connection.session_id = uuid4()
+
+        await handler._handle_mcp_approval_response(
+            mock_connection,
+            {"type": "mcp_approval_response", "payload": {"approved": True}},
+        )
+
+        # Should not send error message, just log warning
+        mock_manager.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_forwards_approval_to_executor(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Forwards approval response to executor."""
+        mock_connection.authenticated = True
+        mock_connection.session_id = uuid4()
+
+        mock_executor = MagicMock()
+        mock_manager.get_mcp_executor.return_value = mock_executor
+
+        await handler._handle_mcp_approval_response(
+            mock_connection,
+            {
+                "type": "mcp_approval_response",
+                "payload": {"request_id": "test-456", "approved": True},
+            },
+        )
+
+        mock_executor.handle_approval_response.assert_called_once_with(
+            request_id="test-456",
+            approved=True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_forwards_rejection_to_executor(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Forwards rejection response to executor."""
+        mock_connection.authenticated = True
+        mock_connection.session_id = uuid4()
+
+        mock_executor = MagicMock()
+        mock_manager.get_mcp_executor.return_value = mock_executor
+
+        await handler._handle_mcp_approval_response(
+            mock_connection,
+            {
+                "type": "mcp_approval_response",
+                "payload": {"request_id": "test-789", "approved": False},
+            },
+        )
+
+        mock_executor.handle_approval_response.assert_called_once_with(
+            request_id="test-789",
+            approved=False,
+        )
+
+
+class TestMessageLoop:
+    """Tests for _message_loop method."""
+
+    @pytest.mark.asyncio
+    async def test_processes_messages_until_disconnect(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Processes messages until WebSocketDisconnect."""
+        # First call returns ping, second raises WebSocketDisconnect
+        mock_connection.websocket.receive_json = AsyncMock(
+            side_effect=[{"type": "ping"}, WebSocketDisconnect()]
+        )
+
+        with pytest.raises(WebSocketDisconnect):
+            await handler._message_loop(mock_connection)
+
+        # Should have processed one ping message
+        assert mock_manager.send_message.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_handles_message_errors(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Handles message processing errors gracefully."""
+        # First call raises error, second raises WebSocketDisconnect
+        mock_connection.websocket.receive_json = AsyncMock(
+            side_effect=[{"type": "unknown_type"}, WebSocketDisconnect()]
+        )
+
+        with pytest.raises(WebSocketDisconnect):
+            await handler._message_loop(mock_connection)
+
+
+class TestSubscribeUnauthorized:
+    """Tests for subscribe authorization."""
+
+    @pytest.mark.asyncio
+    async def test_subscribe_unauthorized_user(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Denies subscription when user doesn't own session."""
+        session_id = uuid4()
+
+        async def mock_get_db():
+            mock_db = AsyncMock()
+            yield mock_db
+
+        with patch("agent.api.websocket.handlers.get_db_session", mock_get_db):
+            with patch("agent.api.websocket.handlers.SessionRepository") as MockSessionRepo:
+                mock_repo = MagicMock()
+                mock_repo.verify_ownership = AsyncMock(return_value=False)
+                MockSessionRepo.return_value = mock_repo
+
+                await handler._handle_message(
+                    mock_connection,
+                    {
+                        "type": "subscribe",
+                        "payload": {"session_id": str(session_id)},
+                    },
+                )
+
+        mock_manager.subscribe_to_session.assert_not_called()
+        mock_manager.send_message.assert_called_once()
+        call_args = mock_manager.send_message.call_args
+        message = call_args[0][1]
+        assert message.type == "error"
+        assert "Not authorized" in message.payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_subscribe_missing_session_id(
+        self,
+        handler: WebSocketHandler,
+        mock_manager: MagicMock,
+        mock_connection: Connection,
+    ) -> None:
+        """Denies subscription when session_id is missing."""
+        await handler._handle_message(
+            mock_connection,
+            {
+                "type": "subscribe",
+                "payload": {},
+            },
+        )
+
+        mock_manager.subscribe_to_session.assert_not_called()
+        mock_manager.send_message.assert_called_once()
+        call_args = mock_manager.send_message.call_args
+        message = call_args[0][1]
+        assert message.type == "error"
+        assert "session_id required" in message.payload["error"]

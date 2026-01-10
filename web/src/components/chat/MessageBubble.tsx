@@ -1,8 +1,9 @@
 'use client';
 
-import { User, Bot, Info, Loader2, Brain, Sparkles, Cog, CheckCircle, FileText, MessageCircle } from 'lucide-react';
-import { ChatMessage, AgentActivity, AgentType, AGENT_DISPLAY } from '@/types/chat';
+import { User, Bot, Info, Loader2, CheckCircle } from 'lucide-react';
+import { ChatMessage, AgentActivity, AGENT_DISPLAY } from '@/types/chat';
 import { cn, formatCurrency, formatNumber } from '@/lib/utils';
+import { AGENT_ICONS, AGENT_TEXT_COLORS } from '@/lib/agentConstants';
 import { QAFeedbackBadge } from './QAFeedbackBadge';
 import { MilestoneProgressCard } from './MilestoneProgressCard';
 import { Badge } from '@/components/ui/badge';
@@ -11,32 +12,12 @@ interface MessageBubbleProps {
   message: ChatMessage;
   showDetails?: boolean;
   currentActivity?: AgentActivity | null;
-  agentHistory?: AgentActivity[];
 }
-
-const AGENT_ICONS: Record<AgentType, React.ReactNode> = {
-  conductor: <Brain className="h-4 w-4" />,
-  meta_prompter: <Sparkles className="h-4 w-4" />,
-  worker: <Cog className="h-4 w-4" />,
-  qa: <CheckCircle className="h-4 w-4" />,
-  summarizer: <FileText className="h-4 w-4" />,
-  responder: <MessageCircle className="h-4 w-4" />,
-};
-
-const AGENT_COLORS: Record<AgentType, string> = {
-  conductor: 'text-blue-500',
-  meta_prompter: 'text-purple-500',
-  worker: 'text-green-500',
-  qa: 'text-orange-500',
-  summarizer: 'text-gray-500',
-  responder: 'text-teal-500',
-};
 
 export function MessageBubble({
   message,
   showDetails = true,
   currentActivity,
-  agentHistory = [],
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -80,7 +61,7 @@ export function MessageBubble({
         {/* Current Activity Indicator (simplified - details shown in right panel) */}
         {isAssistant && message.isStreaming && currentActivity && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-sm">
-            <div className={cn('flex-shrink-0', AGENT_COLORS[currentActivity.agent])}>
+            <div className={cn('flex-shrink-0', AGENT_TEXT_COLORS[currentActivity.agent])}>
               {AGENT_ICONS[currentActivity.agent]}
             </div>
             <span className="font-medium">

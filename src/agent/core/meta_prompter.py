@@ -100,7 +100,7 @@ class MetaPrompterAgent:
             api_key=model.api_key,
         )
 
-        response = await self.llm_client.chat_completion(request)
+        response = await self.llm_client.chat_completion(request, mcp_servers=[])
         generated_prompt = response.content.strip()
 
         # Persist to database

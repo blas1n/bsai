@@ -11,13 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import WorkerAgent
 from agent.core.artifact_extractor import extract_artifacts
+from agent.db.models.enums import TaskStatus
 from agent.db.repository.artifact_repo import ArtifactRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage
 
 from ..broadcast import broadcast_agent_completed, broadcast_agent_started
 from ..state import AgentState, MilestoneData
-from . import get_container, get_ws_manager
+from . import check_task_cancelled, get_container, get_ws_manager
 
 logger = structlog.get_logger()
 
@@ -43,9 +44,27 @@ async def execute_worker_node(
     container = get_container(config)
     ws_manager = get_ws_manager(config)
 
+    # Check if task was cancelled before starting
+    if await check_task_cancelled(session, state["task_id"]):
+        logger.info("execute_worker_cancelled", task_id=str(state["task_id"]))
+        return {
+            "error": "Task cancelled by user",
+            "error_node": "execute_worker",
+            "task_status": TaskStatus.FAILED,
+            "workflow_complete": True,
+        }
+
     try:
         milestones = state.get("milestones")
         idx = state.get("current_milestone_index")
+
+        # Debug: Log user_id for MCP server lookup troubleshooting
+        logger.debug(
+            "execute_worker_context",
+            user_id=state["user_id"],
+            session_id=str(state["session_id"]),
+            task_id=str(state["task_id"]),
+        )
 
         if milestones is None or idx is None:
             return {"error": "No milestones available", "error_node": "execute_worker"}
@@ -72,10 +91,20 @@ async def execute_worker_node(
             router=container.router,
             prompt_manager=container.prompt_manager,
             session=session,
+            ws_manager=ws_manager,
         )
 
         # Determine prompt to use (MetaPrompter output or description)
-        prompt = state.get("current_prompt") or milestone["description"]
+        # Include original_request for context if available
+        base_prompt = state.get("current_prompt") or milestone["description"]
+        original_request = state.get("original_request", "")
+
+        # If the base prompt doesn't seem to include the original request details,
+        # prepend the original request for context
+        if original_request and original_request not in base_prompt:
+            prompt = f"Original user request:\n{original_request}\n\nCurrent task:\n{base_prompt}"
+        else:
+            prompt = base_prompt
 
         # Check if this is a retry with feedback
         previous_output = milestone.get("worker_output")
@@ -87,12 +116,16 @@ async def execute_worker_node(
                 previous_output=previous_output,
                 qa_feedback=qa_feedback,
                 complexity=milestone["complexity"],
+                user_id=state["user_id"],
+                session_id=state["session_id"],
             )
         else:
             response = await worker.execute_milestone(
                 milestone_id=milestone["id"],
                 prompt=prompt,
                 complexity=milestone["complexity"],
+                user_id=state["user_id"],
+                session_id=state["session_id"],
                 preferred_model=milestone.get("selected_model"),
                 context_messages=state.get("context_messages"),
             )

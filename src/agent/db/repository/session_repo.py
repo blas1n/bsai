@@ -138,3 +138,20 @@ class SessionRepository(BaseRepository[Session]):
             Updated session or None if not found
         """
         return await self.update(session_id, status="paused")
+
+    async def verify_ownership(self, session_id: UUID, user_id: str) -> bool:
+        """Verify that a user owns a session.
+
+        Args:
+            session_id: Session UUID to verify
+            user_id: User ID to check ownership
+
+        Returns:
+            True if user owns the session, False otherwise
+        """
+        stmt = select(Session.id).where(
+            Session.id == session_id,
+            Session.user_id == user_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None

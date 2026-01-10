@@ -252,6 +252,37 @@ NEXTAUTH_URL=http://localhost:13000
 NEXTAUTH_SECRET=your-secret
 ```
 
+## MCP (Model Context Protocol) Integration
+
+The frontend includes MCP server management for tool calling:
+
+### Key Files
+
+- `components/mcp/` - MCP server management UI
+  - `McpServerForm.tsx` - Server creation/edit form with OAuth support
+  - `McpServerCard.tsx` - Server display card with status
+  - `McpServerList.tsx` - Server listing with actions
+- `stores/mcpStore.ts` - Zustand store for MCP state
+- `types/mcp.ts` - TypeScript types for MCP
+- `app/(dashboard)/settings/mcp/` - MCP settings page
+- `app/settings/mcp/oauth-callback/` - OAuth callback handler
+
+### MCP Store Usage
+
+```tsx
+import { useMcpStore } from '@/stores/mcpStore';
+
+function McpServersPage() {
+  const { servers, loading, fetchServers, deleteServer } = useMcpStore();
+
+  useEffect(() => {
+    fetchServers();
+  }, [fetchServers]);
+
+  return <McpServerList servers={servers} onDelete={deleteServer} />;
+}
+```
+
 ## Component Patterns
 
 ### 1. Barrel Exports

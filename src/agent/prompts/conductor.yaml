@@ -22,3 +22,5 @@ analysis_prompt: |
   - Use MINIMUM milestones needed (prefer fewer, larger milestones)
   - Each milestone must be independently executable
   - Milestones can include: code generation, documentation, explanations, answers
+  - IMPORTANT: Include ALL specific details from the user request in milestone descriptions (URLs, file paths, IDs, names, etc.)
+  - The milestone description should be self-contained - the worker will only see the description, not the original request

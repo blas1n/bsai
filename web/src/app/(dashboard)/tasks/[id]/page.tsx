@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { MilestoneTimeline } from '@/components/tasks/MilestoneTimeline';
+import { useAuth } from '@/hooks/useAuth';
 import { api, TaskDetailResponse } from '@/lib/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { WSMessageType, LLMChunkPayload, MilestoneProgressPayload } from '@/types/websocket';
@@ -19,6 +20,7 @@ export default function TaskDetailPage() {
   const searchParams = useSearchParams();
   const taskId = params.id as string;
   const sessionId = searchParams.get('session') || '';
+  const { accessToken } = useAuth();
 
   const [task, setTask] = useState<TaskDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,6 +71,7 @@ export default function TaskDetailPage() {
 
   const { isConnected } = useWebSocket({
     sessionId,
+    token: accessToken,
     onMessage: handleWebSocketMessage,
   });
 

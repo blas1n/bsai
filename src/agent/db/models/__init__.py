@@ -13,6 +13,8 @@ from .enums import (
 )
 from .generated_prompt import GeneratedPrompt
 from .llm_usage_log import LLMUsageLog
+from .mcp_server_config import McpServerConfig
+from .mcp_tool_execution_log import McpToolExecutionLog
 from .memory_snapshot import MemorySnapshot
 from .milestone import Milestone
 from .prompt_usage_history import PromptUsageHistory
@@ -35,6 +37,8 @@ __all__ = [
     "SystemPrompt",
     "GeneratedPrompt",
     "PromptUsageHistory",
+    "McpServerConfig",
+    "McpToolExecutionLog",
     # Enums
     "SessionStatus",
     "TaskStatus",

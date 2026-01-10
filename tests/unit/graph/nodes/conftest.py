@@ -13,9 +13,18 @@ from agent.llm import LLMModel
 
 
 @pytest.fixture
-def mock_config(mock_container: MagicMock) -> RunnableConfig:
-    """Create mock RunnableConfig with container."""
-    return RunnableConfig(configurable={"ws_manager": None, "container": mock_container})
+def mock_ws_manager() -> MagicMock:
+    """Create mock WebSocket manager."""
+    manager = MagicMock()
+    manager.send_message = AsyncMock()
+    manager.register_mcp_executor = MagicMock()
+    return manager
+
+
+@pytest.fixture
+def mock_config(mock_container: MagicMock, mock_ws_manager: MagicMock) -> RunnableConfig:
+    """Create mock RunnableConfig with container and ws_manager."""
+    return RunnableConfig(configurable={"ws_manager": mock_ws_manager, "container": mock_container})
 
 
 @pytest.fixture
@@ -50,6 +59,7 @@ def base_state() -> AgentState:
     return AgentState(
         session_id=uuid4(),
         task_id=uuid4(),
+        user_id="test-user-123",
         original_request="Build a web scraper",
         task_status=TaskStatus.PENDING,
         milestones=[],

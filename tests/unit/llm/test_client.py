@@ -80,7 +80,7 @@ class TestChatCompletion:
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
-            result = await client.chat_completion(sample_request)
+            result = await client.chat_completion(sample_request, mcp_servers=[])
 
             assert result.content == "Hello! How can I help?"
             assert result.usage.input_tokens == 20
@@ -113,7 +113,7 @@ class TestChatCompletion:
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
-            await client.chat_completion(request)
+            await client.chat_completion(request, mcp_servers=[])
 
             call_kwargs = mock_completion.call_args[1]
             assert call_kwargs["model"] == "claude-3-opus"
@@ -143,7 +143,7 @@ class TestChatCompletion:
         with patch("agent.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
-            await client.chat_completion(request)
+            await client.chat_completion(request, mcp_servers=[])
 
             call_kwargs = mock_completion.call_args[1]
             assert "max_tokens" not in call_kwargs
@@ -161,7 +161,7 @@ class TestChatCompletion:
             patch("agent.llm.client.litellm.acompletion", return_value=mock_response),
             patch("agent.llm.client.logger") as mock_logger,
         ):
-            await client.chat_completion(sample_request)
+            await client.chat_completion(sample_request, mcp_servers=[])
 
             assert mock_logger.info.call_count == 2
 
@@ -187,7 +187,7 @@ class TestChatCompletion:
             patch("agent.llm.client.litellm.acompletion", side_effect=mock_completion),
             patch("tenacity.nap.time.sleep", return_value=None),  # Skip retry delays
         ):
-            result = await client.chat_completion(sample_request)
+            result = await client.chat_completion(sample_request, mcp_servers=[])
 
             assert result.content == "Response"
             assert call_count == 3  # Initial call + 2 retries
@@ -206,7 +206,7 @@ class TestChatCompletion:
             mock_completion.side_effect = Exception("Persistent error")
 
             with pytest.raises(Exception, match="Persistent error"):
-                await client.chat_completion(sample_request)
+                await client.chat_completion(sample_request, mcp_servers=[])
 
 
 def create_stream_chunk(content: str | None = None) -> MagicMock:
@@ -315,3 +315,411 @@ class TestStreamCompletion:
                 chunks.append(chunk)
 
             assert mock_logger.info.call_count == 2
+
+
+class TestToolExecution:
+    """Tests for tool calling functionality."""
+
+    @pytest.mark.asyncio
+    async def test_completion_with_tools(
+        self,
+        client: LiteLLMClient,
+        sample_request: LLMRequest,
+    ) -> None:
+        """Test completion with MCP tools enabled."""
+
+        mock_server = MagicMock()
+        mock_server.name = "test-server"
+
+        mock_executor = MagicMock()
+
+        mock_response = create_mock_response(content="Done with tools")
+
+        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+            with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
+
+                async def async_build(*args, **kwargs):
+                    return (
+                        [
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": "test_tool",
+                                    "description": "Test",
+                                    "parameters": {},
+                                },
+                            }
+                        ],
+                        {"test_tool": mock_server},
+                    )
+
+                mock_build.side_effect = async_build
+                mock_completion.return_value = mock_response
+
+                result = await client.chat_completion(
+                    request=sample_request,
+                    mcp_servers=[mock_server],
+                    tool_executor=mock_executor,
+                )
+
+        assert result.content == "Done with tools"
+
+    @pytest.mark.asyncio
+    async def test_tool_call_execution_loop(
+        self,
+        client: LiteLLMClient,
+        sample_request: LLMRequest,
+    ) -> None:
+        """Test tool call execution and response loop."""
+        import json
+
+        mock_server = MagicMock()
+        mock_server.name = "test-server"
+
+        mock_executor = MagicMock()
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.output = {"result": "data"}
+        mock_result.execution_time_ms = 100
+
+        async def async_execute(*args, **kwargs):
+            return mock_result
+
+        mock_executor.execute_tool = async_execute
+
+        # Create tool call
+        tool_call = MagicMock()
+        tool_call.id = "call_123"
+        tool_call.type = "function"
+        tool_call.function = MagicMock()
+        tool_call.function.name = "test_tool"
+        tool_call.function.arguments = json.dumps({"param": "value"})
+
+        # First response has tool calls
+        mock_response_with_tools = MagicMock()
+        mock_response_with_tools.choices = [MagicMock()]
+        mock_response_with_tools.choices[0].message.content = ""
+        mock_response_with_tools.choices[0].message.tool_calls = [tool_call]
+        mock_response_with_tools.choices[0].finish_reason = "tool_calls"
+        mock_response_with_tools.usage.prompt_tokens = 10
+        mock_response_with_tools.usage.completion_tokens = 5
+        mock_response_with_tools.model = "gpt-4"
+
+        # Second response is final
+        mock_final_response = create_mock_response(content="Final answer")
+
+        call_count = 0
+
+        async def mock_completion(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return mock_response_with_tools
+            return mock_final_response
+
+        with patch("agent.llm.client.litellm.acompletion", side_effect=mock_completion):
+            with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
+
+                async def async_build(*args, **kwargs):
+                    return (
+                        [{"type": "function", "function": {"name": "test_tool"}}],
+                        {"test_tool": mock_server},
+                    )
+
+                mock_build.side_effect = async_build
+
+                with patch("agent.llm.client.get_agent_settings") as mock_settings:
+                    mock_settings.return_value.max_tool_iterations = 5
+
+                    result = await client.chat_completion(
+                        request=sample_request,
+                        mcp_servers=[mock_server],
+                        tool_executor=mock_executor,
+                    )
+
+        assert result.content == "Final answer"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_tool_call_failure_handling(
+        self,
+        client: LiteLLMClient,
+        sample_request: LLMRequest,
+    ) -> None:
+        """Test handling of failed tool execution."""
+
+        mock_server = MagicMock()
+        mock_server.name = "test-server"
+
+        mock_executor = MagicMock()
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.error = "Tool execution failed"
+        mock_result.output = None
+
+        async def async_execute(*args, **kwargs):
+            return mock_result
+
+        mock_executor.execute_tool = async_execute
+
+        tool_call = MagicMock()
+        tool_call.id = "call_456"
+        tool_call.type = "function"
+        tool_call.function = MagicMock()
+        tool_call.function.name = "test_tool"
+        tool_call.function.arguments = "{}"
+
+        mock_response_with_tools = MagicMock()
+        mock_response_with_tools.choices = [MagicMock()]
+        mock_response_with_tools.choices[0].message.content = ""
+        mock_response_with_tools.choices[0].message.tool_calls = [tool_call]
+        mock_response_with_tools.choices[0].finish_reason = "tool_calls"
+        mock_response_with_tools.usage.prompt_tokens = 10
+        mock_response_with_tools.usage.completion_tokens = 5
+        mock_response_with_tools.model = "gpt-4"
+
+        mock_final_response = create_mock_response(content="Handled error")
+
+        responses = [mock_response_with_tools, mock_final_response]
+
+        async def mock_completion(**kwargs):
+            return responses.pop(0)
+
+        with patch("agent.llm.client.litellm.acompletion", side_effect=mock_completion):
+            with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
+
+                async def async_build(*args, **kwargs):
+                    return (
+                        [{"type": "function", "function": {"name": "test_tool"}}],
+                        {"test_tool": mock_server},
+                    )
+
+                mock_build.side_effect = async_build
+
+                with patch("agent.llm.client.get_agent_settings") as mock_settings:
+                    mock_settings.return_value.max_tool_iterations = 5
+
+                    result = await client.chat_completion(
+                        request=sample_request,
+                        mcp_servers=[mock_server],
+                        tool_executor=mock_executor,
+                    )
+
+        assert result.content == "Handled error"
+
+    @pytest.mark.asyncio
+    async def test_tool_server_not_found(
+        self,
+        client: LiteLLMClient,
+        sample_request: LLMRequest,
+    ) -> None:
+        """Test handling when tool server is not found."""
+
+        mock_server = MagicMock()
+        mock_server.name = "test-server"
+
+        mock_executor = MagicMock()
+
+        # Tool call for unknown tool
+        tool_call = MagicMock()
+        tool_call.id = "call_789"
+        tool_call.type = "function"
+        tool_call.function = MagicMock()
+        tool_call.function.name = "unknown_tool"
+        tool_call.function.arguments = "{}"
+
+        mock_response_with_tools = MagicMock()
+        mock_response_with_tools.choices = [MagicMock()]
+        mock_response_with_tools.choices[0].message.content = ""
+        mock_response_with_tools.choices[0].message.tool_calls = [tool_call]
+        mock_response_with_tools.choices[0].finish_reason = "tool_calls"
+        mock_response_with_tools.usage.prompt_tokens = 10
+        mock_response_with_tools.usage.completion_tokens = 5
+        mock_response_with_tools.model = "gpt-4"
+
+        mock_final_response = create_mock_response(content="Done")
+
+        responses = [mock_response_with_tools, mock_final_response]
+
+        async def mock_completion(**kwargs):
+            return responses.pop(0)
+
+        with patch("agent.llm.client.litellm.acompletion", side_effect=mock_completion):
+            with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
+
+                async def async_build(*args, **kwargs):
+                    # Only test_tool is mapped, not unknown_tool
+                    return (
+                        [{"type": "function", "function": {"name": "test_tool"}}],
+                        {"test_tool": mock_server},
+                    )
+
+                mock_build.side_effect = async_build
+
+                with patch("agent.llm.client.get_agent_settings") as mock_settings:
+                    mock_settings.return_value.max_tool_iterations = 5
+
+                    result = await client.chat_completion(
+                        request=sample_request,
+                        mcp_servers=[mock_server],
+                        tool_executor=mock_executor,
+                    )
+
+        assert result.content == "Done"
+
+    @pytest.mark.asyncio
+    async def test_no_tools_available(
+        self,
+        client: LiteLLMClient,
+        sample_request: LLMRequest,
+    ) -> None:
+        """Test when no tools are available from MCP servers."""
+        mock_server = MagicMock()
+        mock_server.name = "empty-server"
+
+        mock_executor = MagicMock()
+
+        mock_response = create_mock_response(content="No tools available")
+
+        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+            with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
+
+                async def async_build(*args, **kwargs):
+                    return ([], {})  # No tools
+
+                mock_build.side_effect = async_build
+                mock_completion.return_value = mock_response
+
+                result = await client.chat_completion(
+                    request=sample_request,
+                    mcp_servers=[mock_server],
+                    tool_executor=mock_executor,
+                )
+
+        assert result.content == "No tools available"
+
+    @pytest.mark.asyncio
+    async def test_response_format_passed(
+        self,
+        client: LiteLLMClient,
+    ) -> None:
+        """Test that response_format is passed to LiteLLM."""
+        request = LLMRequest(
+            model="gpt-4",
+            messages=[ChatMessage(role="user", content="Test")],
+            response_format={"type": "json_object"},
+        )
+
+        mock_response = create_mock_response()
+
+        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+            mock_completion.return_value = mock_response
+
+            await client.chat_completion(request, mcp_servers=[])
+
+            call_kwargs = mock_completion.call_args[1]
+            assert call_kwargs["response_format"] == {"type": "json_object"}
+
+
+class TestBuildToolsFromMcpServers:
+    """Tests for _build_tools_from_mcp_servers method."""
+
+    @pytest.mark.asyncio
+    async def test_builds_tools_from_servers(
+        self,
+        client: LiteLLMClient,
+    ) -> None:
+        """Test building tools from MCP servers."""
+        mock_server = MagicMock()
+        mock_server.name = "test-server"
+
+        mock_tools = [
+            {"name": "tool1", "description": "Tool 1", "inputSchema": {}},
+            {"name": "tool2", "description": "Tool 2", "inputSchema": {}},
+        ]
+
+        with patch("agent.llm.client.load_tools_from_mcp_server") as mock_load:
+
+            async def async_load(*args, **kwargs):
+                return mock_tools
+
+            mock_load.side_effect = async_load
+
+            tools, tool_to_server = await client._build_tools_from_mcp_servers([mock_server])
+
+        assert len(tools) == 2
+        assert tools[0]["function"]["name"] == "tool1"
+        assert tools[1]["function"]["name"] == "tool2"
+        assert tool_to_server["tool1"] == mock_server
+
+    @pytest.mark.asyncio
+    async def test_uses_preloaded_schemas(
+        self,
+        client: LiteLLMClient,
+    ) -> None:
+        """Test using pre-loaded tool schemas."""
+        mock_server = MagicMock()
+        mock_server.name = "test-server"
+
+        preloaded = {
+            "test-server": [
+                {"name": "preloaded_tool", "description": "Pre-loaded", "inputSchema": {}}
+            ]
+        }
+
+        with patch("agent.llm.client.load_tools_from_mcp_server") as mock_load:
+            tools, _ = await client._build_tools_from_mcp_servers(
+                [mock_server], tool_schemas=preloaded
+            )
+
+        # Should not call load since schemas are pre-loaded
+        mock_load.assert_not_called()
+        assert len(tools) == 1
+        assert tools[0]["function"]["name"] == "preloaded_tool"
+
+    @pytest.mark.asyncio
+    async def test_skips_tools_without_name(
+        self,
+        client: LiteLLMClient,
+    ) -> None:
+        """Test that tools without name are skipped."""
+        mock_server = MagicMock()
+        mock_server.name = "test-server"
+
+        mock_tools = [
+            {"description": "No name"},  # Missing name
+            {"name": "valid_tool", "description": "Valid"},
+        ]
+
+        with patch("agent.llm.client.load_tools_from_mcp_server") as mock_load:
+
+            async def async_load(*args, **kwargs):
+                return mock_tools
+
+            mock_load.side_effect = async_load
+
+            tools, _ = await client._build_tools_from_mcp_servers([mock_server])
+
+        # Only valid tool should be included
+        assert len(tools) == 1
+        assert tools[0]["function"]["name"] == "valid_tool"
+
+    @pytest.mark.asyncio
+    async def test_handles_empty_server_tools(
+        self,
+        client: LiteLLMClient,
+    ) -> None:
+        """Test handling servers with no tools."""
+        mock_server = MagicMock()
+        mock_server.name = "empty-server"
+
+        with patch("agent.llm.client.load_tools_from_mcp_server") as mock_load:
+
+            async def async_load(*args, **kwargs):
+                return []
+
+            mock_load.side_effect = async_load
+
+            tools, _ = await client._build_tools_from_mcp_servers([mock_server])
+
+        assert len(tools) == 0

@@ -80,7 +80,7 @@ def route_qa_decision(state: AgentState) -> QARoute:
     Handles three scenarios:
     1. PASS - Move to next milestone
     2. RETRY - Go back to Worker (if under retry limit)
-    3. FAIL - Max retries exceeded, end workflow
+    3. FAIL - Max retries exceeded, error, or workflow complete
 
     Note: FAIL is only set by qa_agent.py when max retries are exceeded.
     The QA prompt only offers PASS/RETRY to prevent premature failure.
@@ -91,6 +91,10 @@ def route_qa_decision(state: AgentState) -> QARoute:
     Returns:
         QARoute.NEXT to proceed, QARoute.RETRY to retry Worker, QARoute.FAIL to end
     """
+    # Check for errors or early termination first
+    if state.get("error") or state.get("workflow_complete"):
+        return QARoute.FAIL
+
     decision = state.get("current_qa_decision")
     retry_count = state.get("retry_count", 0)
 

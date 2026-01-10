@@ -167,7 +167,7 @@ class ResponderAgent:
             api_key=model.api_key,
         )
 
-        response = await self.llm_client.chat_completion(request)
+        response = await self.llm_client.chat_completion(request, mcp_servers=[])
         final_response = response.content.strip()
 
         logger.info(

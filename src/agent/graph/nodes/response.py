@@ -38,6 +38,18 @@ async def generate_response_node(
     container = get_container(config)
     ws_manager = get_ws_manager(config)
 
+    # If there was an error or cancellation, return the error message as final response
+    if state.get("error"):
+        error_msg = state.get("error", "Task failed or was cancelled")
+        logger.info(
+            "response_skipped_due_to_error",
+            task_id=str(state["task_id"]),
+            error=error_msg,
+        )
+        return {
+            "final_response": f"Task could not be completed: {error_msg}",
+        }
+
     try:
         # Broadcast responder started
         await broadcast_agent_started(

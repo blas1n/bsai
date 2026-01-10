@@ -9,11 +9,11 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import QAAgent, QADecision
-from agent.db.models.enums import MilestoneStatus
+from agent.db.models.enums import MilestoneStatus, TaskStatus
 
 from ..broadcast import broadcast_agent_completed, broadcast_agent_started
 from ..state import AgentState, MilestoneData
-from . import get_container, get_ws_manager
+from . import check_task_cancelled, get_container, get_ws_manager
 
 logger = structlog.get_logger()
 
@@ -38,6 +38,16 @@ async def verify_qa_node(
     """
     container = get_container(config)
     ws_manager = get_ws_manager(config)
+
+    # Check if task was cancelled before starting
+    if await check_task_cancelled(session, state["task_id"]):
+        logger.info("verify_qa_cancelled", task_id=str(state["task_id"]))
+        return {
+            "error": "Task cancelled by user",
+            "error_node": "verify_qa",
+            "task_status": TaskStatus.FAILED,
+            "workflow_complete": True,
+        }
 
     try:
         milestones = state.get("milestones")
@@ -65,6 +75,7 @@ async def verify_qa_node(
             router=container.router,
             prompt_manager=container.prompt_manager,
             session=session,
+            ws_manager=ws_manager,
         )
 
         decision, feedback = await qa.validate_output(
@@ -72,6 +83,8 @@ async def verify_qa_node(
             milestone_description=milestone["description"],
             acceptance_criteria=milestone["acceptance_criteria"],
             worker_output=milestone["worker_output"] or "",
+            user_id=state["user_id"],
+            session_id=state["session_id"],
         )
 
         # Update milestone with QA result (immutable)

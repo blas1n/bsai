@@ -15,13 +15,22 @@ from __future__ import annotations
 
 from enum import StrEnum
 from typing import TYPE_CHECKING
+from uuid import UUID
+
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.container import ContainerState
+from agent.db.models.enums import TaskStatus
+from agent.db.repository.task_repo import TaskRepository
 
 if TYPE_CHECKING:
     from langchain_core.runnables import RunnableConfig
 
     from agent.api.websocket.manager import ConnectionManager
+    from agent.mcp.executor import McpToolExecutor
+
+_logger = structlog.get_logger()
 
 
 class Node(StrEnum):
@@ -38,17 +47,24 @@ class Node(StrEnum):
     GENERATE_RESPONSE = "generate_response"
 
 
-def get_ws_manager(config: RunnableConfig) -> ConnectionManager | None:
+def get_ws_manager(config: RunnableConfig) -> ConnectionManager:
     """Extract WebSocket manager from config.
 
     Args:
         config: LangGraph RunnableConfig
 
     Returns:
-        ConnectionManager if present, None otherwise
+        ConnectionManager instance
+
+    Raises:
+        RuntimeError: If ws_manager not in config
     """
     configurable = config.get("configurable", {})
-    return configurable.get("ws_manager")
+    ws_manager: ConnectionManager | None = configurable.get("ws_manager")
+    if ws_manager is None:
+        msg = "WebSocket manager not found in config. Ensure workflow is run with proper context."
+        raise RuntimeError(msg)
+    return ws_manager
 
 
 def get_container(config: RunnableConfig) -> ContainerState:
@@ -72,8 +88,56 @@ def get_container(config: RunnableConfig) -> ContainerState:
     return container
 
 
+def get_mcp_executor(config: RunnableConfig) -> McpToolExecutor | None:
+    """Extract MCP tool executor from config.
+
+    Args:
+        config: LangGraph RunnableConfig
+
+    Returns:
+        McpToolExecutor if available, None otherwise
+    """
+    configurable = config.get("configurable", {})
+    return configurable.get("mcp_executor")
+
+
+async def check_task_cancelled(
+    session: AsyncSession,
+    task_id: UUID,
+) -> bool:
+    """Check if task has been cancelled.
+
+    Args:
+        session: Database session
+        task_id: Task UUID to check
+
+    Returns:
+        True if task is cancelled/failed, False otherwise
+    """
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    if task is None:
+        _logger.warning("check_task_cancelled_not_found", task_id=str(task_id))
+        return True  # Treat missing task as cancelled
+
+    # Only treat FAILED or COMPLETED status as cancelled/finished
+    # PENDING and IN_PROGRESS are normal running states
+    if task.status in (TaskStatus.FAILED.value, TaskStatus.COMPLETED.value):
+        _logger.info(
+            "task_cancelled_detected",
+            task_id=str(task_id),
+            status=task.status,
+        )
+        return True
+
+    return False
+
+
 __all__ = [
     "Node",
     "get_ws_manager",
     "get_container",
+    "get_mcp_executor",
+    "check_task_cancelled",
 ]

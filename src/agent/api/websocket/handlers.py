@@ -8,6 +8,9 @@ from uuid import UUID
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
+from agent.db.repository.session_repo import SessionRepository
+from agent.db.session import get_db_session
+
 from ..auth import authenticate_websocket
 from ..schemas import (
     WSMessage,
@@ -122,6 +125,10 @@ class WebSocketHandler:
             await self._handle_subscribe(connection, data)
         elif msg_type == WSMessageType.PING:
             await self._handle_ping(connection)
+        elif msg_type == WSMessageType.MCP_TOOL_CALL_RESPONSE:
+            await self._handle_mcp_tool_response(connection, data)
+        elif msg_type == WSMessageType.MCP_APPROVAL_RESPONSE:
+            await self._handle_mcp_approval_response(connection, data)
         else:
             logger.warning(
                 "ws_unknown_message",
@@ -192,7 +199,22 @@ class WebSocketHandler:
             await self._send_error(connection, "Invalid session_id")
             return
 
-        # TODO: Verify user owns session
+        # Verify user owns the session before allowing subscription
+        if connection.user_id:
+            async for db in get_db_session():
+                repo = SessionRepository(db)
+                is_owner = await repo.verify_ownership(session_id, connection.user_id)
+                if not is_owner:
+                    logger.warning(
+                        "ws_subscribe_unauthorized",
+                        connection_id=connection.id,
+                        user_id=connection.user_id,
+                        session_id=str(session_id),
+                    )
+                    await self._send_error(connection, "Not authorized to access this session")
+                    return
+                break
+
         await self.manager.subscribe_to_session(connection, session_id)
 
         await self.manager.send_message(
@@ -241,4 +263,118 @@ class WebSocketHandler:
                 type=WSMessageType.ERROR,
                 payload={"error": message},
             ),
+        )
+
+    async def _handle_mcp_tool_response(
+        self,
+        connection: Connection,
+        data: dict[str, Any],
+    ) -> None:
+        """Handle MCP tool call response from frontend.
+
+        This is called when frontend completes stdio tool execution.
+
+        Args:
+            connection: Source connection
+            data: Tool response data
+        """
+        if not connection.authenticated:
+            await self._send_error(connection, "Authentication required")
+            return
+
+        if not connection.session_id:
+            await self._send_error(connection, "No session subscribed")
+            return
+
+        payload = data.get("payload", {})
+        request_id = payload.get("request_id")
+
+        if not request_id:
+            logger.warning(
+                "mcp_tool_response_missing_request_id",
+                connection_id=connection.id,
+            )
+            return
+
+        # Get executor for this session from ConnectionManager
+        executor = self.manager.get_mcp_executor(connection.session_id)
+        if not executor:
+            logger.warning(
+                "mcp_tool_response_no_executor",
+                connection_id=connection.id,
+                session_id=str(connection.session_id),
+                request_id=request_id,
+            )
+            return
+
+        # Forward to executor - it will resolve the pending asyncio.Future
+        executor.handle_stdio_response(
+            request_id=request_id,
+            success=payload.get("success", False),
+            output=payload.get("output"),
+            error=payload.get("error"),
+            execution_time_ms=payload.get("execution_time_ms"),
+        )
+
+        logger.info(
+            "mcp_tool_response_handled",
+            connection_id=connection.id,
+            session_id=str(connection.session_id),
+            request_id=request_id,
+            success=payload.get("success"),
+        )
+
+    async def _handle_mcp_approval_response(
+        self,
+        connection: Connection,
+        data: dict[str, Any],
+    ) -> None:
+        """Handle MCP approval response from user.
+
+        Args:
+            connection: Source connection
+            data: Approval response data
+        """
+        if not connection.authenticated:
+            await self._send_error(connection, "Authentication required")
+            return
+
+        if not connection.session_id:
+            await self._send_error(connection, "No session subscribed")
+            return
+
+        payload = data.get("payload", {})
+        request_id = payload.get("request_id")
+        approved = payload.get("approved", False)
+
+        if not request_id:
+            logger.warning(
+                "mcp_approval_response_missing_request_id",
+                connection_id=connection.id,
+            )
+            return
+
+        # Get executor for this session from ConnectionManager
+        executor = self.manager.get_mcp_executor(connection.session_id)
+        if not executor:
+            logger.warning(
+                "mcp_approval_response_no_executor",
+                connection_id=connection.id,
+                session_id=str(connection.session_id),
+                request_id=request_id,
+            )
+            return
+
+        # Forward to executor - it will resolve the pending asyncio.Future
+        executor.handle_approval_response(
+            request_id=request_id,
+            approved=approved,
+        )
+
+        logger.info(
+            "mcp_approval_response_handled",
+            connection_id=connection.id,
+            session_id=str(connection.session_id),
+            request_id=request_id,
+            approved=approved,
         )

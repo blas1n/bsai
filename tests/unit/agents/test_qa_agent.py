@@ -55,11 +55,21 @@ def mock_session() -> AsyncMock:
 
 
 @pytest.fixture
+def mock_ws_manager() -> MagicMock:
+    """Create mock WebSocket manager."""
+    manager = MagicMock()
+    manager.send_message = AsyncMock()
+    manager.register_mcp_executor = MagicMock()
+    return manager
+
+
+@pytest.fixture
 def qa_agent(
     mock_llm_client: MagicMock,
     mock_router: MagicMock,
     mock_prompt_manager: MagicMock,
     mock_session: AsyncMock,
+    mock_ws_manager: MagicMock,
 ) -> QAAgent:
     """Create QAAgent with mocked dependencies."""
     agent = QAAgent(
@@ -67,12 +77,18 @@ def qa_agent(
         router=mock_router,
         prompt_manager=mock_prompt_manager,
         session=mock_session,
+        ws_manager=mock_ws_manager,
     )
     # Mock the milestone_repo that gets created internally
     agent.milestone_repo = MagicMock()
     milestone_mock = MagicMock()
     agent.milestone_repo.get_by_id = AsyncMock(return_value=milestone_mock)
     agent.milestone_repo.update = AsyncMock()
+
+    # Mock the mcp_server_repo that gets created internally
+    agent.mcp_server_repo = MagicMock()
+    agent.mcp_server_repo.get_enabled_for_agent = AsyncMock(return_value=[])
+
     return agent
 
 
@@ -87,6 +103,8 @@ class TestQAAgent:
     ) -> None:
         """Test validation that passes."""
         milestone_id = uuid4()
+        session_id = uuid4()
+        user_id = "test-user-id"
         milestone_description = "Implement login"
         acceptance_criteria = "Users can login with username/password"
         worker_output = "Login feature implemented with proper validation"
@@ -105,17 +123,21 @@ class TestQAAgent:
             milestone_description=milestone_description,
             acceptance_criteria=acceptance_criteria,
             worker_output=worker_output,
+            user_id=user_id,
+            session_id=session_id,
         )
 
         # Verify
         assert decision == QADecision.PASS
         assert "meets criteria" in feedback.lower()
 
-        # Check milestone status was updated to "pass" (enum value)
+        # Check milestone status was updated to "passed" (MilestoneStatus enum value)
+        from agent.db.models.enums import MilestoneStatus
+
         mock_repo = cast(MagicMock, qa_agent.milestone_repo)
         mock_repo.update.assert_called_once()
         update_call = mock_repo.update.call_args
-        assert update_call.kwargs["status"] == QADecision.PASS.value
+        assert update_call.kwargs["status"] == MilestoneStatus.PASSED.value
 
     @pytest.mark.asyncio
     async def test_validate_output_retry(
@@ -125,6 +147,8 @@ class TestQAAgent:
     ) -> None:
         """Test validation that requires retry."""
         milestone_id = uuid4()
+        session_id = uuid4()
+        user_id = "test-user-id"
         milestone_description = "Implement login"
         acceptance_criteria = "Users can login with username/password"
         worker_output = "Incomplete login implementation"
@@ -143,6 +167,8 @@ class TestQAAgent:
             milestone_description=milestone_description,
             acceptance_criteria=acceptance_criteria,
             worker_output=worker_output,
+            user_id=user_id,
+            session_id=session_id,
         )
 
         # Verify
@@ -166,6 +192,8 @@ class TestQAAgent:
     ) -> None:
         """Test structured feedback with issues and suggestions."""
         milestone_id = uuid4()
+        session_id = uuid4()
+        user_id = "test-user-id"
         milestone_description = "Implement login"
         acceptance_criteria = "Users can login"
         worker_output = "Bad implementation"
@@ -184,6 +212,8 @@ class TestQAAgent:
             milestone_description=milestone_description,
             acceptance_criteria=acceptance_criteria,
             worker_output=worker_output,
+            user_id=user_id,
+            session_id=session_id,
         )
 
         # Verify decision and feedback structure
@@ -202,6 +232,8 @@ class TestQAAgent:
     ) -> None:
         """Test that non-PASS decisions become RETRY (QA only returns PASS or RETRY)."""
         milestone_id = uuid4()
+        session_id = uuid4()
+        user_id = "test-user-id"
         milestone_description = "Implement login"
         acceptance_criteria = "Users can login"
         worker_output = "Wrong feature implemented"
@@ -220,17 +252,21 @@ class TestQAAgent:
             milestone_description=milestone_description,
             acceptance_criteria=acceptance_criteria,
             worker_output=worker_output,
+            user_id=user_id,
+            session_id=session_id,
         )
 
         # Verify RETRY decision
         assert decision == QADecision.RETRY
         assert "wrong implementation" in feedback.lower()
 
-        # Check milestone status was updated to "retry" (enum value)
+        # Check milestone status was updated to "in_progress" (MilestoneStatus for RETRY)
+        from agent.db.models.enums import MilestoneStatus
+
         mock_repo = cast(MagicMock, qa_agent.milestone_repo)
         mock_repo.update.assert_called()
         update_call = mock_repo.update.call_args
-        assert update_call.kwargs["status"] == QADecision.RETRY.value
+        assert update_call.kwargs["status"] == MilestoneStatus.IN_PROGRESS.value
 
     @pytest.mark.asyncio
     async def test_validate_output_invalid_decision_raises_error(
@@ -240,6 +276,8 @@ class TestQAAgent:
     ) -> None:
         """Test handling of invalid decision from LLM raises ValueError."""
         milestone_id = uuid4()
+        session_id = uuid4()
+        user_id = "test-user-id"
 
         # Mock LLM response with invalid decision (would fail Pydantic validation)
         mock_response = LLMResponse(
@@ -256,6 +294,8 @@ class TestQAAgent:
                 milestone_description="Test",
                 acceptance_criteria="Done",
                 worker_output="Output",
+                user_id=user_id,
+                session_id=session_id,
             )
 
     @pytest.mark.asyncio
@@ -267,6 +307,8 @@ class TestQAAgent:
     ) -> None:
         """Test validation prompt is properly rendered."""
         milestone_id = uuid4()
+        session_id = uuid4()
+        user_id = "test-user-id"
 
         # Mock LLM response
         mock_response = LLMResponse(
@@ -282,6 +324,8 @@ class TestQAAgent:
             milestone_description="Test milestone",
             acceptance_criteria="Must be done",
             worker_output="Output content",
+            user_id=user_id,
+            session_id=session_id,
         )
 
         # Verify prompt was rendered with correct arguments
@@ -300,6 +344,8 @@ class TestQAAgent:
     ) -> None:
         """Test that usage and cost are properly tracked."""
         milestone_id = uuid4()
+        session_id = uuid4()
+        user_id = "test-user-id"
 
         # Mock LLM response
         mock_response = LLMResponse(
@@ -315,6 +361,8 @@ class TestQAAgent:
             milestone_description="Test",
             acceptance_criteria="Done",
             worker_output="Output",
+            user_id=user_id,
+            session_id=session_id,
         )
 
         # Verify LLM was called
