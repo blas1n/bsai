@@ -13,6 +13,7 @@ import traceback
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
+import httpx
 import structlog
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -486,7 +487,11 @@ class McpToolExecutor:
                             execution_time_ms=execution_time_ms,
                         )
             else:  # http
-                async with streamable_http_client(url=server.server_url, headers=headers) as (
+                # Create httpx client with headers for authentication
+                http_client = httpx.AsyncClient(headers=headers) if headers else None
+                async with streamable_http_client(
+                    url=server.server_url, http_client=http_client
+                ) as (
                     read,
                     write,
                     _,

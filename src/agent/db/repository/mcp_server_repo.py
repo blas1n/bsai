@@ -1,5 +1,6 @@
 """MCP server configuration repository."""
 
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -120,7 +121,7 @@ class McpServerRepository(BaseRepository[McpServerConfig]):
         self,
         server_id: UUID,
         user_id: str,
-        **kwargs,
+        **kwargs: Any,
     ) -> McpServerConfig | None:
         """Update MCP server ensuring user ownership.
 

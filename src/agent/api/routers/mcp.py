@@ -174,7 +174,7 @@ def _get_user_friendly_error(e: Exception, server_url: str) -> str:
 
 
 async def _build_server_response(
-    server, user_id: str, include_stdio_config: bool = False
+    server: McpServerConfig, user_id: str, include_stdio_config: bool = False
 ) -> McpServerResponse | McpServerDetailResponse:
     """Build MCP server response from model.
 
@@ -388,7 +388,7 @@ async def update_mcp_server(
     encryptor = CredentialEncryption(settings)
 
     # Prepare update data
-    update_data = {}
+    update_data: dict[str, Any] = {}
 
     if request.name is not None:
         # Check for duplicate name
@@ -690,7 +690,7 @@ OAUTH_STATE_PREFIX = "mcp_oauth_state:"
 OAUTH_STATE_TTL = 600  # 10 minutes
 
 
-async def _discover_oauth_metadata(server_url: str) -> dict | None:
+async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
     """Discover OAuth metadata from MCP server.
 
     Tries standard OAuth discovery endpoints.
@@ -752,7 +752,7 @@ async def _register_oauth_client(
     registration_endpoint: str,
     redirect_uri: str,
     client_name: str = "BSAI MCP Client",
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Dynamically register an OAuth client (RFC 7591).
 
     Args:
@@ -792,7 +792,7 @@ async def _initiate_oauth_flow(
     server_url: str,
     callback_url: str,
     user_id: str,
-    extra_state_data: dict | None = None,
+    extra_state_data: dict[str, Any] | None = None,
 ) -> McpOAuthStartResponse:
     """Common OAuth flow initiation logic.
 
@@ -1080,7 +1080,7 @@ async def check_oauth_status(
     server_id: UUID,
     db: DBSession,
     user_id: CurrentUserId,
-) -> dict:
+) -> dict[str, Any]:
     """Check if OAuth tokens are configured for an MCP server.
 
     Args:
