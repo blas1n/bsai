@@ -5,6 +5,7 @@ Provides settings for authentication, caching, and API behavior.
 
 from functools import lru_cache
 
+from cryptography.fernet import Fernet
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -199,11 +200,33 @@ class McpSettings(BaseSettings):
     """MCP (Model Context Protocol) security and configuration settings."""
 
     # Encryption key for credentials (base64-encoded Fernet key)
-    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # If not provided, a random key will be generated (works but doesn't persist across restarts)
+    # For production, set MCP_ENCRYPTION_KEY to persist encrypted credentials
     encryption_key: str = Field(
         default="",
-        description="Fernet encryption key for MCP credentials (base64). REQUIRED in production.",
+        description="Fernet encryption key for MCP credentials (base64). Auto-generated if not set.",
     )
+
+    # Cache for auto-generated key
+    _generated_key: str | None = None
+
+    def get_encryption_key(self) -> str:
+        """Get encryption key, generating one if not configured.
+
+        Returns:
+            Fernet-compatible encryption key (base64-encoded)
+
+        Note:
+            If MCP_ENCRYPTION_KEY is not set, a random key is generated.
+            This works but encrypted data won't persist across application restarts.
+        """
+        if self.encryption_key:
+            return self.encryption_key
+
+        # Generate and cache a random key if not configured
+        if self._generated_key is None:
+            self._generated_key = Fernet.generate_key().decode()
+        return self._generated_key
 
     # Allowlisted commands for stdio MCP servers
     allowed_stdio_commands: list[str] = Field(
@@ -288,5 +311,9 @@ class McpSettings(BaseSettings):
 
 @lru_cache
 def get_mcp_settings() -> McpSettings:
-    """Get cached MCP settings."""
+    """Get cached MCP settings.
+
+    Returns:
+        McpSettings instance
+    """
     return McpSettings()

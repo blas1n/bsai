@@ -267,22 +267,18 @@ async def process(
 
 ### 1. Dependency Injection
 ```python
-# FastAPI dependencies
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Get database session."""
-    manager = get_session_manager()
-    async for session in manager.get_session():
-        yield session
+# FastAPI dependencies (see api/dependencies.py)
+from agent.api.dependencies import DBSession, CurrentUserId
 
 @router.post("/")
 async def create_task(
     data: TaskCreate,
-    session: AsyncSession = Depends(get_db_session),
+    db: DBSession,  # Type alias for Annotated[AsyncSession, Depends(get_db)]
+    user_id: CurrentUserId,  # Type alias for current user
 ) -> TaskResponse:
     """Create new task."""
-    repo = TaskRepository(session)
-    task = await repo.create(**data.model_dump())
-    await session.commit()
+    repo = TaskRepository(db)
+    task = await repo.create(user_id=user_id, **data.model_dump())
     return TaskResponse.model_validate(task)
 ```
 

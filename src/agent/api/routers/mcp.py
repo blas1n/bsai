@@ -5,6 +5,9 @@ import hashlib
 import json
 import secrets
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any
 from urllib.parse import urlencode, urljoin
 from uuid import UUID
 
@@ -18,6 +21,7 @@ from mcp.client.streamable_http import streamable_http_client
 from agent.api.config import get_mcp_settings
 from agent.api.exceptions import ConflictError, NotFoundError, ValidationError
 from agent.cache.redis_client import get_redis
+from agent.db.models.mcp_server_config import McpServerConfig
 from agent.db.repository.mcp_server_repo import McpServerRepository
 from agent.db.repository.mcp_tool_log_repo import McpToolLogRepository
 from agent.mcp.security import (
@@ -48,6 +52,69 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
 
+@asynccontextmanager
+async def connect_mcp_server(
+    server: McpServerConfig,
+    headers: dict[str, str] | None = None,
+) -> AsyncIterator[ClientSession]:
+    """Connect to MCP server using appropriate transport.
+
+    Args:
+        server: MCP server configuration
+        headers: Optional auth headers
+
+    Yields:
+        Initialized ClientSession
+
+    Raises:
+        ValueError: If server URL is not configured
+    """
+    if not server.server_url:
+        raise ValueError("Server URL is not configured")
+
+    headers = headers or {}
+
+    if server.transport_type == "sse":
+        async with sse_client(url=server.server_url, headers=headers) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                yield session
+    else:  # http
+        async with streamable_http_client(url=server.server_url) as (
+            read,
+            write,
+            _,
+        ):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                yield session
+
+
+async def list_mcp_tools_from_server(
+    server: McpServerConfig,
+    headers: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """List tools from MCP server.
+
+    Args:
+        server: MCP server configuration
+        headers: Optional auth headers
+
+    Returns:
+        List of tool schemas
+    """
+    async with connect_mcp_server(server, headers) as session:
+        tools_result = await session.list_tools()
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description or f"Tool: {tool.name}",
+                "inputSchema": tool.inputSchema if hasattr(tool, "inputSchema") else {},
+            }
+            for tool in tools_result.tools
+        ]
+
+
 def _get_user_friendly_error(e: Exception, server_url: str) -> str:
     """Convert technical exceptions to user-friendly error messages.
 
@@ -64,8 +131,9 @@ def _get_user_friendly_error(e: Exception, server_url: str) -> str:
     # Handle ExceptionGroup (common in async code)
     if error_type == "ExceptionGroup" or "exceptiongroup" in error_type.lower():
         # Extract the actual error from the group
-        if hasattr(e, "exceptions") and e.exceptions:
-            inner_error = e.exceptions[0]
+        exceptions = getattr(e, "exceptions", None)
+        if exceptions:
+            inner_error: Exception = exceptions[0]
             return _get_user_friendly_error(inner_error, server_url)
         return f"Connection failed: Multiple errors occurred while connecting to {server_url}"
 
@@ -463,27 +531,11 @@ async def test_mcp_server(
         )
 
     try:
-        # Measure latency and load tools via MCP SDK
+        # Measure latency and load tools using helper
         start_time = time.monotonic()
-        tool_names: list[str] = []
-
-        # Use appropriate client based on transport type
-        if server.transport_type == "sse":
-            async with sse_client(url=server.server_url, headers=headers) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    tools_result = await session.list_tools()
-                    tool_names = [tool.name for tool in tools_result.tools]
-        else:  # http
-            async with streamable_http_client(url=server.server_url, headers=headers) as (
-                read,
-                write,
-                _,
-            ):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    tools_result = await session.list_tools()
-                    tool_names = [tool.name for tool in tools_result.tools]
+        async with connect_mcp_server(server, headers) as session:
+            tools_result = await session.list_tools()
+            tool_names = [tool.name for tool in tools_result.tools]
 
         latency_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -549,32 +601,18 @@ async def list_mcp_tools(
         # Build auth headers if configured
         headers = build_mcp_auth_headers(server)
 
-        # Load tools from MCP server via MCP SDK
-        # Use appropriate client based on transport type
-        if server.transport_type == "sse":
-            async with sse_client(url=server.server_url, headers=headers) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    tools_result = await session.list_tools()
-        else:  # http
-            async with streamable_http_client(url=server.server_url, headers=headers) as (
-                read,
-                write,
-                _,
-            ):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    tools_result = await session.list_tools()
+        # Load tools using helper
+        async with connect_mcp_server(server, headers) as session:
+            tools_result = await session.list_tools()
 
-        result = []
-        for tool in tools_result.tools:
-            result.append(
-                McpToolSchema(
-                    name=tool.name,
-                    description=tool.description or "",
-                    input_schema=tool.inputSchema if tool.inputSchema else {},
-                )
+        result = [
+            McpToolSchema(
+                name=tool.name,
+                description=tool.description or "",
+                input_schema=tool.inputSchema if tool.inputSchema else {},
             )
+            for tool in tools_result.tools
+        ]
 
         # Filter by available_tools if configured
         if server.available_tools:
@@ -680,8 +718,10 @@ async def _discover_oauth_metadata(server_url: str) -> dict | None:
                     )
                     if meta_response.status_code == 200:
                         return meta_response.json()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "oauth_protected_resource_discovery_failed", server_url=server_url, error=str(e)
+            )
 
         # Try standard OAuth metadata discovery (RFC 8414)
         try:
@@ -690,16 +730,20 @@ async def _discover_oauth_metadata(server_url: str) -> dict | None:
             )
             if response.status_code == 200:
                 return response.json()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "oauth_authorization_server_discovery_failed", server_url=server_url, error=str(e)
+            )
 
         # Try OpenID Connect discovery
         try:
             response = await client.get(urljoin(server_url, "/.well-known/openid-configuration"))
             if response.status_code == 200:
                 return response.json()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "openid_configuration_discovery_failed", server_url=server_url, error=str(e)
+            )
 
     return None
 
@@ -736,8 +780,10 @@ async def _register_oauth_client(
             )
             if response.status_code in (200, 201):
                 return response.json()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "oauth_client_registration_failed", endpoint=registration_endpoint, error=str(e)
+            )
 
     return None
 

@@ -223,7 +223,6 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
                   key={message.id}
                   message={message}
                   currentActivity={message.isStreaming ? currentActivity : undefined}
-                  agentHistory={message.isStreaming ? agentHistory : []}
                 />
               ))}
 

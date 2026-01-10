@@ -169,21 +169,15 @@ class CredentialEncryption:
 
         Args:
             settings: MCP settings containing encryption key.
-                     If None or key is empty, generates a new key (WARNING: for development only)
+                     If key is not configured, auto-generates one (won't persist across restarts)
         """
         settings = settings or McpSettings()
-        encryption_key = settings.encryption_key
+        encryption_key = settings.get_encryption_key()
 
-        if encryption_key:
-            # Validate key format
-            try:
-                self.fernet = Fernet(encryption_key.encode())
-            except Exception as e:
-                raise ValueError(f"Invalid encryption key: {e}") from e
-        else:
-            # Generate new key (development only!)
-            # In production, MCP_ENCRYPTION_KEY must be set
-            self.fernet = Fernet(Fernet.generate_key())
+        try:
+            self.fernet = Fernet(encryption_key.encode())
+        except Exception as e:
+            raise ValueError(f"Invalid encryption key: {e}") from e
 
     @staticmethod
     def generate_key() -> str:

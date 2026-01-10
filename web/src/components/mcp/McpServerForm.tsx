@@ -80,7 +80,9 @@ export function McpServerForm({
     if (server?.id && server?.auth_type === 'oauth2') {
       api.getMcpOAuthStatus(server.id).then((status) => {
         setOauthAuthenticated(status.has_oauth_tokens);
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error('Failed to check OAuth status:', err);
+      });
     }
   }, [server?.id, server?.auth_type]);
 

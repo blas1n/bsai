@@ -32,17 +32,13 @@ logger = structlog.get_logger()
 
 
 class LiteLLMClient:
-    """Async LiteLLM client with automatic retry logic."""
+    """Async LiteLLM client with automatic retry logic.
 
-    def __init__(self) -> None:
-        """Initialize LiteLLM client.
-
-        LiteLLM uses API keys from environment variables:
-        - OPENAI_API_KEY
-        - ANTHROPIC_API_KEY
-        - GOOGLE_API_KEY
-        """
-        pass
+    LiteLLM uses API keys from environment variables:
+    - OPENAI_API_KEY
+    - ANTHROPIC_API_KEY
+    - GOOGLE_API_KEY
+    """
 
     @retry(
         stop=stop_after_attempt(3),

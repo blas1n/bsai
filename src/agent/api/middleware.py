@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-
-if TYPE_CHECKING:
-    pass
 
 logger = structlog.get_logger()
 
