@@ -630,23 +630,25 @@ OAUTH_STATE_PREFIX = "mcp_oauth_state:"
 OAUTH_STATE_TTL = 600  # 10 minutes
 
 
-def _build_wellknown_url(base_url: str, wellknown_path: str) -> str:
-    """Build well-known URL safely from validated base URL.
+def _build_wellknown_url(
+    base_url: str, wellknown_path: str, validator: McpSecurityValidator
+) -> str:
+    """Build well-known URL safely with SSRF protection.
 
-    Only appends well-known paths to the already-validated base URL.
-    This prevents SSRF by ensuring we only request from the same origin.
+    Validates URL, normalizes to scheme://netloc only (strips path/query/fragment),
+    then appends the allowed well-known path.
 
     Args:
-        base_url: Already-validated base URL
-        wellknown_path: Well-known path (must start with /.well-known/)
+        base_url: URL to validate and normalize
+        wellknown_path: Well-known path to append
+        validator: Security validator instance
 
     Returns:
         Full well-known URL
 
     Raises:
-        ValueError: If wellknown_path is not a valid well-known path
+        ValueError: If URL fails validation or wellknown_path is not allowed
     """
-    # Only allow specific well-known paths
     allowed_paths = {
         "/.well-known/oauth-protected-resource",
         "/.well-known/oauth-authorization-server",
@@ -655,7 +657,11 @@ def _build_wellknown_url(base_url: str, wellknown_path: str) -> str:
     if wellknown_path not in allowed_paths:
         raise ValueError(f"Invalid well-known path: {wellknown_path}")
 
-    return urljoin(base_url, wellknown_path)
+    validator.validate_server_url(base_url)
+    parsed = urlparse(base_url)
+    normalized_url = f"{parsed.scheme}://{parsed.netloc}"
+
+    return urljoin(normalized_url, wellknown_path)
 
 
 async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
@@ -672,21 +678,14 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
     Raises:
         ValueError: If URL fails SSRF validation
     """
-    # Validate URL to prevent SSRF attacks
     settings = get_mcp_settings()
     validator = McpSecurityValidator(settings)
-    validator.validate_server_url(server_url)
-
-    # Normalize to origin-only URL (scheme + host[:port]) to avoid using any
-    # user-controlled path/query/fragment when building well-known URLs.
-    parsed = urlparse(server_url)
-    normalized_base_url = f"{parsed.scheme}://{parsed.netloc}"
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         # Try protected resource metadata first (RFC 9728)
         try:
             protected_resource_url = _build_wellknown_url(
-                normalized_base_url, "/.well-known/oauth-protected-resource"
+                server_url, "/.well-known/oauth-protected-resource", validator
             )
             response = await client.get(protected_resource_url)
             if response.status_code == 200:
@@ -694,13 +693,9 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
                 # Get authorization server URL
                 auth_server = resource_meta.get("authorization_servers", [None])[0]
                 if auth_server:
-                    # Validate auth server URL before making request
-                    validator.validate_server_url(auth_server)
-                    # Build well-known URL from validated auth server
                     auth_server_meta_url = _build_wellknown_url(
-                        auth_server, "/.well-known/oauth-authorization-server"
+                        auth_server, "/.well-known/oauth-authorization-server", validator
                     )
-                    # Fetch authorization server metadata
                     meta_response = await client.get(auth_server_meta_url)
                     if meta_response.status_code == 200:
                         meta_result: dict[str, Any] = meta_response.json()
@@ -716,7 +711,7 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
         # Try standard OAuth metadata discovery (RFC 8414)
         try:
             oauth_server_url = _build_wellknown_url(
-                server_url, "/.well-known/oauth-authorization-server"
+                server_url, "/.well-known/oauth-authorization-server", validator
             )
             response = await client.get(oauth_server_url)
             if response.status_code == 200:
@@ -729,7 +724,9 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
 
         # Try OpenID Connect discovery
         try:
-            openid_url = _build_wellknown_url(server_url, "/.well-known/openid-configuration")
+            openid_url = _build_wellknown_url(
+                server_url, "/.well-known/openid-configuration", validator
+            )
             response = await client.get(openid_url)
             if response.status_code == 200:
                 openid_result: dict[str, Any] = response.json()
