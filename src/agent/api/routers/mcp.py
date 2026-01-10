@@ -717,8 +717,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
                         urljoin(auth_server, "/.well-known/oauth-authorization-server")
                     )
                     if meta_response.status_code == 200:
-                        result: dict[str, Any] = meta_response.json()
-                        return result
+                        meta_result: dict[str, Any] = meta_response.json()
+                        return meta_result
         except Exception as e:
             logger.debug(
                 "oauth_protected_resource_discovery_failed", server_url=server_url, error=str(e)
@@ -730,8 +730,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
                 urljoin(server_url, "/.well-known/oauth-authorization-server")
             )
             if response.status_code == 200:
-                result: dict[str, Any] = response.json()
-                return result
+                standard_result: dict[str, Any] = response.json()
+                return standard_result
         except Exception as e:
             logger.debug(
                 "oauth_authorization_server_discovery_failed", server_url=server_url, error=str(e)
@@ -741,8 +741,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
         try:
             response = await client.get(urljoin(server_url, "/.well-known/openid-configuration"))
             if response.status_code == 200:
-                result: dict[str, Any] = response.json()
-                return result
+                openid_result: dict[str, Any] = response.json()
+                return openid_result
         except Exception as e:
             logger.debug(
                 "openid_configuration_discovery_failed", server_url=server_url, error=str(e)
