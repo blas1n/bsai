@@ -1,5 +1,7 @@
 """System prompt model."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -38,7 +40,7 @@ class SystemPrompt(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships
-    generated_prompts: Mapped[list["GeneratedPrompt"]] = relationship(
+    generated_prompts: Mapped[list[GeneratedPrompt]] = relationship(
         back_populates="system_prompt", lazy="selectin"
     )
 

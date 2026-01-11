@@ -1,5 +1,7 @@
 """Artifact model for storing generated code and files."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -49,8 +51,8 @@ class Artifact(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships
-    task: Mapped["Task"] = relationship(back_populates="artifacts")
-    milestone: Mapped["Milestone | None"] = relationship(back_populates="artifacts")
+    task: Mapped[Task] = relationship(back_populates="artifacts")
+    milestone: Mapped[Milestone | None] = relationship(back_populates="artifacts")
 
     def __repr__(self) -> str:
         return f"<Artifact(id={self.id}, filename={self.filename}, type={self.artifact_type})>"

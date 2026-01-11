@@ -7,12 +7,16 @@ the 6 specialized agents for task execution.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 import structlog
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.api.websocket.manager import ConnectionManager
+from agent.cache import SessionCache
 from agent.container import lifespan
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
 from agent.db.repository.artifact_repo import ArtifactRepository
@@ -40,13 +44,6 @@ from .nodes.llm import generate_prompt_node, select_llm_node
 from .nodes.qa import verify_qa_node
 from .nodes.response import generate_response_node
 from .state import AgentState, MilestoneData
-
-if TYPE_CHECKING:
-    from langgraph.graph.graph import CompiledGraph
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from agent.api.websocket.manager import ConnectionManager
-    from agent.cache import SessionCache
 
 logger = structlog.get_logger()
 
@@ -183,7 +180,7 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
 def compile_workflow(
     session: AsyncSession,
     checkpointer: object | None = None,
-) -> CompiledGraph:
+) -> CompiledStateGraph[Any, Any, Any, Any]:
     """Compile the workflow graph.
 
     Args:
@@ -447,7 +444,7 @@ class WorkflowRunner:
         async with lifespan(self.session) as container:
             compiled = compile_workflow(self.session)
 
-            final_state: AgentState = await compiled.ainvoke(
+            final_state = await compiled.ainvoke(
                 initial_state,
                 config={
                     "recursion_limit": 100,
@@ -465,4 +462,4 @@ class WorkflowRunner:
             error=final_state.get("error"),
         )
 
-        return final_state
+        return dict(final_state)  # type: ignore[return-value]

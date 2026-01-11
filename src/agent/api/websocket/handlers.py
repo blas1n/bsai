@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
+from agent.cache import SessionCache
 from agent.db.repository.session_repo import SessionRepository
 from agent.db.session import get_db_session
 
@@ -17,9 +18,6 @@ from ..schemas import (
     WSMessageType,
 )
 from .manager import Connection, ConnectionManager
-
-if TYPE_CHECKING:
-    from agent.cache import SessionCache
 
 logger = structlog.get_logger()
 

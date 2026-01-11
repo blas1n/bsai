@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import time
 import traceback
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -18,17 +18,14 @@ import structlog
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.api.config import get_mcp_settings
 from agent.api.schemas.websocket import WSMessage, WSMessageType
+from agent.api.websocket.manager import ConnectionManager
 from agent.db.models.mcp_server_config import McpServerConfig
 from agent.db.repository.mcp_tool_log_repo import McpToolLogRepository
 from agent.mcp.security import McpSecurityValidator, build_mcp_auth_headers
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from agent.api.websocket.manager import ConnectionManager
 
 logger = structlog.get_logger()
 

@@ -1,5 +1,7 @@
 """MCP tool execution log model."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -79,10 +81,10 @@ class McpToolExecutionLog(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
     # Relationships
-    session: Mapped["Session"] = relationship("Session", foreign_keys=[session_id])
-    task: Mapped["Task | None"] = relationship("Task", foreign_keys=[task_id])
-    milestone: Mapped["Milestone | None"] = relationship("Milestone", foreign_keys=[milestone_id])
-    mcp_server: Mapped["McpServerConfig"] = relationship(
+    session: Mapped[Session] = relationship("Session", foreign_keys=[session_id])
+    task: Mapped[Task | None] = relationship("Task", foreign_keys=[task_id])
+    milestone: Mapped[Milestone | None] = relationship("Milestone", foreign_keys=[milestone_id])
+    mcp_server: Mapped[McpServerConfig] = relationship(
         "McpServerConfig", foreign_keys=[mcp_server_id]
     )
 

@@ -1,5 +1,7 @@
 """LLM usage log model."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -47,8 +49,8 @@ class LLMUsageLog(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships
-    session: Mapped["Session"] = relationship(back_populates="llm_usage_logs")
-    milestone: Mapped["Milestone | None"] = relationship(back_populates="llm_usage_logs")
+    session: Mapped[Session] = relationship(back_populates="llm_usage_logs")
+    milestone: Mapped[Milestone | None] = relationship(back_populates="llm_usage_logs")
 
     def __repr__(self) -> str:
         return f"<LLMUsageLog(id={self.id}, model={self.llm_model}, cost={self.cost})>"

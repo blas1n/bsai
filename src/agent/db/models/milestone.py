@@ -1,5 +1,7 @@
 """Milestone model."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -64,14 +66,14 @@ class Milestone(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    task: Mapped["Task"] = relationship(back_populates="milestones")
-    llm_usage_logs: Mapped[list["LLMUsageLog"]] = relationship(
+    task: Mapped[Task] = relationship(back_populates="milestones")
+    llm_usage_logs: Mapped[list[LLMUsageLog]] = relationship(
         back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
     )
-    generated_prompts: Mapped[list["GeneratedPrompt"]] = relationship(
+    generated_prompts: Mapped[list[GeneratedPrompt]] = relationship(
         back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
     )
-    artifacts: Mapped[list["Artifact"]] = relationship(
+    artifacts: Mapped[list[Artifact]] = relationship(
         back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
     )
 
