@@ -5,3 +5,10 @@ paths-ignore:
   - "**/node_modules/**"
   - "**/*.test.py"
   - "**/*_test.py"
+
+query-filters:
+  # Exclude cyclic import warnings for SQLAlchemy ORM models
+  # These use TYPE_CHECKING blocks which don't cause runtime issues
+  - exclude:
+      id: py/cyclic-import
+      path-regex: src/agent/db/models/.*\.py
