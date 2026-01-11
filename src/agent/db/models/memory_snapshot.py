@@ -1,5 +1,7 @@
 """Memory snapshot model."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -41,7 +43,7 @@ class MemorySnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships
-    session: Mapped["Session"] = relationship(back_populates="memory_snapshots")
+    session: Mapped[Session] = relationship(back_populates="memory_snapshots")
 
     def __repr__(self) -> str:
         return f"<MemorySnapshot(id={self.id}, type={self.snapshot_type})>"

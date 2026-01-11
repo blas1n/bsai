@@ -1,5 +1,7 @@
 """Generated prompt model."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -42,8 +44,8 @@ class GeneratedPrompt(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships
-    milestone: Mapped["Milestone"] = relationship(back_populates="generated_prompts")
-    system_prompt: Mapped["SystemPrompt"] = relationship(back_populates="generated_prompts")
+    milestone: Mapped[Milestone] = relationship(back_populates="generated_prompts")
+    system_prompt: Mapped[SystemPrompt] = relationship(back_populates="generated_prompts")
 
     def __repr__(self) -> str:
         return f"<GeneratedPrompt(id={self.id}, milestone_id={self.milestone_id})>"

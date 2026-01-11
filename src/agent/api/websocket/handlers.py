@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
+from agent.cache import SessionCache
 from agent.db.repository.session_repo import SessionRepository
 from agent.db.session import get_db_session
 
@@ -17,9 +18,6 @@ from ..schemas import (
     WSMessageType,
 )
 from .manager import Connection, ConnectionManager
-
-if TYPE_CHECKING:
-    from agent.cache import SessionCache
 
 logger = structlog.get_logger()
 
@@ -80,7 +78,7 @@ class WebSocketHandler:
             await self._message_loop(connection)
 
         except WebSocketDisconnect:
-            pass
+            logger.debug("ws_client_disconnected", connection_id=str(connection.id))
         except Exception as e:
             logger.exception("ws_handler_error", error=str(e))
         finally:

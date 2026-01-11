@@ -32,6 +32,7 @@ def create_milestone(
 def create_base_state(
     session_id: UUID | None = None,
     task_id: UUID | None = None,
+    user_id: str = "test-user",
     original_request: str = "Test request",
     milestones: list[MilestoneData] | None = None,
     current_milestone_index: int = 0,
@@ -50,6 +51,7 @@ def create_base_state(
     return {
         "session_id": session_id or uuid4(),
         "task_id": task_id or uuid4(),
+        "user_id": user_id,
         "original_request": original_request,
         "milestones": milestones or [],
         "current_milestone_index": current_milestone_index,
@@ -120,7 +122,7 @@ class TestMilestoneDataValidation:
 
     def test_milestone_complexity_levels(self):
         """Test all complexity levels are valid."""
-        for complexity in TaskComplexity:
+        for complexity in list(TaskComplexity):
             milestone = create_milestone(complexity=complexity)
             assert milestone.get("complexity") == complexity
 

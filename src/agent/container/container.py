@@ -14,15 +14,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.llm import LiteLLMClient, LLMRouter, ModelRegistry
 from agent.prompts import PromptManager
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
 

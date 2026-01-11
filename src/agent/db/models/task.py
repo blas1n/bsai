@@ -1,5 +1,7 @@
 """Task model."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -40,11 +42,11 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    session: Mapped["Session"] = relationship(back_populates="tasks")
-    milestones: Mapped[list["Milestone"]] = relationship(
+    session: Mapped[Session] = relationship(back_populates="tasks")
+    milestones: Mapped[list[Milestone]] = relationship(
         back_populates="task", lazy="selectin", cascade="all, delete-orphan"
     )
-    artifacts: Mapped[list["Artifact"]] = relationship(
+    artifacts: Mapped[list[Artifact]] = relationship(
         back_populates="task", lazy="selectin", cascade="all, delete-orphan"
     )
 

@@ -1,5 +1,7 @@
 """Session model."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -45,13 +47,13 @@ class Session(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    tasks: Mapped[list["Task"]] = relationship(
+    tasks: Mapped[list[Task]] = relationship(
         back_populates="session", lazy="selectin", cascade="all, delete-orphan"
     )
-    memory_snapshots: Mapped[list["MemorySnapshot"]] = relationship(
+    memory_snapshots: Mapped[list[MemorySnapshot]] = relationship(
         back_populates="session", lazy="selectin", cascade="all, delete-orphan"
     )
-    llm_usage_logs: Mapped[list["LLMUsageLog"]] = relationship(
+    llm_usage_logs: Mapped[list[LLMUsageLog]] = relationship(
         back_populates="session", lazy="selectin", cascade="all, delete-orphan"
     )
 

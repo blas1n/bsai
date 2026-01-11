@@ -5,22 +5,20 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.cache import SessionCache
+from agent.db.models import Task
 from agent.db.models.enums import SessionStatus, TaskStatus
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.db.session import get_db_session
+from agent.graph.state import AgentState
 from agent.graph.workflow import WorkflowRunner
-
-if TYPE_CHECKING:
-    from agent.graph.state import AgentState
 
 from ..exceptions import AccessDeniedError, InvalidStateError, NotFoundError
 from ..schemas import (
@@ -37,11 +35,7 @@ from ..schemas import (
     WSMessage,
     WSMessageType,
 )
-
-if TYPE_CHECKING:
-    from agent.db.models import Task
-
-    from ..websocket.manager import ConnectionManager
+from ..websocket.manager import ConnectionManager
 
 logger = structlog.get_logger()
 

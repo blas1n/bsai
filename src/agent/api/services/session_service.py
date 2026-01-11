@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.cache import SessionCache
 from agent.container import lifespan
 from agent.core import SummarizerAgent
+from agent.db.models import Session
 from agent.db.models.enums import SessionStatus, TaskStatus
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
 from agent.db.repository.session_repo import SessionRepository
@@ -27,11 +28,7 @@ from ..schemas import (
     WSMessage,
     WSMessageType,
 )
-
-if TYPE_CHECKING:
-    from agent.db.models import Session
-
-    from ..websocket.manager import ConnectionManager
+from ..websocket.manager import ConnectionManager
 
 logger = structlog.get_logger()
 

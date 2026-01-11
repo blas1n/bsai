@@ -1,5 +1,7 @@
 """Prompt usage history model."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -39,7 +41,7 @@ class PromptUsageHistory(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships
-    generated_prompt: Mapped["GeneratedPrompt"] = relationship()
+    generated_prompt: Mapped[GeneratedPrompt] = relationship()
 
     def __repr__(self) -> str:
         return f"<PromptUsageHistory(id={self.id}, qa_passed={self.qa_passed})>"

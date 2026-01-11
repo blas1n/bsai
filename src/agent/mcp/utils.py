@@ -1,7 +1,9 @@
 """MCP utility functions shared across agents."""
 
+from __future__ import annotations
+
 import traceback
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import httpx
 import structlog
@@ -9,20 +11,18 @@ from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
 
+from agent.db.models.mcp_server_config import McpServerConfig
+from agent.db.repository.mcp_server_repo import McpServerRepository
 from agent.mcp.security import build_mcp_auth_headers
-
-if TYPE_CHECKING:
-    from agent.db.models.mcp_server_config import McpServerConfig
-    from agent.db.repository.mcp_server_repo import McpServerRepository
 
 logger = structlog.get_logger()
 
 
 async def load_user_mcp_servers(
-    mcp_server_repo: "McpServerRepository",
+    mcp_server_repo: McpServerRepository,
     user_id: str,
     agent_type: str,
-) -> list["McpServerConfig"]:
+) -> list[McpServerConfig]:
     """Load enabled MCP servers for an agent.
 
     Args:
@@ -58,7 +58,7 @@ async def load_user_mcp_servers(
 
 
 async def load_tools_from_mcp_server(
-    server: "McpServerConfig",
+    server: McpServerConfig,
 ) -> list[dict[str, Any]]:
     """Load tool schemas from an MCP server.
 
@@ -153,7 +153,7 @@ async def load_tools_from_mcp_server(
 
 
 async def load_all_mcp_tools(
-    servers: list["McpServerConfig"],
+    servers: list[McpServerConfig],
 ) -> dict[str, list[dict[str, Any]]]:
     """Load tools from all MCP servers.
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import litellm
 import structlog
@@ -20,13 +20,10 @@ from tenacity import (
 
 from agent.api.config import get_agent_settings
 from agent.db.models.mcp_server_config import McpServerConfig
-from agent.mcp.executor import McpToolCall
+from agent.mcp.executor import McpToolCall, McpToolExecutor
 from agent.mcp.utils import load_tools_from_mcp_server
 
 from .schemas import LLMRequest, LLMResponse, UsageInfo
-
-if TYPE_CHECKING:
-    from agent.mcp.executor import McpToolExecutor
 
 logger = structlog.get_logger()
 

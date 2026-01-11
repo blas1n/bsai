@@ -6,7 +6,7 @@ during workflow execution.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -17,10 +17,8 @@ from agent.api.schemas import (
     WSMessage,
     WSMessageType,
 )
+from agent.api.websocket.manager import ConnectionManager
 from agent.db.models.enums import MilestoneStatus
-
-if TYPE_CHECKING:
-    from agent.api.websocket.manager import ConnectionManager
 
 logger = structlog.get_logger()
 

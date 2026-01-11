@@ -14,21 +14,17 @@ that LangGraph merges with the existing state.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
+from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.api.websocket.manager import ConnectionManager
 from agent.container import ContainerState
 from agent.db.models.enums import TaskStatus
 from agent.db.repository.task_repo import TaskRepository
-
-if TYPE_CHECKING:
-    from langchain_core.runnables import RunnableConfig
-
-    from agent.api.websocket.manager import ConnectionManager
-    from agent.mcp.executor import McpToolExecutor
+from agent.mcp.executor import McpToolExecutor
 
 _logger = structlog.get_logger()
 

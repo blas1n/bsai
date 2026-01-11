@@ -9,14 +9,15 @@ The Worker is responsible for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.api.config import get_agent_settings
+from agent.api.websocket.manager import ConnectionManager
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
+from agent.db.models.mcp_server_config import McpServerConfig
 from agent.db.repository.mcp_server_repo import McpServerRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMResponse, LLMRouter
@@ -24,10 +25,6 @@ from agent.llm.schemas import WorkerOutput
 from agent.mcp.executor import McpToolExecutor
 from agent.mcp.utils import load_user_mcp_servers
 from agent.prompts import PromptManager, WorkerPrompts
-
-if TYPE_CHECKING:
-    from agent.api.websocket.manager import ConnectionManager
-    from agent.db.models.mcp_server_config import McpServerConfig
 
 logger = structlog.get_logger()
 
