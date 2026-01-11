@@ -64,6 +64,8 @@ export interface TaskStartedPayload {
   original_request: string;
   milestone_count: number;
   previous_milestones?: PreviousMilestoneInfo[];
+  /** Langfuse trace URL for debugging and observability (empty string if not available) */
+  trace_url: string;
 }
 
 export interface TaskProgressPayload {
@@ -80,6 +82,8 @@ export interface TaskCompletedPayload {
   total_tokens: number;
   total_cost_usd: string;
   duration_seconds: number;
+  /** Langfuse trace URL for debugging and observability (empty string if not available) */
+  trace_url: string;
 }
 
 export interface TaskFailedPayload {

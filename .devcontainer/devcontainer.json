@@ -57,6 +57,21 @@
       }
     }
   },
+  // Port forwarding
+  "forwardPorts": [
+    18000,  // FastAPI backend
+    13000,  // Next.js frontend
+    5433,   // PostgreSQL
+    6380,   // Redis
+    8080    // Keycloak
+  ],
+  "portsAttributes": {
+    "18000": { "label": "Backend API" },
+    "13000": { "label": "Frontend" },
+    "5433": { "label": "PostgreSQL" },
+    "6380": { "label": "Redis" },
+    "8080": { "label": "Keycloak" }
+  },
   // Features
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},

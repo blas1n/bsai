@@ -90,6 +90,10 @@ class TaskStartedPayload(BaseModel):
     original_request: str
     milestone_count: int = 0
     previous_milestones: list[PreviousMilestoneInfo] = Field(default_factory=list)
+    trace_url: str = Field(
+        default="",
+        description="Langfuse trace URL for debugging and observability",
+    )
 
 
 class TaskProgressPayload(BaseModel):
@@ -110,6 +114,10 @@ class TaskCompletedPayload(BaseModel):
     total_tokens: int
     total_cost_usd: Decimal
     duration_seconds: float
+    trace_url: str = Field(
+        default="",
+        description="Langfuse trace URL for debugging and observability",
+    )
 
 
 class TaskFailedPayload(BaseModel):

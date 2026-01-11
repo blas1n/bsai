@@ -317,3 +317,62 @@ def get_mcp_settings() -> McpSettings:
         McpSettings instance
     """
     return McpSettings()
+
+
+class LangfuseSettings(BaseSettings):
+    """Langfuse observability settings for LLM tracing.
+
+    Configure connection to Langfuse Cloud or self-hosted instance for
+    tracing, debugging, and monitoring LLM operations.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable Langfuse tracing. Set to False to disable.",
+    )
+    host: str = Field(
+        default="https://cloud.langfuse.com",
+        description="Langfuse server URL (default: Langfuse Cloud)",
+    )
+    public_key: str = Field(
+        default="",
+        description="Langfuse public API key",
+    )
+    secret_key: str = Field(
+        default="",
+        description="Langfuse secret API key",
+    )
+    debug: bool = Field(
+        default=False,
+        description="Enable debug logging for Langfuse SDK",
+    )
+    flush_at: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        description="Number of events to accumulate before flushing",
+    )
+    flush_interval: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=60.0,
+        description="Maximum time in seconds between flushes",
+    )
+    sample_rate: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Sampling rate for traces (1.0 = trace everything)",
+    )
+
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="LANGFUSE_", extra="ignore")
+
+
+@lru_cache
+def get_langfuse_settings() -> LangfuseSettings:
+    """Get cached Langfuse settings.
+
+    Returns:
+        LangfuseSettings instance
+    """
+    return LangfuseSettings()

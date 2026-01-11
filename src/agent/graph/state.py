@@ -91,3 +91,6 @@ class AgentState(TypedDict):
 
     # Final response (from Responder agent)
     final_response: NotRequired[str | None]
+
+    # Observability
+    trace_url: NotRequired[str]  # Langfuse trace URL (empty string if disabled)

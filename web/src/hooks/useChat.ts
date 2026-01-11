@@ -79,6 +79,8 @@ interface UseChatReturn {
   currentActivity: AgentActivity | null;
   completedAgents: AgentType[];
   agentHistory: AgentActivity[];
+  /** Current task's Langfuse trace URL for debugging */
+  currentTraceUrl: string | null;
   sendMessage: (content: string) => Promise<void>;
   cancelTask: () => void;
   createNewChat: () => Promise<string>;
@@ -152,6 +154,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           milestones: previousMilestones,
           agentActivity: [],
           isStreaming: true,
+          traceUrl: payload.trace_url,
         };
 
         setMessages((prev) => [...prev, assistantMessage]);
@@ -547,6 +550,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                     costUsd: parseFloat(payload.total_cost_usd),
                     model: 'multiple',
                   },
+                  // Update trace URL if provided in completed event
+                  traceUrl: payload.trace_url || msg.traceUrl,
                 }
                 : msg
             )
@@ -865,6 +870,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     }
   }, [initialSessionId, accessToken, loadSession]);
 
+  // Get the current trace URL from the streaming message (empty string means no trace)
+  const traceUrl = messages.find(
+    (msg) => msg.isStreaming || msg.taskId === currentTaskIdRef.current
+  )?.traceUrl;
+  const currentTraceUrl = traceUrl && traceUrl.length > 0 ? traceUrl : null;
+
   return {
     sessionId,
     messages,
@@ -875,6 +886,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     currentActivity,
     completedAgents,
     agentHistory,
+    currentTraceUrl,
     sendMessage,
     cancelTask,
     createNewChat,
