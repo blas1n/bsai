@@ -62,6 +62,7 @@ class TestHandleConnection:
         """Authenticates user when token provided."""
         mock_websocket = AsyncMock()
         mock_connection = MagicMock(spec=Connection)
+        mock_connection.id = uuid4()
         mock_connection.authenticated = False
         mock_connection.websocket = mock_websocket
         mock_manager.connect.return_value = mock_connection
@@ -111,6 +112,7 @@ class TestHandleConnection:
         session_id = uuid4()
 
         mock_connection = MagicMock(spec=Connection)
+        mock_connection.id = uuid4()
         mock_connection.authenticated = True
         mock_connection.user_id = "user-123"
         mock_connection.websocket = AsyncMock()

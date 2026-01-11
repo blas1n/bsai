@@ -78,7 +78,7 @@ class WebSocketHandler:
             await self._message_loop(connection)
 
         except WebSocketDisconnect:
-            pass
+            logger.debug("ws_client_disconnected", connection_id=str(connection.id))
         except Exception as e:
             logger.exception("ws_handler_error", error=str(e))
         finally:

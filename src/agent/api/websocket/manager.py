@@ -30,7 +30,6 @@ class McpToolExecutorProtocol(Protocol):
         execution_time_ms: int | None = None,
     ) -> None:
         """Handle stdio tool execution response from frontend."""
-        ...
 
     def handle_approval_response(
         self,
@@ -38,7 +37,6 @@ class McpToolExecutorProtocol(Protocol):
         approved: bool,
     ) -> None:
         """Handle user approval response from frontend."""
-        ...
 
 
 logger = structlog.get_logger()
