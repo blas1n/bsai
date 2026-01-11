@@ -1,13 +1,17 @@
 #!/bin/bash
 set -e
 
-echo "BSAI DevContainer Post-Create Setup"
+echo "BSAI DevContainer Post-Start Setup"
 echo "======================================"
 
 # 0. Configure git safe directory (required for devcontainer)
-echo "Configuring git safe directory..."
-git config --global --add safe.directory /workspace
-echo "[OK] Git safe directory configured"
+# Use --replace-all to avoid duplicates on repeated runs
+if ! git config --global --get-all safe.directory | grep -q "^/workspace$"; then
+    git config --global --add safe.directory /workspace
+    echo "[OK] Git safe directory configured"
+else
+    echo "[OK] Git safe directory already configured"
+fi
 
 # 1. Install uv (fast Python package installer)
 echo "Installing uv..."
