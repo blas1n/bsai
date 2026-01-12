@@ -78,6 +78,7 @@ class TestWorkflowRunner:
 
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
+            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
             patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
@@ -97,6 +98,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock checkpointer context manager
+            mock_checkpointer = MagicMock()
+            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
+                return_value=mock_checkpointer
+            )
+            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Setup mock session repository
             mock_session_obj = MagicMock()
@@ -143,6 +151,7 @@ class TestWorkflowRunner:
 
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
+            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
             patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
@@ -161,6 +170,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock checkpointer context manager
+            mock_checkpointer = MagicMock()
+            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
+                return_value=mock_checkpointer
+            )
+            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Setup mock session repository
             mock_session_obj = MagicMock()
@@ -206,6 +222,7 @@ class TestWorkflowRunner:
 
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
+            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
             patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
@@ -224,6 +241,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock checkpointer context manager
+            mock_checkpointer = MagicMock()
+            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
+                return_value=mock_checkpointer
+            )
+            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Setup mock session repository
             mock_session_obj = MagicMock()
@@ -265,6 +289,7 @@ class TestWorkflowRunner:
 
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
+            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
             patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
@@ -283,6 +308,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock checkpointer context manager
+            mock_checkpointer = MagicMock()
+            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
+                return_value=mock_checkpointer
+            )
+            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Setup mock session repository
             mock_session_obj = MagicMock()
@@ -326,6 +358,7 @@ class TestWorkflowRunner:
 
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
+            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
             patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
@@ -344,6 +377,13 @@ class TestWorkflowRunner:
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
             mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup mock checkpointer context manager
+            mock_checkpointer = MagicMock()
+            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
+                return_value=mock_checkpointer
+            )
+            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Setup mock session repository
             mock_session_obj = MagicMock()
