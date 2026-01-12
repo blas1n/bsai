@@ -175,7 +175,9 @@ class LangfuseTracer:
             Metadata dict with langfuse_ prefixed keys
         """
         if hasattr(self, "_pending_handler_metadata"):
-            return self._pending_handler_metadata.get("langfuse_metadata", {})
+            metadata = self._pending_handler_metadata.get("langfuse_metadata")
+            if isinstance(metadata, dict):
+                return metadata
         return {}
 
     def create_trace(
