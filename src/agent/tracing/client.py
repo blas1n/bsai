@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import random
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import structlog
@@ -200,7 +200,7 @@ class LangfuseTracer:
             tags: Tags for filtering
 
         Returns:
-            Trace object if tracing is enabled, None otherwise
+            Span object if tracing is enabled, None otherwise
         """
         if not self.client or not self.should_sample():
             return None
@@ -209,14 +209,20 @@ class LangfuseTracer:
             trace_metadata = metadata or {}
             if session_id:
                 trace_metadata["session_id"] = str(session_id)
+            if user_id:
+                trace_metadata["user_id"] = user_id
+            if tags:
+                trace_metadata["tags"] = tags
+            if task_id:
+                trace_metadata["task_id"] = str(task_id)
 
-            trace = self.client.trace(
-                id=str(task_id) if task_id else None,
+            # Langfuse v3 uses start_span instead of trace
+            # Cast to Any to satisfy type checker - the dict structure matches TraceContext
+            trace_context = cast(Any, {"trace_id": str(task_id)}) if task_id else None
+            span = self.client.start_span(
                 name=name,
-                session_id=str(session_id) if session_id else None,
-                user_id=user_id,
                 metadata=trace_metadata,
-                tags=tags or [],
+                trace_context=trace_context,
             )
 
             logger.debug(
@@ -225,7 +231,7 @@ class LangfuseTracer:
                 trace_id=str(task_id) if task_id else None,
             )
 
-            return trace
+            return span
 
         except Exception as e:
             logger.warning(

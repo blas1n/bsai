@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { MilestoneTimeline } from '@/components/tasks/MilestoneTimeline';
+import { TaskDetailMonitor } from '@/components/monitoring/TaskDetailMonitor';
 import { useAuth } from '@/hooks/useAuth';
 import { api, TaskDetailResponse } from '@/lib/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { WSMessageType, LLMChunkPayload, MilestoneProgressPayload } from '@/types/websocket';
-import { formatCurrency, formatNumber, formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/utils';
 
 export default function TaskDetailPage() {
   const params = useParams();
@@ -126,16 +126,8 @@ export default function TaskDetailPage() {
     );
   }
 
-  const completedMilestones = task.milestones.filter((m) => m.status === 'completed').length;
-  const progress = task.milestones.length > 0 ? completedMilestones / task.milestones.length : 0;
-  const totalTokens = task.milestones.reduce(
-    (sum, m) => sum + m.input_tokens + m.output_tokens,
-    0
-  );
-  const totalCost = task.milestones.reduce(
-    (sum, m) => sum + parseFloat(m.cost_usd),
-    0
-  );
+  const completedMilestones = task.milestones.filter((m) => m.status === 'passed').length;
+  const progress = task.progress || (task.milestones.length > 0 ? completedMilestones / task.milestones.length : 0);
 
   return (
     <div className="space-y-6">
@@ -200,45 +192,6 @@ export default function TaskDetailPage() {
         </Card>
       )}
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Milestones
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{task.milestones.length}</p>
-            <p className="text-xs text-muted-foreground">
-              {completedMilestones} completed
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tokens Used
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatNumber(totalTokens)}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Cost
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(totalCost)}</p>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Streaming Output */}
       {streamingContent && (
         <Card>
@@ -271,15 +224,8 @@ export default function TaskDetailPage() {
         </Card>
       )}
 
-      {/* Milestones Timeline */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Milestones</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MilestoneTimeline milestones={task.milestones} />
-        </CardContent>
-      </Card>
+      {/* Task Detail Monitor - shows agent steps, milestones, cost breakdown */}
+      <TaskDetailMonitor task={task} />
     </div>
   );
 }

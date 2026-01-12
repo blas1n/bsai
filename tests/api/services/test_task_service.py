@@ -207,15 +207,28 @@ class TestGetTask:
                 "get_by_task_id",
                 new_callable=AsyncMock,
             ) as mock_milestones,
+            patch.object(
+                task_service.agent_step_repo,
+                "get_steps_by_task",
+                new_callable=AsyncMock,
+            ) as mock_agent_steps,
+            patch.object(
+                task_service.agent_step_repo,
+                "get_cost_breakdown_by_agent",
+                new_callable=AsyncMock,
+            ) as mock_cost_breakdown,
         ):
             mock_get_task.return_value = mock_task
             mock_get_session.return_value = mock_session
             mock_milestones.return_value = []
+            mock_agent_steps.return_value = []
+            mock_cost_breakdown.return_value = {}
 
             result = await task_service.get_task(task_id, user_id)
 
             assert result.id == task_id
             assert result.milestones == []
+            assert result.agent_steps == []
             assert result.progress == 0.0
 
     @pytest.mark.asyncio

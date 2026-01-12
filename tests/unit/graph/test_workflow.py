@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent.graph.nodes import Node
-from agent.graph.workflow import WorkflowRunner, build_workflow, compile_workflow
+from agent.graph.workflow import WorkflowResult, WorkflowRunner, build_workflow, compile_workflow
 
 
 @pytest.fixture
@@ -112,6 +112,10 @@ class TestWorkflowRunner:
                     "workflow_complete": True,
                 }
             )
+            # Mock aget_state to return no pending nodes (not interrupted)
+            mock_graph_state = MagicMock()
+            mock_graph_state.next = ()  # Empty tuple means no pending nodes
+            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
             runner = WorkflowRunner(mock_session)
@@ -126,7 +130,9 @@ class TestWorkflowRunner:
             )
 
             mock_compiled.ainvoke.assert_called_once()
-            assert result["task_status"] == TaskStatus.COMPLETED
+            assert isinstance(result, WorkflowResult)
+            assert result.state.get("task_status") == TaskStatus.COMPLETED
+            assert result.interrupted is False
 
     @pytest.mark.asyncio
     async def test_run_accepts_uuid(self, mock_session: AsyncMock) -> None:
@@ -169,6 +175,10 @@ class TestWorkflowRunner:
                     "task_status": TaskStatus.COMPLETED,
                 }
             )
+            # Mock aget_state
+            mock_graph_state = MagicMock()
+            mock_graph_state.next = ()
+            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
             runner = WorkflowRunner(mock_session)
@@ -228,6 +238,10 @@ class TestWorkflowRunner:
                     "task_status": TaskStatus.COMPLETED,
                 }
             )
+            # Mock aget_state
+            mock_graph_state = MagicMock()
+            mock_graph_state.next = ()
+            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
             runner = WorkflowRunner(mock_session)
@@ -283,6 +297,10 @@ class TestWorkflowRunner:
                     "task_status": TaskStatus.COMPLETED,
                 }
             )
+            # Mock aget_state
+            mock_graph_state = MagicMock()
+            mock_graph_state.next = ()
+            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
             mock_ws_manager = MagicMock()
@@ -340,6 +358,10 @@ class TestWorkflowRunner:
                     "task_status": TaskStatus.COMPLETED,
                 }
             )
+            # Mock aget_state
+            mock_graph_state = MagicMock()
+            mock_graph_state.next = ()
+            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
             runner = WorkflowRunner(mock_session)

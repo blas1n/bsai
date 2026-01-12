@@ -226,10 +226,10 @@ class TestLangfuseTracer:
             mock_callback_class.assert_not_called()
 
     def test_create_trace(self, mock_settings):
-        """Test trace creation."""
+        """Test trace creation using Langfuse v3 start_span API."""
         mock_client = MagicMock()
-        mock_trace = MagicMock()
-        mock_client.trace.return_value = mock_trace
+        mock_span = MagicMock()
+        mock_client.start_span.return_value = mock_span
 
         with patch("agent.tracing.client.Langfuse", return_value=mock_client):
             tracer = LangfuseTracer()
@@ -245,8 +245,8 @@ class TestLangfuseTracer:
                 tags=["tag1"],
             )
 
-            assert trace == mock_trace
-            mock_client.trace.assert_called_once()
+            assert trace == mock_span
+            mock_client.start_span.assert_called_once()
 
     def test_create_trace_disabled(self, disabled_settings):
         """Test trace creation returns None when disabled."""

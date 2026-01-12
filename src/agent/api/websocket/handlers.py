@@ -127,6 +127,8 @@ class WebSocketHandler:
             await self._handle_mcp_tool_response(connection, data)
         elif msg_type == WSMessageType.MCP_APPROVAL_RESPONSE:
             await self._handle_mcp_approval_response(connection, data)
+        elif msg_type == WSMessageType.BREAKPOINT_CONFIG:
+            await self._handle_breakpoint_config(connection, data)
         else:
             logger.warning(
                 "ws_unknown_message",
@@ -375,4 +377,48 @@ class WebSocketHandler:
             session_id=str(connection.session_id),
             request_id=request_id,
             approved=approved,
+        )
+
+    async def _handle_breakpoint_config(
+        self,
+        connection: Connection,
+        data: dict[str, Any],
+    ) -> None:
+        """Handle dynamic breakpoint configuration update.
+
+        This allows users to enable/disable breakpoints during task execution.
+
+        Args:
+            connection: Source connection
+            data: Breakpoint config data
+        """
+        if not connection.authenticated:
+            await self._send_error(connection, "Authentication required")
+            return
+
+        payload = data.get("payload", {})
+        task_id_str = payload.get("task_id")
+        breakpoint_enabled = payload.get("breakpoint_enabled", False)
+
+        if not task_id_str:
+            logger.warning(
+                "breakpoint_config_missing_task_id",
+                connection_id=connection.id,
+            )
+            return
+
+        try:
+            task_id = UUID(task_id_str)
+        except ValueError:
+            await self._send_error(connection, "Invalid task_id")
+            return
+
+        # Update breakpoint enabled state in manager
+        self.manager.set_breakpoint_enabled(task_id, breakpoint_enabled)
+
+        logger.info(
+            "breakpoint_config_received",
+            connection_id=connection.id,
+            task_id=str(task_id),
+            enabled=breakpoint_enabled,
         )

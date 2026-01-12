@@ -6,3 +6,4 @@
  */
 
 export { LangfuseTraceLink } from './LangfuseTraceLink';
+export { BreakpointModal } from './BreakpointModal';

@@ -14,6 +14,7 @@ import { MilestoneStatus, TaskComplexity } from '@/types/session';
 import {
   AgentDetails,
   ArtifactData,
+  BreakpointHitPayload,
   ConductorDetails,
   LLMChunkPayload,
   LLMCompletePayload,
@@ -34,6 +35,8 @@ import { useSessionStore } from '@/stores/sessionStore';
 interface UseChatOptions {
   sessionId?: string;
   onError?: (error: string) => void;
+  breakpointEnabled?: boolean;
+  breakpointNodes?: string[];
 }
 
 /**
@@ -81,17 +84,46 @@ interface UseChatReturn {
   agentHistory: AgentActivity[];
   /** Current task's Langfuse trace URL for debugging */
   currentTraceUrl: string | null;
+  /** Current breakpoint state if workflow is paused */
+  breakpoint: BreakpointHitPayload | null;
+  /** Whether a breakpoint resume/reject is in progress */
+  isBreakpointLoading: boolean;
+  /** Current streaming text chunks from LLM */
+  streamingChunks: string[];
+  /** Current agent doing the streaming */
+  streamingAgent: AgentType | undefined;
   sendMessage: (content: string) => Promise<void>;
   cancelTask: () => void;
   createNewChat: () => Promise<string>;
   loadSession: (sessionId: string) => Promise<void>;
   clearError: () => void;
+  /** Resume workflow from breakpoint with optional user input */
+  resumeFromBreakpoint: (userInput?: string) => Promise<void>;
+  /** Reject and cancel task at breakpoint */
+  rejectAtBreakpoint: (reason?: string) => Promise<void>;
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
-  const { sessionId: initialSessionId, onError } = options;
+  const {
+    sessionId: initialSessionId,
+    onError,
+    breakpointEnabled = false,
+    breakpointNodes = ['qa_breakpoint'],
+  } = options;
   const { accessToken } = useAuth();
   const updateSessionTitle = useSessionStore((state) => state.updateSessionTitle);
+
+  // Use refs to always have the latest values in callbacks
+  const breakpointEnabledRef = useRef(breakpointEnabled);
+  const breakpointNodesRef = useRef(breakpointNodes);
+  useEffect(() => {
+    console.log('[useChat] Breakpoint settings changed:', {
+      breakpointEnabled,
+      breakpointNodes,
+    });
+    breakpointEnabledRef.current = breakpointEnabled;
+    breakpointNodesRef.current = breakpointNodes;
+  }, [breakpointEnabled, breakpointNodes]);
 
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -110,6 +142,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const [currentActivity, setCurrentActivity] = useState<AgentActivity | null>(null);
   const [completedAgents, setCompletedAgents] = useState<AgentType[]>([]);
   const [agentHistory, setAgentHistory] = useState<AgentActivity[]>([]);
+  const [breakpoint, setBreakpoint] = useState<BreakpointHitPayload | null>(null);
+  const [isBreakpointLoading, setIsBreakpointLoading] = useState(false);
 
   const currentTaskIdRef = useRef<string | null>(null);
   const streamingMessageIdRef = useRef<string | null>(null);
@@ -362,24 +396,47 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           }
         }
 
-        // If worker completed with artifacts, add them to the message
+        // If worker completed, update milestone with token/cost info and artifacts
         if (agentType === 'worker' && isCompletion && payload.details) {
           const workerDetails = payload.details as WorkerDetails;
-          if (workerDetails.artifacts && workerDetails.artifacts.length > 0) {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === streamingMessageIdRef.current
-                  ? {
-                    ...msg,
-                    artifacts: [...(msg.artifacts || []), ...workerDetails.artifacts!],
-                    rawContent: workerDetails.output,  // Store raw output with code blocks
-                    agentActivity: [...(msg.agentActivity || []), activity],
-                  }
-                  : msg
-              )
-            );
-            break; // Skip the default activity update since we already did it
-          }
+
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id !== streamingMessageIdRef.current) return msg;
+
+              // Update milestone usage based on sequence number
+              const milestones = msg.milestones || [];
+              const milestoneIndex = payload.sequence_number - 1; // Convert 1-based to 0-based
+
+              const updatedMilestones = milestones.map((m, idx) => {
+                if (idx === milestoneIndex) {
+                  return {
+                    ...m,
+                    status: 'in_progress' as MilestoneStatus,
+                    selectedModel: workerDetails.model,
+                    usage: {
+                      inputTokens: workerDetails.input_tokens || 0,
+                      outputTokens: workerDetails.output_tokens || 0,
+                      costUsd: workerDetails.cost_usd || 0,
+                      model: workerDetails.model || 'unknown',
+                    },
+                  };
+                }
+                return m;
+              });
+
+              return {
+                ...msg,
+                milestones: updatedMilestones,
+                artifacts: workerDetails.artifacts
+                  ? [...(msg.artifacts || []), ...workerDetails.artifacts]
+                  : msg.artifacts,
+                rawContent: workerDetails.output || msg.rawContent,
+                agentActivity: [...(msg.agentActivity || []), activity],
+              };
+            })
+          );
+          break; // Skip the default activity update since we already did it
         }
 
         // Update message with activity
@@ -612,15 +669,70 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         setMessages((prev) => [...prev, systemMessage]);
         break;
       }
+
+      case WSMessageType.BREAKPOINT_HIT: {
+        const payload = message.payload as BreakpointHitPayload;
+        // Store breakpoint state - the UI will show the modal
+        setBreakpoint(payload);
+        // Update current activity to show paused state
+        setCurrentActivity({
+          agent: payload.agent_type as AgentType,
+          status: 'running',
+          message: `Paused at ${payload.node_name} - awaiting review`,
+          startedAt: payload.timestamp,
+        });
+        break;
+      }
     }
   }, [onError, updateSessionTitle]);
 
   // WebSocket connection with auth token
-  const { isConnected, reconnect: wsReconnect } = useWebSocket({
+  const { isConnected, reconnect: wsReconnect, send: wsSend } = useWebSocket({
     sessionId: sessionId || undefined,
     token: accessToken || undefined,
     onMessage: handleWebSocketMessage,
   });
+
+  // Store wsSend in ref to avoid unnecessary effect triggers
+  const wsSendRef = useRef(wsSend);
+  useEffect(() => {
+    wsSendRef.current = wsSend;
+  }, [wsSend]);
+
+  // Track previous breakpoint values to only send when actually changed
+  const prevBreakpointRef = useRef({ enabled: breakpointEnabled, nodes: breakpointNodes });
+
+  // Send breakpoint config update via WebSocket when settings change during active task
+  useEffect(() => {
+    const taskId = currentTaskIdRef.current;
+    const prev = prevBreakpointRef.current;
+
+    // Only send if there's an active task and the values actually changed
+    if (
+      taskId &&
+      isConnected &&
+      (prev.enabled !== breakpointEnabled ||
+        JSON.stringify(prev.nodes) !== JSON.stringify(breakpointNodes))
+    ) {
+      console.log('[useChat] Sending breakpoint config update via WebSocket:', {
+        taskId,
+        breakpointEnabled,
+        breakpointNodes,
+      });
+      wsSendRef.current({
+        type: WSMessageType.BREAKPOINT_CONFIG,
+        payload: {
+          task_id: taskId,
+          breakpoint_enabled: breakpointEnabled,
+          breakpoint_nodes: breakpointNodes,
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      // Update previous values
+      prevBreakpointRef.current = { enabled: breakpointEnabled, nodes: breakpointNodes };
+    }
+  }, [breakpointEnabled, breakpointNodes, isConnected]);
 
   // Create new chat session
   const createNewChat = useCallback(async (): Promise<string> => {
@@ -630,6 +742,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     try {
       const session = await api.createSession();
       setSessionId(session.id);
+      // Reset all state for new session
       setMessages([]);
       setStats({
         totalTokens: 0,
@@ -637,6 +750,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         inputTokens: 0,
         outputTokens: 0,
       });
+      setStreaming({ isStreaming: false, chunks: [] });
+      setCurrentActivity(null);
+      setCompletedAgents([]);
+      setAgentHistory([]);
+      setBreakpoint(null);
+      setIsBreakpointLoading(false);
+      currentTaskIdRef.current = null;
+      streamingMessageIdRef.current = null;
       return session.id;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to create session';
@@ -685,12 +806,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 description: m.description,
                 complexity: m.complexity.toLowerCase() as TaskComplexity,
                 status: m.status.toLowerCase() as MilestoneStatus,
-                selectedModel: m.llm_model || undefined,
+                selectedModel: m.selected_llm || undefined,
                 usage: {
                   inputTokens: m.input_tokens,
                   outputTokens: m.output_tokens,
                   costUsd: parseFloat(m.cost_usd),
-                  model: m.llm_model || 'unknown',
+                  model: m.selected_llm || 'unknown',
                 },
               }));
 
@@ -713,7 +834,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                   agent: 'worker' as AgentType,
                   status: 'completed' as const,
                   message: `Executed milestone ${m.sequence_number}`,
-                  model: m.llm_model || undefined,
+                  model: m.selected_llm || undefined,
                   completedAt: m.created_at,
                 });
                 // QA activity
@@ -775,6 +896,15 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         inputTokens: session.total_input_tokens,
         outputTokens: session.total_output_tokens,
       });
+      // Reset live monitoring state when loading a different session
+      setStreaming({ isStreaming: false, chunks: [] });
+      setCurrentActivity(null);
+      setCompletedAgents([]);
+      setAgentHistory([]);
+      setBreakpoint(null);
+      setIsBreakpointLoading(false);
+      currentTaskIdRef.current = null;
+      streamingMessageIdRef.current = null;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load session';
       setError(errorMsg);
@@ -808,7 +938,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
     try {
       // Create task - assistant message will be created when TASK_STARTED arrives
-      await api.createTask(currentSessionId, content);
+      // Use refs to get the latest values at call time
+      console.log('[useChat] Creating task with breakpoint settings:', {
+        breakpointEnabled: breakpointEnabledRef.current,
+        breakpointNodes: breakpointNodesRef.current,
+      });
+      await api.createTask(currentSessionId, content, {
+        stream: true,
+        breakpointEnabled: breakpointEnabledRef.current,
+        breakpointNodes: breakpointNodesRef.current,
+      });
       // Note: streamingMessageIdRef and currentTaskIdRef will be set by TASK_STARTED handler
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to send message';
@@ -854,6 +993,79 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     streamingMessageIdRef.current = null;
   }, [sessionId]);
 
+  // Resume workflow from breakpoint
+  const resumeFromBreakpoint = useCallback(async (userInput?: string) => {
+    if (!breakpoint || !sessionId) return;
+
+    setIsBreakpointLoading(true);
+    try {
+      await api.resumeTask(sessionId, breakpoint.task_id, userInput);
+      setBreakpoint(null);
+      // Update activity to show resuming
+      setCurrentActivity({
+        agent: breakpoint.agent_type as AgentType,
+        status: 'running',
+        message: 'Resuming workflow...',
+        startedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to resume task';
+      setError(errorMsg);
+      onError?.(errorMsg);
+    } finally {
+      setIsBreakpointLoading(false);
+    }
+  }, [breakpoint, sessionId, onError]);
+
+  // Reject at breakpoint - with feedback: re-run worker, without feedback: cancel task
+  const rejectAtBreakpoint = useCallback(async (feedback?: string) => {
+    if (!breakpoint || !sessionId) return;
+
+    setIsBreakpointLoading(true);
+    try {
+      await api.rejectBreakpoint(sessionId, breakpoint.task_id, feedback);
+      setBreakpoint(null);
+
+      if (feedback) {
+        // With feedback: worker will re-run, keep streaming state
+        // Update activity to show re-running
+        setCurrentActivity({
+          agent: 'worker' as AgentType,
+          status: 'running',
+          message: 'Re-running with user feedback...',
+          startedAt: new Date().toISOString(),
+        });
+      } else {
+        // Without feedback: task cancelled
+        if (streamingMessageIdRef.current) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === streamingMessageIdRef.current
+                ? {
+                  ...msg,
+                  content: 'Task cancelled by user.',
+                  isStreaming: false,
+                }
+                : msg
+            )
+          );
+        }
+
+        setStreaming({ isStreaming: false, chunks: [] });
+        setIsLoading(false);
+        setCurrentActivity(null);
+        currentTaskIdRef.current = null;
+        streamingMessageIdRef.current = null;
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to reject task';
+      setError(errorMsg);
+      onError?.(errorMsg);
+    } finally {
+      setIsBreakpointLoading(false);
+    }
+  }, [breakpoint, sessionId, onError]);
+
   // Set API token when auth changes
   useEffect(() => {
     if (accessToken) {
@@ -887,10 +1099,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     completedAgents,
     agentHistory,
     currentTraceUrl,
+    breakpoint,
+    isBreakpointLoading,
+    streamingChunks: streaming.chunks,
+    streamingAgent: streaming.currentAgent,
     sendMessage,
     cancelTask,
     createNewChat,
     loadSession,
     clearError,
+    resumeFromBreakpoint,
+    rejectAtBreakpoint,
   };
 }

@@ -1,6 +1,6 @@
 """WebSocket message schemas and types."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
@@ -19,6 +19,7 @@ class WSMessageType(StrEnum):
     SUBSCRIBE = "subscribe"
     UNSUBSCRIBE = "unsubscribe"
     PING = "ping"
+    BREAKPOINT_CONFIG = "breakpoint_config"
 
     # Server -> Client (Auth)
     AUTH_SUCCESS = "auth_success"
@@ -51,6 +52,11 @@ class WSMessageType(StrEnum):
 
     # Errors
     ERROR = "error"
+
+    # Breakpoint Events (Human-in-the-Loop)
+    BREAKPOINT_HIT = "breakpoint_hit"
+    BREAKPOINT_RESUME = "breakpoint_resume"
+    BREAKPOINT_REJECTED = "breakpoint_rejected"
 
     # MCP Tool Execution
     MCP_TOOL_CALL_REQUEST = "mcp_tool_call_request"
@@ -158,3 +164,24 @@ class LLMCompletePayload(BaseModel):
     full_content: str
     tokens_used: int
     agent: str
+
+
+class BreakpointCurrentState(BaseModel):
+    """Current workflow state at breakpoint."""
+
+    current_milestone_index: int
+    total_milestones: int
+    milestones: list[dict[str, Any]] = Field(default_factory=list)
+    last_worker_output: str | None = None
+    last_qa_result: dict[str, Any] | None = None
+
+
+class BreakpointHitPayload(BaseModel):
+    """Payload for BREAKPOINT_HIT event."""
+
+    task_id: UUID
+    session_id: UUID
+    node_name: str = Field(description="Name of the node where breakpoint was hit")
+    agent_type: str = Field(description="Type of agent (conductor, worker, qa, etc)")
+    current_state: BreakpointCurrentState
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))

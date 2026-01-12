@@ -14,6 +14,7 @@ from .base import Base
 from .enums import MilestoneStatus
 
 if TYPE_CHECKING:
+    from .agent_step import AgentStep
     from .artifact import Artifact
     from .generated_prompt import GeneratedPrompt
     from .llm_usage_log import LLMUsageLog
@@ -62,6 +63,9 @@ class Milestone(Base):
     input_tokens: Mapped[int] = mapped_column(INTEGER, default=0)
     output_tokens: Mapped[int] = mapped_column(INTEGER, default=0)
     cost_usd: Mapped[Decimal] = mapped_column(DECIMAL(10, 6), default=Decimal("0"))
+    started_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(INTEGER, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
@@ -74,6 +78,9 @@ class Milestone(Base):
         back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
     )
     artifacts: Mapped[list[Artifact]] = relationship(
+        back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
+    )
+    agent_steps: Mapped[list[AgentStep]] = relationship(
         back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
     )
 

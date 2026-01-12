@@ -49,6 +49,14 @@ class TaskCreate(BaseModel):
         default=True,
         description="Enable WebSocket streaming for task execution",
     )
+    breakpoint_enabled: bool = Field(
+        default=False,
+        description="Enable breakpoints for human-in-the-loop workflow",
+    )
+    breakpoint_nodes: list[str] = Field(
+        default_factory=lambda: ["qa_breakpoint"],
+        description="List of node names to pause at. Use 'all' to pause at all breakpoints.",
+    )
 
 
 class SnapshotCreate(BaseModel):
@@ -58,4 +66,28 @@ class SnapshotCreate(BaseModel):
         default="Manual checkpoint",
         max_length=500,
         description="Reason for creating the snapshot",
+    )
+
+
+class TaskResume(BaseModel):
+    """Request schema for resuming a paused task from a breakpoint."""
+
+    user_input: str | None = Field(
+        default=None,
+        max_length=10000,
+        description="Optional user input/feedback to pass to the workflow",
+    )
+    rejected: bool = Field(
+        default=False,
+        description="If true with user_input, re-run worker with feedback. If true without user_input, cancel task.",
+    )
+
+
+class TaskReject(BaseModel):
+    """Request schema for rejecting a task at a breakpoint."""
+
+    reason: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Optional reason for rejecting the task",
     )

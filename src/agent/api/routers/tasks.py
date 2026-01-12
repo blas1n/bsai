@@ -11,7 +11,9 @@ from ..schemas import (
     PaginatedResponse,
     TaskCreate,
     TaskDetailResponse,
+    TaskReject,
     TaskResponse,
+    TaskResume,
 )
 from ..services import TaskService
 
@@ -160,3 +162,75 @@ async def cancel_task(
     _ = session_id
     service = TaskService(db, cache, ws_manager)
     return await service.cancel_task(task_id, user_id)
+
+
+@router.put(
+    "/{task_id}/resume",
+    response_model=TaskResponse,
+    summary="Resume paused task",
+)
+async def resume_task(
+    session_id: UUID,
+    task_id: UUID,
+    request: TaskResume,
+    db: DBSession,
+    cache: Cache,
+    ws_manager: WSManager,
+    user_id: CurrentUserId,
+) -> TaskResponse:
+    """Resume a task that is paused at a breakpoint.
+
+    This endpoint is used for Human-in-the-Loop workflows where
+    a task has been paused for user review.
+
+    Args:
+        session_id: Session UUID (for URL consistency)
+        task_id: Task UUID
+        request: Resume request with optional user input
+        db: Database session
+        cache: Session cache
+        ws_manager: WebSocket connection manager
+        user_id: Current user ID
+
+    Returns:
+        Updated task
+    """
+    _ = session_id
+    service = TaskService(db, cache, ws_manager)
+    return await service.resume_task(task_id, user_id, request.user_input, request.rejected)
+
+
+@router.put(
+    "/{task_id}/reject",
+    response_model=TaskResponse,
+    summary="Reject task at breakpoint",
+)
+async def reject_task(
+    session_id: UUID,
+    task_id: UUID,
+    request: TaskReject,
+    db: DBSession,
+    cache: Cache,
+    ws_manager: WSManager,
+    user_id: CurrentUserId,
+) -> TaskResponse:
+    """Reject and cancel a task at a breakpoint.
+
+    This endpoint is used when the user wants to abort the task
+    during a Human-in-the-Loop review.
+
+    Args:
+        session_id: Session UUID (for URL consistency)
+        task_id: Task UUID
+        request: Reject request with optional reason
+        db: Database session
+        cache: Session cache
+        ws_manager: WebSocket connection manager
+        user_id: Current user ID
+
+    Returns:
+        Updated task (with FAILED status)
+    """
+    _ = session_id
+    service = TaskService(db, cache, ws_manager)
+    return await service.reject_task(task_id, user_id, request.reason)

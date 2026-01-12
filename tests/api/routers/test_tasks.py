@@ -250,7 +250,10 @@ class TestGetTask:
             updated_at=datetime.now(UTC),
             final_result="Completed result",
             milestones=[],
+            agent_steps=[],
             progress=1.0,
+            total_duration_ms=None,
+            cost_breakdown={},
         )
 
         with patch("agent.api.routers.tasks.TaskService") as mock_service_class:

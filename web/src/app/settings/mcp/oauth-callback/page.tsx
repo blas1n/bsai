@@ -1,14 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 /**
- * OAuth callback page for MCP server authentication.
- * This page is opened in a popup and receives the OAuth authorization code.
- * It then sends the code back to the parent window via postMessage.
+ * OAuth callback content component.
+ * Handles the actual OAuth callback logic.
  */
-export default function McpOAuthCallbackPage() {
+function McpOAuthCallbackContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -100,5 +99,25 @@ export default function McpOAuthCallbackPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * OAuth callback page for MCP server authentication.
+ * This page is opened in a popup and receives the OAuth authorization code.
+ * It then sends the code back to the parent window via postMessage.
+ */
+export default function McpOAuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4 p-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    }>
+      <McpOAuthCallbackContent />
+    </Suspense>
   );
 }

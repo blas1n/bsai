@@ -94,3 +94,8 @@ class AgentState(TypedDict):
 
     # Observability
     trace_url: NotRequired[str]  # Langfuse trace URL (empty string if disabled)
+
+    # Breakpoint configuration (Human-in-the-Loop)
+    breakpoint_enabled: NotRequired[bool]  # Whether breakpoints are enabled
+    breakpoint_nodes: NotRequired[list[str]]  # List of node names to pause at
+    breakpoint_user_input: NotRequired[str | None]  # User input at breakpoint

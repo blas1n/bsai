@@ -14,6 +14,8 @@ from uuid import UUID
 import structlog
 
 from agent.api.schemas import (
+    BreakpointCurrentState,
+    BreakpointHitPayload,
     MilestoneProgressPayload,
     TaskCompletedPayload,
     TaskProgressPayload,
@@ -391,5 +393,71 @@ async def broadcast_task_completed(
     except Exception as e:
         logger.warning(
             "broadcast_task_completed_failed",
+            error=str(e),
+        )
+
+
+async def broadcast_breakpoint_hit(
+    ws_manager: ConnectionManager | None,
+    session_id: UUID,
+    task_id: UUID,
+    node_name: str,
+    agent_type: str,
+    current_milestone_index: int,
+    total_milestones: int,
+    milestones: list[dict[str, Any]],
+    last_worker_output: str | None = None,
+    last_qa_result: dict[str, Any] | None = None,
+) -> None:
+    """Broadcast breakpoint hit notification for Human-in-the-Loop.
+
+    Args:
+        ws_manager: WebSocket connection manager
+        session_id: Session ID for broadcast target
+        task_id: Task ID
+        node_name: Name of the node where breakpoint was hit
+        agent_type: Type of agent (conductor, worker, qa, etc)
+        current_milestone_index: Current milestone index (0-based)
+        total_milestones: Total number of milestones
+        milestones: List of milestone data
+        last_worker_output: Last worker output (if any)
+        last_qa_result: Last QA result (if any)
+    """
+    if ws_manager is None:
+        return
+
+    try:
+        current_state = BreakpointCurrentState(
+            current_milestone_index=current_milestone_index,
+            total_milestones=total_milestones,
+            milestones=milestones,
+            last_worker_output=last_worker_output,
+            last_qa_result=last_qa_result,
+        )
+
+        payload = BreakpointHitPayload(
+            task_id=task_id,
+            session_id=session_id,
+            node_name=node_name,
+            agent_type=agent_type,
+            current_state=current_state,
+        )
+
+        await ws_manager.broadcast_to_session(
+            session_id,
+            WSMessage(
+                type=WSMessageType.BREAKPOINT_HIT,
+                payload=payload.model_dump(),
+            ),
+        )
+        logger.info(
+            "broadcast_breakpoint_hit",
+            task_id=str(task_id),
+            node_name=node_name,
+            agent_type=agent_type,
+        )
+    except Exception as e:
+        logger.warning(
+            "broadcast_breakpoint_hit_failed",
             error=str(e),
         )

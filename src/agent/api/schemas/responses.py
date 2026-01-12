@@ -51,6 +51,27 @@ class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AgentStepResponse(BaseModel):
+    """Response schema for agent execution step."""
+
+    id: UUID
+    task_id: UUID
+    milestone_id: UUID | None = None
+    agent_type: str
+    status: str
+    started_at: datetime
+    ended_at: datetime | None = None
+    duration_ms: int | None = None
+    input_summary: str | None = None
+    output_summary: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: Decimal = Decimal("0")
+    error_message: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class MilestoneResponse(BaseModel):
     """Response schema for milestone data."""
 
@@ -66,6 +87,9 @@ class MilestoneResponse(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: Decimal = Decimal("0")
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    duration_ms: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(
@@ -82,14 +106,23 @@ class MilestoneDetailResponse(MilestoneResponse):
 
 
 class TaskDetailResponse(TaskResponse):
-    """Detailed task response with milestones."""
+    """Detailed task response with milestones and agent steps."""
 
     milestones: list[MilestoneResponse] = []
+    agent_steps: list[AgentStepResponse] = []
     progress: float = Field(
         default=0.0,
         ge=0.0,
         le=1.0,
         description="Task completion progress (0.0 - 1.0)",
+    )
+    total_duration_ms: int | None = Field(
+        default=None,
+        description="Total execution duration in milliseconds",
+    )
+    cost_breakdown: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Cost breakdown by agent type",
     )
 
 

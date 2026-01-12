@@ -165,6 +165,13 @@ class WorkerAgent:
             },
         )
 
+        # TODO: Refactor to use stream_completion for real-time Live Output in frontend
+        # Currently uses non-streaming chat_completion, so no LLM_CHUNK WebSocket events
+        # are generated. To enable Live Output streaming:
+        # 1. Use self.llm_client.stream_completion() instead
+        # 2. Broadcast LLM_CHUNK events via ws_manager during streaming
+        # 3. Accumulate chunks and return final response
+        # See: web/src/components/monitoring/LiveDetailPanel.tsx (Live Output section)
         response = await self.llm_client.chat_completion(
             request=request,
             mcp_servers=mcp_servers,
