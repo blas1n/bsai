@@ -13,6 +13,7 @@ from .base import Base
 from .enums import TaskStatus
 
 if TYPE_CHECKING:
+    from .agent_step import AgentStep
     from .artifact import Artifact
     from .milestone import Milestone
     from .session import Session
@@ -47,6 +48,9 @@ class Task(Base):
         back_populates="task", lazy="selectin", cascade="all, delete-orphan"
     )
     artifacts: Mapped[list[Artifact]] = relationship(
+        back_populates="task", lazy="selectin", cascade="all, delete-orphan"
+    )
+    agent_steps: Mapped[list[AgentStep]] = relationship(
         back_populates="task", lazy="selectin", cascade="all, delete-orphan"
     )
 

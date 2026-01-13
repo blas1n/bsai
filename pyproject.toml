@@ -27,7 +27,12 @@ dependencies = [
     # LLM & Orchestration
     "litellm>=1.27.0",
     "langgraph>=0.0.20",
+    "langgraph-checkpoint-postgres>=3.0.0",
     "langchain-core>=0.1.0",
+    "langchain>=0.3.0",
+
+    # Observability
+    "langfuse>=2.0.0",
 
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
@@ -159,5 +164,11 @@ follow_imports = "normal"
 module = [
     "fastapi_keycloak_middleware",
     "langgraph.graph.graph",
+    "langfuse",
+    "langfuse.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "agent.tracing.*"
+disable_error_code = ["attr-defined"]

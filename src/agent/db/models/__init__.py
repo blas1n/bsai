@@ -1,5 +1,6 @@
 """Database models for BSAI agent system."""
 
+from .agent_step import AgentStep
 from .artifact import Artifact
 from .base import Base
 from .custom_llm_model import CustomLLMModel
@@ -26,6 +27,7 @@ from .user_settings import UserSettings
 __all__ = [
     "Base",
     # Models
+    "AgentStep",
     "Artifact",
     "UserSettings",
     "Session",

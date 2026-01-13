@@ -6,6 +6,7 @@ export enum WSMessageType {
   SUBSCRIBE = 'subscribe',
   UNSUBSCRIBE = 'unsubscribe',
   PING = 'ping',
+  BREAKPOINT_CONFIG = 'breakpoint_config', // Dynamic breakpoint configuration update
 
   // Server -> Client (Auth)
   AUTH_SUCCESS = 'auth_success',
@@ -36,6 +37,11 @@ export enum WSMessageType {
   SESSION_RESUMED = 'session_resumed',
   CONTEXT_COMPRESSED = 'context_compressed',
 
+  // Breakpoint Events (Human-in-the-Loop)
+  BREAKPOINT_HIT = 'breakpoint_hit',
+  BREAKPOINT_RESUME = 'breakpoint_resume',
+  BREAKPOINT_REJECTED = 'breakpoint_rejected',
+
   // Errors
   ERROR = 'error',
 }
@@ -64,6 +70,8 @@ export interface TaskStartedPayload {
   original_request: string;
   milestone_count: number;
   previous_milestones?: PreviousMilestoneInfo[];
+  /** Langfuse trace URL for debugging and observability (empty string if not available) */
+  trace_url: string;
 }
 
 export interface TaskProgressPayload {
@@ -80,6 +88,8 @@ export interface TaskCompletedPayload {
   total_tokens: number;
   total_cost_usd: string;
   duration_seconds: number;
+  /** Langfuse trace URL for debugging and observability (empty string if not available) */
+  trace_url: string;
 }
 
 export interface TaskFailedPayload {
@@ -179,4 +189,44 @@ export interface LLMCompletePayload {
 export interface ErrorPayload {
   code: string;
   message: string;
+}
+
+// Breakpoint payloads for Human-in-the-Loop
+export interface BreakpointHitPayload {
+  task_id: string;
+  session_id: string;
+  node_name: string;
+  agent_type: string;
+  current_state: {
+    current_milestone_index: number;
+    total_milestones: number;
+    milestones: Array<{
+      description: string;
+      status: string;
+    }>;
+    last_worker_output?: string;
+    last_qa_result?: {
+      decision: string;
+      feedback: string | null;
+    };
+  };
+  timestamp: string;
+}
+
+export interface BreakpointResumePayload {
+  task_id: string;
+  user_input?: string;
+  modified_state?: Record<string, unknown>;
+}
+
+export interface BreakpointRejectedPayload {
+  task_id: string;
+  reason?: string;
+}
+
+// Client -> Server: Dynamic breakpoint configuration
+export interface BreakpointConfigPayload {
+  task_id?: string; // Optional: specific task, or current active task if omitted
+  breakpoint_enabled: boolean;
+  breakpoint_nodes?: string[];
 }

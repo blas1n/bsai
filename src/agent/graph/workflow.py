@@ -7,10 +7,12 @@ the 6 specialized agents for task execution.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 import structlog
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +26,9 @@ from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
 from agent.llm import ChatMessage
+from agent.tracing import get_langfuse_callback, get_langfuse_tracer
 
+from .checkpointer import get_checkpointer
 from .edges import (
     AdvanceRoute,
     CompressionRoute,
@@ -38,12 +42,26 @@ from .edges import (
 from .nodes import Node
 from .nodes.advance import advance_node
 from .nodes.analyze import analyze_task_node
+from .nodes.breakpoint import qa_breakpoint_node
 from .nodes.context import check_context_node, summarize_node
 from .nodes.execute import execute_worker_node
 from .nodes.llm import generate_prompt_node, select_llm_node
 from .nodes.qa import verify_qa_node
 from .nodes.response import generate_response_node
 from .state import AgentState, MilestoneData
+
+if TYPE_CHECKING:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+
+@dataclass
+class WorkflowResult:
+    """Result of a workflow execution."""
+
+    state: AgentState
+    interrupted: bool = False
+    interrupt_node: str | None = None
+
 
 logger = structlog.get_logger()
 
@@ -64,7 +82,6 @@ def _create_node_with_session(
     Returns:
         Wrapped async function compatible with LangGraph
     """
-    from langchain_core.runnables import RunnableConfig
 
     async def wrapper(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         result: dict[str, Any] = await node_func(state, config, session)
@@ -100,6 +117,7 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         Node.SELECT_LLM: select_llm_node,
         Node.GENERATE_PROMPT: generate_prompt_node,
         Node.EXECUTE_WORKER: execute_worker_node,
+        Node.QA_BREAKPOINT: qa_breakpoint_node,
         Node.VERIFY_QA: verify_qa_node,
         Node.CHECK_CONTEXT: check_context_node,
         Node.SUMMARIZE: summarize_node,
@@ -130,8 +148,11 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     # Edge from generate_prompt to execute_worker
     graph.add_edge(Node.GENERATE_PROMPT, Node.EXECUTE_WORKER)
 
-    # Edge from execute_worker to verify_qa
-    graph.add_edge(Node.EXECUTE_WORKER, Node.VERIFY_QA)
+    # Edge from execute_worker to qa_breakpoint (Human-in-the-Loop checkpoint)
+    graph.add_edge(Node.EXECUTE_WORKER, Node.QA_BREAKPOINT)
+
+    # Edge from qa_breakpoint to verify_qa
+    graph.add_edge(Node.QA_BREAKPOINT, Node.VERIFY_QA)
 
     # Conditional edges from verify_qa based on QA decision
     # NOTE: RETRY also goes to ADVANCE first to increment retry_count
@@ -207,7 +228,8 @@ class WorkflowRunner:
     """High-level workflow runner with session management.
 
     Handles database session lifecycle and provides a clean API
-    for executing workflows.
+    for executing workflows. Includes Langfuse tracing integration
+    for observability and debugging.
     """
 
     def __init__(
@@ -226,6 +248,7 @@ class WorkflowRunner:
         self.session = session
         self.ws_manager = ws_manager
         self.cache = cache
+        self._tracer = get_langfuse_tracer()
 
     async def _load_previous_milestones(
         self,
@@ -373,23 +396,41 @@ class WorkflowRunner:
 
         return context_messages, context_summary, token_count
 
+    def get_trace_url(self, task_id: str | UUID) -> str:
+        """Get the Langfuse trace URL for a task.
+
+        Args:
+            task_id: The task UUID
+
+        Returns:
+            URL to view the trace in Langfuse UI, or empty string if tracing is disabled
+        """
+        return self._tracer.get_trace_url(task_id)
+
     async def run(
         self,
         session_id: str | UUID,
         task_id: str | UUID,
         original_request: str,
         max_context_tokens: int = 100000,
-    ) -> AgentState:
+        breakpoint_enabled: bool = False,
+        breakpoint_nodes: list[str] | None = None,
+    ) -> WorkflowResult:
         """Run workflow for a task.
+
+        Integrates with Langfuse for tracing and observability when enabled.
+        The trace URL is included in the returned state for frontend linking.
 
         Args:
             session_id: Session UUID (string or UUID)
             task_id: Task UUID (string or UUID)
             original_request: User's original request
             max_context_tokens: Maximum context window
+            breakpoint_enabled: Whether breakpoints are enabled
+            breakpoint_nodes: List of node names to pause at
 
         Returns:
-            Final workflow state
+            WorkflowResult containing state and interrupt status
         """
         # Ensure UUIDs
         if isinstance(session_id, str):
@@ -409,6 +450,20 @@ class WorkflowRunner:
             session_id
         )
         previous_milestones, max_sequence = await self._load_previous_milestones(session_id)
+
+        # Create Langfuse callback handler for tracing
+        langfuse_callback = get_langfuse_callback(
+            session_id=session_id,
+            task_id=task_id,
+            user_id=user_id,
+            trace_name=f"task-{task_id}",
+            metadata={
+                "original_request": original_request[:500],
+                "previous_milestone_count": len(previous_milestones),
+            },
+            tags=["bsai", "langgraph", "multi-agent"],
+        )
+        trace_url = self.get_trace_url(task_id)
 
         # Build initial state with previous context and milestones
         initial_state: AgentState = {
@@ -431,6 +486,8 @@ class WorkflowRunner:
             "needs_compression": False,
             "workflow_complete": False,
             "should_continue": True,
+            "breakpoint_enabled": breakpoint_enabled,
+            "breakpoint_nodes": breakpoint_nodes or ["qa_breakpoint"],
         }
 
         logger.info(
@@ -438,28 +495,151 @@ class WorkflowRunner:
             session_id=str(session_id),
             task_id=str(task_id),
             has_previous_context=len(context_messages) > 0,
-            previous_milestone_count=len(previous_milestones),
+            prevㄴious_milestone_count=len(previous_milestones),
+            trace_url=trace_url,
+            tracing_enabled=langfuse_callback is not None,
         )
 
         async with lifespan(self.session) as container:
-            compiled = compile_workflow(self.session)
+            # Get checkpointer for state persistence
+            async with get_checkpointer() as checkpointer:
+                compiled = compile_workflow(self.session, checkpointer=checkpointer)
 
-            final_state = await compiled.ainvoke(
-                initial_state,
-                config={
+                # Build config with optional Langfuse callback
+                callbacks: list[BaseCallbackHandler] = []
+                if langfuse_callback:
+                    callbacks.append(langfuse_callback)
+
+                # Thread ID for checkpointing (unique per task)
+                thread_id = str(task_id)
+
+                config: RunnableConfig = {
                     "recursion_limit": 100,
+                    "callbacks": callbacks,
                     "configurable": {
+                        "thread_id": thread_id,
                         "ws_manager": self.ws_manager,
                         "container": container,
+                        "trace_url": trace_url,
                     },
-                },
-            )
+                }
+
+                final_state: AgentState = cast(
+                    AgentState,
+                    await compiled.ainvoke(initial_state, config=config),
+                )
+
+                # Check if workflow was interrupted (paused at breakpoint)
+                graph_state = await compiled.aget_state(config)
+                interrupted = bool(graph_state.next)
+                interrupt_node = graph_state.next[0] if graph_state.next else None
+
+        # Flush Langfuse events
+        if langfuse_callback:
+            self._tracer.flush()
 
         logger.info(
             "workflow_finished",
             task_id=str(task_id),
             status=final_state.get("task_status"),
             error=final_state.get("error"),
+            trace_url=trace_url,
+            interrupted=interrupted,
+            interrupt_node=interrupt_node,
         )
 
-        return dict(final_state)  # type: ignore[return-value]
+        final_state["trace_url"] = trace_url
+        return WorkflowResult(
+            state=final_state,
+            interrupted=interrupted,
+            interrupt_node=interrupt_node,
+        )
+
+    async def resume(
+        self,
+        task_id: str | UUID,
+        user_input: dict[str, Any] | None = None,
+    ) -> WorkflowResult:
+        """Resume a paused workflow from checkpoint.
+
+        This allows continuing execution after an interrupt or pause.
+
+        Args:
+            task_id: Task UUID (string or UUID)
+            user_input: Optional dict with user input data to provide at the interrupt point
+
+        Returns:
+            WorkflowResult containing state and interrupt status
+        """
+        if isinstance(task_id, str):
+            task_id = UUID(task_id)
+
+        thread_id = str(task_id)
+
+        async with lifespan(self.session) as container:
+            async with get_checkpointer() as checkpointer:
+                compiled = compile_workflow(self.session, checkpointer=checkpointer)
+
+                # Resume from checkpoint with optional user input
+                resume_input = user_input
+
+                config: RunnableConfig = {
+                    "recursion_limit": 100,
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "ws_manager": self.ws_manager,
+                        "container": container,
+                    },
+                }
+
+                final_state: AgentState = cast(
+                    AgentState,
+                    await compiled.ainvoke(resume_input, config=config),
+                )
+
+                # Check if workflow was interrupted again (another breakpoint)
+                graph_state = await compiled.aget_state(config)
+                interrupted = bool(graph_state.next)
+                interrupt_node = graph_state.next[0] if graph_state.next else None
+
+        logger.info(
+            "workflow_resumed",
+            task_id=str(task_id),
+            status=final_state.get("task_status"),
+            interrupted=interrupted,
+            interrupt_node=interrupt_node,
+        )
+
+        return WorkflowResult(
+            state=final_state,
+            interrupted=interrupted,
+            interrupt_node=interrupt_node,
+        )
+
+    async def get_state(
+        self,
+        task_id: str | UUID,
+    ) -> AgentState | None:
+        """Get the current state of a workflow from checkpoint.
+
+        Args:
+            task_id: Task UUID
+
+        Returns:
+            Current workflow state or None if no checkpoint exists
+        """
+        if isinstance(task_id, str):
+            task_id = UUID(task_id)
+
+        thread_id = str(task_id)
+
+        async with get_checkpointer() as checkpointer:
+            compiled = compile_workflow(self.session, checkpointer=checkpointer)
+
+            state = await compiled.aget_state(
+                config=cast(RunnableConfig, {"configurable": {"thread_id": thread_id}})
+            )
+
+            if state.values:
+                return cast(AgentState, state.values)
+        return None

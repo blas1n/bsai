@@ -364,7 +364,7 @@ class TestCreateMcpServer:
             response = client.post("/api/v1/mcp/servers", json=payload, headers=auth_headers)
 
         # Validation happens at Pydantic schema level, returns 422
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     def test_create_server_blocks_disallowed_command(
         self,
@@ -389,7 +389,7 @@ class TestCreateMcpServer:
             response = client.post("/api/v1/mcp/servers", json=payload, headers=auth_headers)
 
         # Validation happens at Pydantic schema level, returns 422
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
         # ErrorResponse format: {"error": ..., "detail": None, "code": ..., "request_id": ...}
         assert "not allowed" in response.json()["error"].lower()
 
@@ -415,7 +415,7 @@ class TestCreateMcpServer:
             response = client.post("/api/v1/mcp/servers", json=payload, headers=auth_headers)
 
         # Validation happens at Pydantic schema level, returns 422
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
         # ErrorResponse format: {"error": ..., "detail": None, "code": ..., "request_id": ...}
         assert "blocked" in response.json()["error"].lower()
 
@@ -611,7 +611,7 @@ class TestTestMcpServer:
         )
 
         # ValidationError returns 422
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
         # ErrorResponse format: {"error": ..., "detail": None, "code": ..., "request_id": ...}
         assert "stdio" in response.json()["error"].lower()
 

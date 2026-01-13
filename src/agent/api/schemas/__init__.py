@@ -1,7 +1,15 @@
 """Pydantic schemas for API request/response validation."""
 
-from .requests import BulkSessionAction, SessionCreate, SnapshotCreate, TaskCreate
+from .requests import (
+    BulkSessionAction,
+    SessionCreate,
+    SnapshotCreate,
+    TaskCreate,
+    TaskReject,
+    TaskResume,
+)
 from .responses import (
+    AgentStepResponse,
     ArtifactResponse,
     ErrorResponse,
     MilestoneDetailResponse,
@@ -14,6 +22,8 @@ from .responses import (
     TaskResponse,
 )
 from .websocket import (
+    BreakpointCurrentState,
+    BreakpointHitPayload,
     LLMChunkPayload,
     LLMCompletePayload,
     MilestoneProgressPayload,
@@ -30,9 +40,12 @@ __all__ = [
     # Requests
     "SessionCreate",
     "TaskCreate",
+    "TaskResume",
+    "TaskReject",
     "SnapshotCreate",
     "BulkSessionAction",
     # Responses
+    "AgentStepResponse",
     "SessionResponse",
     "SessionDetailResponse",
     "TaskResponse",
@@ -54,4 +67,6 @@ __all__ = [
     "PreviousMilestoneInfo",
     "LLMChunkPayload",
     "LLMCompletePayload",
+    "BreakpointCurrentState",
+    "BreakpointHitPayload",
 ]

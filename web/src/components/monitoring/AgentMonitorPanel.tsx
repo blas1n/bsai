@@ -15,12 +15,15 @@ import {
 } from '@/lib/agentConstants';
 import { MilestoneCard } from './MilestoneCard';
 import { ActivityLogItem } from './ActivityLogItem';
+import { LangfuseTraceLink } from '@/components/debug';
 
 interface AgentMonitorPanelProps {
   milestones: MilestoneInfo[];
   currentActivity: AgentActivity | null;
   isStreaming: boolean;
   agentHistory?: AgentActivity[];
+  /** Langfuse trace URL for debugging and observability */
+  traceUrl?: string | null;
 }
 
 export function AgentMonitorPanel({
@@ -28,6 +31,7 @@ export function AgentMonitorPanel({
   currentActivity,
   isStreaming,
   agentHistory = [],
+  traceUrl,
 }: AgentMonitorPanelProps) {
   const [expandedMilestones, setExpandedMilestones] = useState<Set<string>>(new Set());
   const [showAllHistory, setShowAllHistory] = useState(false);
@@ -75,10 +79,17 @@ export function AgentMonitorPanel({
     <div className="h-full flex flex-col bg-background border-l">
       {/* Header */}
       <div className="p-4 border-b">
-        <h2 className="font-semibold text-sm">Agent Pipeline</h2>
-        <p className="text-xs text-muted-foreground mt-1">
-          Multi-agent workflow monitoring
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-sm">Agent Pipeline</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Multi-agent workflow monitoring
+            </p>
+          </div>
+          {traceUrl && (
+            <LangfuseTraceLink traceUrl={traceUrl} variant="button" showLabel={false} />
+          )}
+        </div>
       </div>
 
       {/* Current Activity - Enhanced */}

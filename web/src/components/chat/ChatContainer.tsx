@@ -8,8 +8,10 @@ import { MessageBubble } from './MessageBubble';
 import { FloatingUsageIndicator } from './UsageDisplay';
 import { Sidebar } from '@/components/sidebar';
 import { AgentMonitorPanel } from '@/components/monitoring/AgentMonitorPanel';
+import { LiveDetailPanel } from '@/components/monitoring/LiveDetailPanel';
 import { ArtifactPanel, Artifact, CodeArtifact } from '@/components/artifacts/ArtifactPanel';
-import { AlertCircle, Bot, LogIn, PanelRightClose, PanelRight, Activity, FileCode } from 'lucide-react';
+import { BreakpointModal } from '@/components/debug/BreakpointModal';
+import { AlertCircle, Bot, LogIn, PanelRightClose, PanelRight, Activity, FileCode, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MilestoneInfo } from '@/types/chat';
@@ -18,13 +20,14 @@ interface ChatContainerProps {
   sessionId?: string;
 }
 
-type RightPanelTab = 'monitor' | 'artifacts';
+type RightPanelTab = 'monitor' | 'artifacts' | 'details';
 
 export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isAuthenticated, isLoading: authLoading, login } = useAuth();
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('monitor');
+  const [breakpointEnabled, setBreakpointEnabled] = useState(false);
 
   const {
     sessionId,
@@ -36,11 +39,21 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
     currentActivity,
     completedAgents,
     agentHistory,
+    breakpoint,
+    isBreakpointLoading,
+    streamingChunks,
+    streamingAgent,
     sendMessage,
     cancelTask,
     createNewChat,
     clearError,
-  } = useChat({ sessionId: initialSessionId });
+    resumeFromBreakpoint,
+    rejectAtBreakpoint,
+  } = useChat({
+    sessionId: initialSessionId,
+    breakpointEnabled,
+    breakpointNodes: ['qa_breakpoint'],
+  });
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -172,6 +185,14 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
       setRightPanelTab('artifacts');
     }
   }, [artifacts.length, isStreaming]);
+
+  // Switch to details tab when breakpoint is hit
+  useEffect(() => {
+    if (breakpoint) {
+      setRightPanelOpen(true);
+      setRightPanelTab('details');
+    }
+  }, [breakpoint]);
 
   return (
     <div className="flex h-screen bg-background">
@@ -317,6 +338,25 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
                 </span>
               )}
             </Button>
+            <Button
+              variant={rightPanelOpen && rightPanelTab === 'details' ? 'secondary' : 'ghost'}
+              size="icon"
+              className="h-9 w-9 relative"
+              onClick={() => {
+                if (rightPanelOpen && rightPanelTab === 'details') {
+                  setRightPanelOpen(false);
+                } else {
+                  setRightPanelOpen(true);
+                  setRightPanelTab('details');
+                }
+              }}
+              title="Live Details"
+            >
+              <Gauge className="h-4 w-4" />
+              {breakpoint && (
+                <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-500 animate-pulse" />
+              )}
+            </Button>
           </div>
           {/* Panel toggle */}
           <Button
@@ -356,9 +396,34 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
                 taskId={latestTaskId}
               />
             )}
+            {rightPanelTab === 'details' && (
+              <LiveDetailPanel
+                milestones={currentMilestones}
+                agentHistory={agentHistory}
+                currentActivity={currentActivity}
+                isStreaming={isStreaming}
+                breakpoint={breakpoint}
+                onResume={resumeFromBreakpoint}
+                onReject={rejectAtBreakpoint}
+                isBreakpointLoading={isBreakpointLoading}
+                streamingChunks={streamingChunks}
+                streamingAgent={streamingAgent}
+                breakpointEnabled={breakpointEnabled}
+                onBreakpointToggle={setBreakpointEnabled}
+              />
+            )}
           </div>
         )}
       </div>
+
+      {/* Breakpoint Modal for Human-in-the-Loop */}
+      <BreakpointModal
+        open={!!breakpoint}
+        breakpoint={breakpoint}
+        onResume={resumeFromBreakpoint}
+        onReject={rejectAtBreakpoint}
+        isLoading={isBreakpointLoading}
+      />
     </div>
   );
 }

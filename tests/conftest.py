@@ -2,6 +2,20 @@
 Pytest configuration and fixtures
 """
 
+import sys
+from unittest.mock import MagicMock
+
+# Patch mcp module early to avoid pydantic compatibility issues
+# This must happen before any agent modules are imported
+if "mcp" not in sys.modules:
+    _mock_mcp = MagicMock()
+    sys.modules["mcp"] = _mock_mcp
+    sys.modules["mcp.client"] = MagicMock()
+    sys.modules["mcp.client.session"] = MagicMock()
+    sys.modules["mcp.client.sse"] = MagicMock()
+    sys.modules["mcp.client.streamable_http"] = MagicMock()
+    sys.modules["mcp.types"] = MagicMock()
+
 import asyncio
 
 import pytest

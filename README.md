@@ -32,6 +32,12 @@
 - **Docker Compose**: Single-command deployment
 - **Type-Safe**: Full type hints with mypy strict mode
 
+### 5. Observability & Debugging
+- **Langfuse Integration**: LLM tracing and observability
+- **Real-time Trace Links**: WebSocket broadcasts include trace URLs
+- **Cost & Token Tracking**: Automatic monitoring via Langfuse
+- **Debug UI**: One-click access to detailed trace analysis
+
 ## Architecture Overview
 
 ### 7 Specialized Agents
@@ -168,6 +174,20 @@ Dashboard will be available at: http://localhost:3000
 3. Wait for container build (automatic)
 4. All services start automatically
 
+**Available Services in DevContainer**:
+| Service     | URL                    | Purpose           |
+| ----------- | ---------------------- | ----------------- |
+| Backend API | http://localhost:18000 | FastAPI REST API  |
+| Frontend    | http://localhost:13000 | Next.js Dashboard |
+| PostgreSQL  | localhost:5433         | Database          |
+| Redis       | localhost:6380         | Cache             |
+| Keycloak    | http://localhost:8080  | Authentication    |
+
+**External Services**:
+| Service        | URL                        | Purpose           |
+| -------------- | -------------------------- | ----------------- |
+| Langfuse Cloud | https://cloud.langfuse.com | LLM Observability |
+
 ## Technology Stack
 
 ### Backend
@@ -186,23 +206,24 @@ Dashboard will be available at: http://localhost:3000
 | **Language Detection** | lingua-py       | 75+ language detection           |
 | **Retry Logic**        | Tenacity        | Exponential backoff              |
 | **Logging**            | Structlog       | Structured JSON logs             |
+| **Observability**      | Langfuse        | LLM tracing & debugging          |
 | **Testing**            | pytest          | Test framework                   |
 | **Type Checking**      | mypy            | Static type analysis             |
 | **Docs**               | MkDocs Material | Documentation                    |
 
 ### Frontend
 
-| Component              | Technology      | Purpose                          |
-| ---------------------- | --------------- | -------------------------------- |
-| **Framework**          | Next.js 16      | React framework with App Router  |
-| **UI Library**         | React 19        | Component-based UI               |
-| **Styling**            | Tailwind CSS    | Utility-first CSS                |
-| **UI Components**      | Radix UI        | Accessible component primitives  |
-| **State Management**   | Zustand         | Lightweight state management     |
-| **Data Fetching**      | SWR             | React hooks for data fetching    |
-| **Charts**             | Recharts        | Data visualization               |
-| **Authentication**     | NextAuth.js     | OAuth/Social login               |
-| **Icons**              | Lucide React    | Icon library                     |
+| Component            | Technology   | Purpose                         |
+| -------------------- | ------------ | ------------------------------- |
+| **Framework**        | Next.js 16   | React framework with App Router |
+| **UI Library**       | React 19     | Component-based UI              |
+| **Styling**          | Tailwind CSS | Utility-first CSS               |
+| **UI Components**    | Radix UI     | Accessible component primitives |
+| **State Management** | Zustand      | Lightweight state management    |
+| **Data Fetching**    | SWR          | React hooks for data fetching   |
+| **Charts**           | Recharts     | Data visualization              |
+| **Authentication**   | NextAuth.js  | OAuth/Social login              |
+| **Icons**            | Lucide React | Icon library                    |
 
 ## Directory Structure
 
@@ -398,6 +419,13 @@ DAILY_COST_LIMIT_USD=50.0
 # LiteLLM
 LITELLM_LOG_LEVEL=INFO
 LITELLM_DROP_PARAMS=true
+
+# Langfuse Cloud (LLM Observability)
+LANGFUSE_ENABLED=true
+LANGFUSE_HOST=https://cloud.langfuse.com
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_SAMPLE_RATE=1.0
 ```
 
 ## Cost Optimization Example

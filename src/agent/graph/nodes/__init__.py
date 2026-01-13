@@ -36,6 +36,7 @@ class Node(StrEnum):
     SELECT_LLM = "select_llm"
     GENERATE_PROMPT = "generate_prompt"
     EXECUTE_WORKER = "execute_worker"
+    QA_BREAKPOINT = "qa_breakpoint"
     VERIFY_QA = "verify_qa"
     CHECK_CONTEXT = "check_context"
     SUMMARIZE = "summarize"

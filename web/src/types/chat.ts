@@ -28,6 +28,8 @@ export interface ChatMessage {
   isStreaming?: boolean;
   artifacts?: ArtifactData[];  // Extracted artifacts from worker output
   rawContent?: string;  // Original content with code blocks (for artifact extraction)
+  /** Langfuse trace URL for debugging and observability (empty string if not available) */
+  traceUrl?: string;
 }
 
 // Milestone information for display

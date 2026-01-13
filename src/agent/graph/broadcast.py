@@ -1,19 +1,25 @@
 """WebSocket broadcast utilities for workflow nodes.
 
 Provides helper functions to broadcast agent status updates
-during workflow execution.
+during workflow execution. Includes Langfuse trace URL for
+observability integration.
 """
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 import structlog
 
 from agent.api.schemas import (
+    BreakpointCurrentState,
+    BreakpointHitPayload,
     MilestoneProgressPayload,
+    TaskCompletedPayload,
     TaskProgressPayload,
+    TaskStartedPayload,
     WSMessage,
     WSMessageType,
 )
@@ -285,5 +291,173 @@ async def broadcast_milestone_retry(
     except Exception as e:
         logger.warning(
             "broadcast_milestone_retry_failed",
+            error=str(e),
+        )
+
+
+async def broadcast_task_started(
+    ws_manager: ConnectionManager | None,
+    session_id: UUID,
+    task_id: UUID,
+    original_request: str,
+    milestone_count: int = 0,
+    trace_url: str = "",
+) -> None:
+    """Broadcast task started notification with Langfuse trace URL.
+
+    Args:
+        ws_manager: WebSocket connection manager
+        session_id: Session ID for broadcast target
+        task_id: Task ID
+        original_request: User's original request
+        milestone_count: Number of milestones (0 if not yet analyzed)
+        trace_url: Langfuse trace URL for observability
+    """
+    if ws_manager is None:
+        return
+
+    try:
+        await ws_manager.broadcast_to_session(
+            session_id,
+            WSMessage(
+                type=WSMessageType.TASK_STARTED,
+                payload=TaskStartedPayload(
+                    task_id=task_id,
+                    session_id=session_id,
+                    original_request=original_request,
+                    milestone_count=milestone_count,
+                    trace_url=trace_url,
+                ).model_dump(),
+            ),
+        )
+        logger.debug(
+            "broadcast_task_started",
+            task_id=str(task_id),
+            trace_url=trace_url,
+        )
+    except Exception as e:
+        logger.warning(
+            "broadcast_task_started_failed",
+            error=str(e),
+        )
+
+
+async def broadcast_task_completed(
+    ws_manager: ConnectionManager | None,
+    session_id: UUID,
+    task_id: UUID,
+    final_result: str,
+    total_tokens: int,
+    total_cost_usd: Decimal | str,
+    duration_seconds: float,
+    trace_url: str = "",
+) -> None:
+    """Broadcast task completed notification with Langfuse trace URL.
+
+    Args:
+        ws_manager: WebSocket connection manager
+        session_id: Session ID for broadcast target
+        task_id: Task ID
+        final_result: Final response content
+        total_tokens: Total tokens used
+        total_cost_usd: Total cost in USD
+        duration_seconds: Task duration
+        trace_url: Langfuse trace URL for observability
+    """
+    if ws_manager is None:
+        return
+
+    try:
+        # Convert string to Decimal if needed
+        cost = Decimal(str(total_cost_usd)) if isinstance(total_cost_usd, str) else total_cost_usd
+
+        await ws_manager.broadcast_to_session(
+            session_id,
+            WSMessage(
+                type=WSMessageType.TASK_COMPLETED,
+                payload=TaskCompletedPayload(
+                    task_id=task_id,
+                    final_result=final_result,
+                    total_tokens=total_tokens,
+                    total_cost_usd=cost,
+                    duration_seconds=duration_seconds,
+                    trace_url=trace_url,
+                ).model_dump(),
+            ),
+        )
+        logger.debug(
+            "broadcast_task_completed",
+            task_id=str(task_id),
+            trace_url=trace_url,
+        )
+    except Exception as e:
+        logger.warning(
+            "broadcast_task_completed_failed",
+            error=str(e),
+        )
+
+
+async def broadcast_breakpoint_hit(
+    ws_manager: ConnectionManager | None,
+    session_id: UUID,
+    task_id: UUID,
+    node_name: str,
+    agent_type: str,
+    current_milestone_index: int,
+    total_milestones: int,
+    milestones: list[dict[str, Any]],
+    last_worker_output: str | None = None,
+    last_qa_result: dict[str, Any] | None = None,
+) -> None:
+    """Broadcast breakpoint hit notification for Human-in-the-Loop.
+
+    Args:
+        ws_manager: WebSocket connection manager
+        session_id: Session ID for broadcast target
+        task_id: Task ID
+        node_name: Name of the node where breakpoint was hit
+        agent_type: Type of agent (conductor, worker, qa, etc)
+        current_milestone_index: Current milestone index (0-based)
+        total_milestones: Total number of milestones
+        milestones: List of milestone data
+        last_worker_output: Last worker output (if any)
+        last_qa_result: Last QA result (if any)
+    """
+    if ws_manager is None:
+        return
+
+    try:
+        current_state = BreakpointCurrentState(
+            current_milestone_index=current_milestone_index,
+            total_milestones=total_milestones,
+            milestones=milestones,
+            last_worker_output=last_worker_output,
+            last_qa_result=last_qa_result,
+        )
+
+        payload = BreakpointHitPayload(
+            task_id=task_id,
+            session_id=session_id,
+            node_name=node_name,
+            agent_type=agent_type,
+            current_state=current_state,
+        )
+
+        await ws_manager.broadcast_to_session(
+            session_id,
+            WSMessage(
+                type=WSMessageType.BREAKPOINT_HIT,
+                payload=payload.model_dump(),
+            ),
+        )
+        logger.info(
+            "broadcast_breakpoint_hit",
+            task_id=str(task_id),
+            node_name=node_name,
+            agent_type=agent_type,
+        )
+    except Exception as e:
+        logger.warning(
+            "broadcast_breakpoint_hit_failed",
             error=str(e),
         )
