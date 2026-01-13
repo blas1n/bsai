@@ -343,3 +343,196 @@ class TestCancelTask:
             response = client.put(f"/api/v1/sessions/{session_id}/tasks/{task_id}/cancel")
 
             assert response.status_code == 403
+
+
+class TestResumeTask:
+    """Tests for PUT /sessions/{session_id}/tasks/{task_id}/resume endpoint."""
+
+    def test_resumes_paused_task(self, client: TestClient) -> None:
+        """Resumes a paused/interrupted task."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        mock_response = TaskResponse(
+            id=task_id,
+            session_id=session_id,
+            original_request="Test",
+            status=TaskStatus.IN_PROGRESS,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            final_result=None,
+        )
+
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.resume_task = AsyncMock(return_value=mock_response)
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/resume",
+                json={},  # Empty body for default values
+            )
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "in_progress"
+
+    def test_resumes_with_user_input(self, client: TestClient) -> None:
+        """Resumes task with user-modified input."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        mock_response = TaskResponse(
+            id=task_id,
+            session_id=session_id,
+            original_request="Test",
+            status=TaskStatus.IN_PROGRESS,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            final_result=None,
+        )
+
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.resume_task = AsyncMock(return_value=mock_response)
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/resume",
+                json={"user_input": "Modified output"},
+            )
+
+            assert response.status_code == 200
+            mock_service.resume_task.assert_called_once()
+            # Check positional arg (user_input is 3rd arg after task_id and user_id)
+            call_args = mock_service.resume_task.call_args[0]
+            assert call_args[2] == "Modified output"
+
+    def test_returns_400_for_completed_task(self, client: TestClient) -> None:
+        """Returns 400 when trying to resume a completed task."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.resume_task = AsyncMock(
+                side_effect=InvalidStateError(
+                    resource="Task",
+                    current_state="completed",
+                    action="resumed",
+                )
+            )
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/resume",
+                json={},
+            )
+
+            assert response.status_code == 400
+
+    def test_returns_404_for_missing_task(self, client: TestClient) -> None:
+        """Returns 404 when task not found."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.resume_task = AsyncMock(side_effect=NotFoundError("Task", task_id))
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/resume",
+                json={},
+            )
+
+            assert response.status_code == 404
+
+
+class TestRejectTask:
+    """Tests for PUT /sessions/{session_id}/tasks/{task_id}/reject endpoint."""
+
+    def test_rejects_task(self, client: TestClient) -> None:
+        """Rejects an in-progress task."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        mock_response = TaskResponse(
+            id=task_id,
+            session_id=session_id,
+            original_request="Test",
+            status=TaskStatus.FAILED,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            final_result="Task rejected by user",
+        )
+
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.reject_task = AsyncMock(return_value=mock_response)
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/reject",
+                json={},
+            )
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "failed"
+
+    def test_rejects_with_reason(self, client: TestClient) -> None:
+        """Rejects task with reason."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        mock_response = TaskResponse(
+            id=task_id,
+            session_id=session_id,
+            original_request="Test",
+            status=TaskStatus.FAILED,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            final_result="Task rejected: Quality not acceptable",
+        )
+
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.reject_task = AsyncMock(return_value=mock_response)
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/reject",
+                json={"reason": "Quality not acceptable"},
+            )
+
+            assert response.status_code == 200
+            mock_service.reject_task.assert_called_once()
+            # Check positional arg (reason is 3rd arg after task_id and user_id)
+            call_args = mock_service.reject_task.call_args[0]
+            assert call_args[2] == "Quality not acceptable"
+
+    def test_returns_400_for_pending_task(self, client: TestClient) -> None:
+        """Returns 400 when trying to reject a pending task."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.reject_task = AsyncMock(
+                side_effect=InvalidStateError(
+                    resource="Task",
+                    current_state="pending",
+                    action="rejected",
+                )
+            )
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/reject",
+                json={},
+            )
+
+            assert response.status_code == 400
+
+
+# Note: Milestones endpoints are in a separate router (milestones.py)
+# with path /tasks/{task_id}/milestones, not under sessions
