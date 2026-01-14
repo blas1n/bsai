@@ -8,8 +8,10 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.events.bus import EventBus
 from agent.graph.state import AgentState, MilestoneData
 from agent.llm import LLMModel
+from agent.services import BreakpointService
 
 
 @pytest.fixture
@@ -22,9 +24,40 @@ def mock_ws_manager() -> MagicMock:
 
 
 @pytest.fixture
-def mock_config(mock_container: MagicMock, mock_ws_manager: MagicMock) -> RunnableConfig:
-    """Create mock RunnableConfig with container and ws_manager."""
-    return RunnableConfig(configurable={"ws_manager": mock_ws_manager, "container": mock_container})
+def mock_event_bus() -> MagicMock:
+    """Create mock event bus."""
+    event_bus = MagicMock(spec=EventBus)
+    event_bus.emit = AsyncMock()
+    return event_bus
+
+
+@pytest.fixture
+def mock_breakpoint_service() -> MagicMock:
+    """Create mock breakpoint service."""
+    service = MagicMock(spec=BreakpointService)
+    service.is_breakpoint_enabled = MagicMock(return_value=False)
+    service.is_paused_at = MagicMock(return_value=False)
+    service.set_paused_at = MagicMock()
+    service.clear_paused_at = MagicMock()
+    return service
+
+
+@pytest.fixture
+def mock_config(
+    mock_container: MagicMock,
+    mock_ws_manager: MagicMock,
+    mock_event_bus: MagicMock,
+    mock_breakpoint_service: MagicMock,
+) -> RunnableConfig:
+    """Create mock RunnableConfig with all required dependencies."""
+    return RunnableConfig(
+        configurable={
+            "ws_manager": mock_ws_manager,
+            "container": mock_container,
+            "event_bus": mock_event_bus,
+            "breakpoint_service": mock_breakpoint_service,
+        }
+    )
 
 
 @pytest.fixture
@@ -89,7 +122,19 @@ def state_with_milestone(base_state: AgentState) -> AgentState:
         qa_feedback=None,
         retry_count=0,
     )
-    # Create a copy of base_state and override milestones
-    state = dict(base_state)
-    state["milestones"] = [milestone]
-    return AgentState(**state)  # type: ignore[misc]
+    return AgentState(
+        session_id=base_state["session_id"],
+        task_id=base_state["task_id"],
+        user_id=base_state["user_id"],
+        original_request=base_state["original_request"],
+        task_status=base_state.get("task_status", TaskStatus.PENDING),
+        milestones=[milestone],
+        current_milestone_index=base_state.get("current_milestone_index", 0),
+        retry_count=base_state.get("retry_count", 0),
+        context_messages=base_state.get("context_messages", []),
+        current_context_tokens=base_state.get("current_context_tokens", 0),
+        max_context_tokens=base_state.get("max_context_tokens", 100000),
+        needs_compression=base_state.get("needs_compression", False),
+        workflow_complete=base_state.get("workflow_complete", False),
+        should_continue=base_state.get("should_continue", True),
+    )

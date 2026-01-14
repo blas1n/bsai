@@ -105,7 +105,7 @@ class TestPromptManager:
             WRONG_KEY = "wrong_key"
 
         with pytest.raises(KeyError, match="not found"):
-            prompt_manager.render("conductor", FakePrompts.WRONG_KEY, test="value")  # type: ignore
+            prompt_manager.render("conductor", FakePrompts.WRONG_KEY, test="value")
 
     def test_render_missing_variable_raises_error(self, prompt_manager: PromptManager) -> None:
         """Test error when template variable is missing."""
@@ -130,7 +130,7 @@ class TestPromptManager:
             WRONG_KEY = "wrong_key"
 
         with pytest.raises(KeyError, match="not found"):
-            prompt_manager.get_data("conductor", FakePrompts.WRONG_KEY)  # type: ignore
+            prompt_manager.get_data("conductor", FakePrompts.WRONG_KEY)
 
     def test_render_template_direct(self, prompt_manager: PromptManager) -> None:
         """Test rendering template string directly."""
@@ -208,11 +208,11 @@ Main content"""
             CONDITIONAL = "conditional"
 
         # With extra
-        result1 = manager.render("test", TestPrompts.CONDITIONAL, show_extra=True)  # type: ignore
+        result1 = manager.render("test", TestPrompts.CONDITIONAL, show_extra=True)
         assert "Extra content" in result1
         assert "Main content" in result1
 
         # Without extra
-        result2 = manager.render("test", TestPrompts.CONDITIONAL, show_extra=False)  # type: ignore
+        result2 = manager.render("test", TestPrompts.CONDITIONAL, show_extra=False)
         assert "Extra content" not in result2
         assert "Main content" in result2

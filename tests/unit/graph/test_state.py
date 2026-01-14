@@ -58,6 +58,7 @@ class TestAgentState:
         state: AgentState = {
             "session_id": uuid4(),
             "task_id": uuid4(),
+            "user_id": "test-user",
             "original_request": "Build a web scraper",
         }
 
@@ -85,6 +86,7 @@ class TestAgentState:
         state: AgentState = {
             "session_id": session_id,
             "task_id": task_id,
+            "user_id": "test-user",
             "original_request": "Build something",
             "task_status": TaskStatus.IN_PROGRESS,
             "milestones": [milestone],
@@ -117,12 +119,13 @@ class TestAgentState:
         state: AgentState = {
             "session_id": uuid4(),
             "task_id": uuid4(),
+            "user_id": "test-user",
             "original_request": "Test",
             "retry_count": 0,
         }
 
         # Simulate partial update (as returned by node functions)
-        update: AgentState = {
+        update: dict[str, int | str] = {
             "retry_count": 1,
             "current_qa_decision": "retry",
         }
@@ -150,20 +153,38 @@ class TestAgentState:
         )
 
         state: AgentState = {
+            "session_id": uuid4(),
+            "task_id": uuid4(),
+            "user_id": "test-user",
+            "original_request": "Test",
             "milestones": [milestone],
             "current_milestone_index": 0,
         }
 
         # Create updated milestone (immutable pattern)
-        updated_milestone = dict(milestone)
-        updated_milestone["status"] = MilestoneStatus.IN_PROGRESS
+        updated_milestone = MilestoneData(
+            id=milestone["id"],
+            description=milestone["description"],
+            complexity=milestone["complexity"],
+            acceptance_criteria=milestone["acceptance_criteria"],
+            status=MilestoneStatus.IN_PROGRESS,
+            selected_model=milestone["selected_model"],
+            generated_prompt=milestone["generated_prompt"],
+            worker_output=milestone["worker_output"],
+            qa_feedback=milestone["qa_feedback"],
+            retry_count=milestone["retry_count"],
+        )
 
         updated_milestones = list(state["milestones"])
-        updated_milestones[0] = MilestoneData(**updated_milestone)  # type: ignore[misc]
+        updated_milestones[0] = updated_milestone
 
         new_state: AgentState = {
-            **state,
+            "session_id": state["session_id"],
+            "task_id": state["task_id"],
+            "user_id": state["user_id"],
+            "original_request": state["original_request"],
             "milestones": updated_milestones,
+            "current_milestone_index": state["current_milestone_index"],
         }
 
         # Original state should be unchanged

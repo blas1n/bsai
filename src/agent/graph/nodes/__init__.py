@@ -5,7 +5,7 @@ Each node:
 2. Calls appropriate agent method
 3. Returns partial state update (immutable)
 4. Handles errors gracefully
-5. Broadcasts WebSocket notifications for real-time UI updates
+5. Emits events via EventBus for real-time UI updates
 
 All nodes follow the pattern of returning partial state dicts
 that LangGraph merges with the existing state.
@@ -24,7 +24,9 @@ from agent.api.websocket.manager import ConnectionManager
 from agent.container import ContainerState
 from agent.db.models.enums import TaskStatus
 from agent.db.repository.task_repo import TaskRepository
+from agent.events import EventBus
 from agent.mcp.executor import McpToolExecutor
+from agent.services import BreakpointService
 
 _logger = structlog.get_logger()
 
@@ -44,24 +46,26 @@ class Node(StrEnum):
     GENERATE_RESPONSE = "generate_response"
 
 
-def get_ws_manager(config: RunnableConfig) -> ConnectionManager:
-    """Extract WebSocket manager from config.
+def get_breakpoint_service(config: RunnableConfig) -> BreakpointService:
+    """Extract BreakpointService from config.
+
+    Used for breakpoint state management (enable/disable, pause tracking).
 
     Args:
         config: LangGraph RunnableConfig
 
     Returns:
-        ConnectionManager instance
+        BreakpointService instance
 
     Raises:
-        RuntimeError: If ws_manager not in config
+        RuntimeError: If breakpoint_service not in config
     """
     configurable = config.get("configurable", {})
-    ws_manager: ConnectionManager | None = configurable.get("ws_manager")
-    if ws_manager is None:
-        msg = "WebSocket manager not found in config. Ensure workflow is run with proper context."
+    breakpoint_service: BreakpointService | None = configurable.get("breakpoint_service")
+    if breakpoint_service is None:
+        msg = "BreakpointService not found in config. Ensure workflow is run with breakpoint_service in configurable."
         raise RuntimeError(msg)
-    return ws_manager
+    return breakpoint_service
 
 
 def get_container(config: RunnableConfig) -> ContainerState:
@@ -96,6 +100,42 @@ def get_mcp_executor(config: RunnableConfig) -> McpToolExecutor | None:
     """
     configurable = config.get("configurable", {})
     return configurable.get("mcp_executor")
+
+
+def get_event_bus(config: RunnableConfig) -> EventBus:
+    """Extract EventBus from config.
+
+    Args:
+        config: LangGraph RunnableConfig
+
+    Returns:
+        EventBus instance
+
+    Raises:
+        RuntimeError: If event_bus not in config
+    """
+    configurable = config.get("configurable", {})
+    event_bus: EventBus | None = configurable.get("event_bus")
+    if event_bus is None:
+        msg = "EventBus not found in config. Ensure workflow is run with event_bus in configurable."
+        raise RuntimeError(msg)
+    return event_bus
+
+
+def get_ws_manager_optional(config: RunnableConfig) -> ConnectionManager | None:
+    """Extract WebSocket manager from config (optional).
+
+    Used only for MCP stdio tool coordination. Returns None if not available,
+    which means MCP stdio tools will not be supported but HTTP/SSE tools will work.
+
+    Args:
+        config: LangGraph RunnableConfig
+
+    Returns:
+        ConnectionManager instance or None if not available
+    """
+    configurable = config.get("configurable", {})
+    return configurable.get("ws_manager")
 
 
 async def check_task_cancelled(
@@ -133,8 +173,10 @@ async def check_task_cancelled(
 
 __all__ = [
     "Node",
-    "get_ws_manager",
+    "get_breakpoint_service",
     "get_container",
     "get_mcp_executor",
+    "get_event_bus",
+    "get_ws_manager_optional",
     "check_task_cancelled",
 ]

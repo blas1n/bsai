@@ -333,6 +333,50 @@ function Component() {
 }
 ```
 
+### 4. Event-Driven WebSocket Handling
+
+The frontend uses explicit status from backend events (no heuristic-based detection):
+
+```tsx
+// hooks/chatEventHandlers.ts - Separated event handlers
+
+// Backend sends explicit status values:
+// AgentStatus: 'started' | 'completed' | 'failed'
+// MilestoneStatus: 'pending' | 'in_progress' | 'passed' | 'failed'
+
+export function handleMilestoneProgress(
+  payload: MilestoneProgressPayload,
+  ctx: ChatEventContext
+): void {
+  // Use EXPLICIT status from payload - no keyword detection needed
+  const isCompletion =
+    payload.status === 'completed' ||
+    payload.status === 'passed' ||
+    payload.status === 'failed';
+
+  // Update UI based on explicit status
+  const activity: AgentActivity = {
+    agent: payload.agent as AgentType,
+    status: isCompletion ? 'completed' : 'running',
+    message: payload.message,
+    // ...
+  };
+}
+
+// useChat.ts - Uses handler map pattern
+const handleWebSocketMessage = useCallback((message: WSMessage) => {
+  const handlers: Record<string, (payload: unknown, ctx: ChatEventContext) => void> = {
+    [WSMessageType.TASK_STARTED]: (p, c) => handleTaskStarted(p as TaskStartedPayload, c),
+    [WSMessageType.MILESTONE_PROGRESS]: (p, c) => handleMilestoneProgress(p as MilestoneProgressPayload, c),
+    [WSMessageType.TASK_COMPLETED]: (p, c) => handleTaskCompleted(p as TaskCompletedPayload, c),
+    // ... other handlers
+  };
+
+  const handler = handlers[message.type];
+  if (handler) handler(message.payload, eventContext);
+}, [eventContext]);
+```
+
 ## File Naming
 
 - Components: `PascalCase.tsx` (e.g., `ChatInput.tsx`)

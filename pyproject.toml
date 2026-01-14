@@ -142,6 +142,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+"migrations/*.py" = ["F401"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -166,9 +167,17 @@ module = [
     "langgraph.graph.graph",
     "langfuse",
     "langfuse.*",
+    "mako",
+    "mako.*",
 ]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "agent.tracing.*"
 disable_error_code = ["attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+disable_error_code = ["arg-type", "misc", "union-attr"]

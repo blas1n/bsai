@@ -98,10 +98,18 @@ export interface TaskFailedPayload {
   failed_milestone?: number;
 }
 
+// Agent status - explicit values from backend (AgentStatus enum)
+export type AgentStatusType = 'started' | 'completed' | 'failed';
+
 export interface MilestoneProgressPayload {
   milestone_id: string;
   task_id: string;
   sequence_number: number;
+  /**
+   * Status field from backend.
+   * For agent events: 'started' | 'completed' | 'failed' (AgentStatus)
+   * For milestone events: 'pending' | 'in_progress' | 'passed' | 'failed' (MilestoneStatus)
+   */
   status: string;
   agent: string;
   message: string;

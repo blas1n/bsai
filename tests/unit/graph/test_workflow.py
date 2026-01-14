@@ -14,6 +14,42 @@ def mock_session() -> AsyncMock:
     return AsyncMock()
 
 
+@pytest.fixture
+def mock_event_bus() -> MagicMock:
+    """Create mock event bus."""
+    from agent.events.bus import EventBus
+
+    event_bus = MagicMock(spec=EventBus)
+    event_bus.emit = AsyncMock()
+    return event_bus
+
+
+@pytest.fixture
+def mock_ws_manager() -> MagicMock:
+    """Create mock WebSocket manager."""
+    from agent.api.websocket.manager import ConnectionManager
+
+    return MagicMock(spec=ConnectionManager)
+
+
+@pytest.fixture
+def mock_cache() -> MagicMock:
+    """Create mock session cache."""
+    from agent.cache import SessionCache
+
+    cache = MagicMock(spec=SessionCache)
+    cache.get_cached_context = AsyncMock(return_value=None)
+    return cache
+
+
+@pytest.fixture
+def mock_breakpoint_service() -> MagicMock:
+    """Create mock breakpoint service."""
+    from agent.services import BreakpointService
+
+    return MagicMock(spec=BreakpointService)
+
+
 class TestBuildWorkflow:
     """Tests for build_workflow function."""
 
@@ -54,23 +90,63 @@ class TestCompileWorkflow:
 class TestWorkflowRunner:
     """Tests for WorkflowRunner class."""
 
-    def test_initialization(self, mock_session: AsyncMock) -> None:
+    def test_initialization(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test WorkflowRunner initialization."""
-        runner = WorkflowRunner(mock_session)
+        runner = WorkflowRunner(
+            mock_session,
+            ws_manager=mock_ws_manager,
+            cache=mock_cache,
+            event_bus=mock_event_bus,
+            breakpoint_service=mock_breakpoint_service,
+        )
 
         assert runner.session is mock_session
-        assert runner.ws_manager is None
+        assert runner.ws_manager is mock_ws_manager
+        assert runner.cache is mock_cache
+        assert runner.event_bus is mock_event_bus
+        assert runner.breakpoint_service is mock_breakpoint_service
 
-    def test_initialization_with_ws_manager(self, mock_session: AsyncMock) -> None:
-        """Test WorkflowRunner initialization with WebSocket manager."""
-        mock_ws_manager = MagicMock()
-        runner = WorkflowRunner(mock_session, ws_manager=mock_ws_manager)
+    def test_initialization_stores_all_dependencies(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
+        """Test WorkflowRunner stores all dependencies."""
+        runner = WorkflowRunner(
+            mock_session,
+            ws_manager=mock_ws_manager,
+            cache=mock_cache,
+            event_bus=mock_event_bus,
+            breakpoint_service=mock_breakpoint_service,
+        )
 
         assert runner.session is mock_session
         assert runner.ws_manager is mock_ws_manager
 
+    def test_initialization_requires_all_arguments(self, mock_session: AsyncMock) -> None:
+        """Test WorkflowRunner requires all arguments."""
+        with pytest.raises(TypeError):
+            WorkflowRunner(mock_session)  # type: ignore[call-arg]
+
     @pytest.mark.asyncio
-    async def test_run_calls_ainvoke(self, mock_session: AsyncMock) -> None:
+    async def test_run_calls_ainvoke(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that run calls ainvoke on the graph."""
         from uuid import uuid4
 
@@ -126,7 +202,13 @@ class TestWorkflowRunner:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             session_id = str(uuid4())
             task_id = str(uuid4())
@@ -143,7 +225,14 @@ class TestWorkflowRunner:
             assert result.interrupted is False
 
     @pytest.mark.asyncio
-    async def test_run_accepts_uuid(self, mock_session: AsyncMock) -> None:
+    async def test_run_accepts_uuid(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that run accepts UUID objects."""
         from uuid import UUID, uuid4
 
@@ -197,7 +286,13 @@ class TestWorkflowRunner:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             session_id = uuid4()
             task_id = uuid4()
@@ -214,7 +309,14 @@ class TestWorkflowRunner:
             assert isinstance(call_args["task_id"], UUID)
 
     @pytest.mark.asyncio
-    async def test_run_with_custom_max_tokens(self, mock_session: AsyncMock) -> None:
+    async def test_run_with_custom_max_tokens(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that run accepts custom max_context_tokens."""
         from uuid import uuid4
 
@@ -268,7 +370,13 @@ class TestWorkflowRunner:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             await runner.run(
                 session_id=str(uuid4()),
@@ -281,7 +389,14 @@ class TestWorkflowRunner:
             assert call_args["max_context_tokens"] == 50000
 
     @pytest.mark.asyncio
-    async def test_run_passes_container_in_config(self, mock_session: AsyncMock) -> None:
+    async def test_run_passes_container_in_config(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that run passes container in config to ainvoke."""
         from uuid import uuid4
 
@@ -335,8 +450,13 @@ class TestWorkflowRunner:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            mock_ws_manager = MagicMock()
-            runner = WorkflowRunner(mock_session, ws_manager=mock_ws_manager)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             await runner.run(
                 session_id=str(uuid4()),
@@ -348,9 +468,17 @@ class TestWorkflowRunner:
             call_config = mock_compiled.ainvoke.call_args[1]["config"]
             assert call_config["configurable"]["container"] is mock_container
             assert call_config["configurable"]["ws_manager"] is mock_ws_manager
+            assert call_config["configurable"]["event_bus"] is mock_event_bus
 
     @pytest.mark.asyncio
-    async def test_run_uses_lifespan_context(self, mock_session: AsyncMock) -> None:
+    async def test_run_uses_lifespan_context(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that run uses lifespan context manager."""
         from uuid import uuid4
 
@@ -404,7 +532,13 @@ class TestWorkflowRunner:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             await runner.run(
                 session_id=str(uuid4()),
@@ -416,7 +550,14 @@ class TestWorkflowRunner:
             mock_lifespan.assert_called_once_with(mock_session)
 
     @pytest.mark.asyncio
-    async def test_run_raises_for_missing_session(self, mock_session: AsyncMock) -> None:
+    async def test_run_raises_for_missing_session(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that run raises ValueError when session not found."""
         from uuid import uuid4
 
@@ -425,7 +566,13 @@ class TestWorkflowRunner:
             mock_session_repo.get_by_id = AsyncMock(return_value=None)
             mock_session_repo_class.return_value = mock_session_repo
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             with pytest.raises(ValueError, match="not found"):
                 await runner.run(
@@ -435,7 +582,14 @@ class TestWorkflowRunner:
                 )
 
     @pytest.mark.asyncio
-    async def test_run_returns_interrupted_result(self, mock_session: AsyncMock) -> None:
+    async def test_run_returns_interrupted_result(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that run returns interrupted result when workflow is paused."""
         from uuid import uuid4
 
@@ -487,7 +641,13 @@ class TestWorkflowRunner:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             result = await runner.run(
                 session_id=str(uuid4()),
@@ -503,7 +663,14 @@ class TestWorkflowRunnerResume:
     """Tests for WorkflowRunner.resume method."""
 
     @pytest.mark.asyncio
-    async def test_resume_calls_ainvoke(self, mock_session: AsyncMock) -> None:
+    async def test_resume_calls_ainvoke(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that resume calls ainvoke on the graph."""
         from uuid import uuid4
 
@@ -531,7 +698,13 @@ class TestWorkflowRunnerResume:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             result = await runner.resume(task_id=str(uuid4()))
 
@@ -539,7 +712,14 @@ class TestWorkflowRunnerResume:
             assert result.interrupted is False
 
     @pytest.mark.asyncio
-    async def test_resume_passes_user_input(self, mock_session: AsyncMock) -> None:
+    async def test_resume_passes_user_input(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that resume passes user_input to ainvoke."""
         from uuid import uuid4
 
@@ -567,7 +747,13 @@ class TestWorkflowRunnerResume:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
             user_input = {"user_input": "Modified output", "rejected": False}
 
             await runner.resume(task_id=str(uuid4()), user_input=user_input)
@@ -576,7 +762,14 @@ class TestWorkflowRunnerResume:
             assert call_args[0][0] == user_input
 
     @pytest.mark.asyncio
-    async def test_resume_detects_interrupt(self, mock_session: AsyncMock) -> None:
+    async def test_resume_detects_interrupt(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that resume detects when workflow is interrupted again."""
         from uuid import uuid4
 
@@ -604,7 +797,13 @@ class TestWorkflowRunnerResume:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             result = await runner.resume(task_id=uuid4())
 
@@ -616,7 +815,14 @@ class TestWorkflowRunnerGetState:
     """Tests for WorkflowRunner.get_state method."""
 
     @pytest.mark.asyncio
-    async def test_get_state_returns_state(self, mock_session: AsyncMock) -> None:
+    async def test_get_state_returns_state(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that get_state returns state from checkpoint."""
         from uuid import uuid4
 
@@ -640,14 +846,27 @@ class TestWorkflowRunnerGetState:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             result = await runner.get_state(uuid4())
 
             assert result == expected_state
 
     @pytest.mark.asyncio
-    async def test_get_state_returns_none_for_empty(self, mock_session: AsyncMock) -> None:
+    async def test_get_state_returns_none_for_empty(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test that get_state returns None when no state exists."""
         from uuid import uuid4
 
@@ -668,7 +887,13 @@ class TestWorkflowRunnerGetState:
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
-            runner = WorkflowRunner(mock_session)
+            runner = WorkflowRunner(
+                mock_session,
+                ws_manager=mock_ws_manager,
+                cache=mock_cache,
+                event_bus=mock_event_bus,
+                breakpoint_service=mock_breakpoint_service,
+            )
 
             result = await runner.get_state(str(uuid4()))
 
@@ -679,7 +904,13 @@ class TestWorkflowRunnerLoadContext:
     """Tests for WorkflowRunner context loading methods."""
 
     @pytest.mark.asyncio
-    async def test_load_previous_context_from_cache(self, mock_session: AsyncMock) -> None:
+    async def test_load_previous_context_from_cache(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test loading context from cache."""
         mock_cache = MagicMock()
         mock_cache.get_cached_context = AsyncMock(
@@ -690,7 +921,13 @@ class TestWorkflowRunnerLoadContext:
             }
         )
 
-        runner = WorkflowRunner(mock_session, cache=mock_cache)
+        runner = WorkflowRunner(
+            mock_session,
+            ws_manager=mock_ws_manager,
+            cache=mock_cache,
+            event_bus=mock_event_bus,
+            breakpoint_service=mock_breakpoint_service,
+        )
 
         from uuid import uuid4
 
@@ -702,11 +939,26 @@ class TestWorkflowRunnerLoadContext:
         assert tokens == 100
 
     @pytest.mark.asyncio
-    async def test_load_previous_context_from_snapshot(self, mock_session: AsyncMock) -> None:
+    async def test_load_previous_context_from_snapshot(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test loading context from memory snapshot."""
         from uuid import uuid4
 
-        runner = WorkflowRunner(mock_session, cache=None)
+        mock_cache = MagicMock()
+        mock_cache.get_cached_context = AsyncMock(return_value=None)
+
+        runner = WorkflowRunner(
+            mock_session,
+            ws_manager=mock_ws_manager,
+            cache=mock_cache,
+            event_bus=mock_event_bus,
+            breakpoint_service=mock_breakpoint_service,
+        )
 
         mock_snapshot = MagicMock()
         mock_snapshot.id = uuid4()
@@ -730,13 +982,26 @@ class TestWorkflowRunnerLoadContext:
         assert tokens == 200
 
     @pytest.mark.asyncio
-    async def test_load_previous_milestones(self, mock_session: AsyncMock) -> None:
+    async def test_load_previous_milestones(
+        self,
+        mock_session: AsyncMock,
+        mock_ws_manager: MagicMock,
+        mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_breakpoint_service: MagicMock,
+    ) -> None:
         """Test loading previous milestones."""
         from uuid import uuid4
 
         from agent.db.models.enums import MilestoneStatus, TaskComplexity
 
-        runner = WorkflowRunner(mock_session)
+        runner = WorkflowRunner(
+            mock_session,
+            ws_manager=mock_ws_manager,
+            cache=mock_cache,
+            event_bus=mock_event_bus,
+            breakpoint_service=mock_breakpoint_service,
+        )
 
         mock_milestone = MagicMock()
         mock_milestone.id = uuid4()

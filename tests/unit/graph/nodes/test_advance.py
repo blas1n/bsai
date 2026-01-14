@@ -1,6 +1,6 @@
 """Tests for advance node."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -38,6 +38,7 @@ class TestAdvanceNode:
         state = AgentState(
             session_id=uuid4(),
             task_id=uuid4(),
+            user_id="test-user",
             original_request="Test",
             milestones=[milestone],
             current_milestone_index=0,
@@ -45,8 +46,7 @@ class TestAdvanceNode:
             retry_count=0,
         )
 
-        with patch("agent.graph.nodes.advance.broadcast_milestone_retry", new_callable=AsyncMock):
-            result = await advance_node(state, mock_config, mock_session)
+        result = await advance_node(state, mock_config, mock_session)
 
         assert result["retry_count"] == 1
         assert result["should_continue"] is False
@@ -75,16 +75,14 @@ class TestAdvanceNode:
         state = AgentState(
             session_id=uuid4(),
             task_id=uuid4(),
+            user_id="test-user",
             original_request="Test",
             milestones=[milestone],
             current_milestone_index=0,
             current_qa_decision=QADecision.FAIL.value,
         )
 
-        with patch(
-            "agent.graph.nodes.advance.broadcast_milestone_completed", new_callable=AsyncMock
-        ):
-            result = await advance_node(state, mock_config, mock_session)
+        result = await advance_node(state, mock_config, mock_session)
 
         assert result["task_status"] == TaskStatus.FAILED
         assert result["workflow_complete"] is True
@@ -126,16 +124,14 @@ class TestAdvanceNode:
         state = AgentState(
             session_id=uuid4(),
             task_id=uuid4(),
+            user_id="test-user",
             original_request="Test",
             milestones=milestones,
             current_milestone_index=0,
             current_qa_decision=QADecision.PASS.value,
         )
 
-        with patch(
-            "agent.graph.nodes.advance.broadcast_milestone_completed", new_callable=AsyncMock
-        ):
-            result = await advance_node(state, mock_config, mock_session)
+        result = await advance_node(state, mock_config, mock_session)
 
         assert result["current_milestone_index"] == 1
         assert result["retry_count"] == 0
@@ -164,16 +160,14 @@ class TestAdvanceNode:
         state = AgentState(
             session_id=uuid4(),
             task_id=uuid4(),
+            user_id="test-user",
             original_request="Test",
             milestones=[milestone],
             current_milestone_index=0,
             current_qa_decision=QADecision.PASS.value,
         )
 
-        with patch(
-            "agent.graph.nodes.advance.broadcast_milestone_completed", new_callable=AsyncMock
-        ):
-            result = await advance_node(state, mock_config, mock_session)
+        result = await advance_node(state, mock_config, mock_session)
 
         assert result["task_status"] == TaskStatus.COMPLETED
         assert result["workflow_complete"] is True

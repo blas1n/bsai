@@ -263,6 +263,94 @@ async def process(
     pass
 ```
 
+## Event-Driven Architecture
+
+### EventBus Pattern
+The agent module uses an event-driven architecture to decouple business logic from notification/persistence concerns.
+
+```python
+from agent.events.bus import get_event_bus
+from agent.events.types import (
+    AgentActivityEvent,
+    AgentStatus,
+    EventType,
+)
+
+# In workflow nodes - emit events instead of direct WebSocket calls
+async def execute_worker_node(state, config, session):
+    event_bus = get_event_bus_from_config(config)
+
+    # Emit event when work starts
+    await event_bus.emit(
+        AgentActivityEvent(
+            type=EventType.AGENT_STARTED,
+            session_id=state["session_id"],
+            task_id=state["task_id"],
+            milestone_id=milestone_id,
+            sequence_number=1,
+            agent="worker",
+            status=AgentStatus.STARTED,  # Explicit status
+            message="Starting execution",
+        )
+    )
+
+    # ... do work ...
+
+    # Emit event when work completes
+    await event_bus.emit(
+        AgentActivityEvent(
+            type=EventType.AGENT_COMPLETED,
+            status=AgentStatus.COMPLETED,  # Explicit status
+            details={"output": result, "tokens_used": 100},
+            # ... other fields
+        )
+    )
+```
+
+### Event Types
+All events inherit from `Event` base class with explicit status fields:
+
+- **Task Events**: `TASK_STARTED`, `TASK_PROGRESS`, `TASK_COMPLETED`, `TASK_FAILED`
+- **Milestone Events**: `MILESTONE_STATUS_CHANGED`, `MILESTONE_COMPLETED`, `MILESTONE_FAILED`, `MILESTONE_RETRY`
+- **Agent Events**: `AGENT_STARTED`, `AGENT_COMPLETED`, `AGENT_FAILED`
+- **LLM Events**: `LLM_CHUNK`, `LLM_COMPLETE`
+- **Context Events**: `CONTEXT_COMPRESSED`
+- **Breakpoint Events**: `BREAKPOINT_HIT`, `BREAKPOINT_RESUMED`
+
+### Explicit Status (No Heuristics)
+The frontend receives explicit status from backend - no keyword-based detection:
+
+```python
+# Backend sends explicit status
+class AgentStatus(StrEnum):
+    STARTED = "started"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class MilestoneStatus(StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    PASSED = "passed"  # Not "completed" - matches backend exactly
+    FAILED = "failed"
+```
+
+### Event Handlers
+Handlers are registered globally in `main.py`:
+
+```python
+from agent.events.bus import get_event_bus
+from agent.events.handlers.websocket_handler import WebSocketEventHandler
+from agent.events.handlers.logging_handler import LoggingEventHandler
+
+# Initialize and register handlers
+event_bus = get_event_bus()
+ws_handler = WebSocketEventHandler(app.state.ws_manager)
+logging_handler = LoggingEventHandler()
+
+event_bus.subscribe_all(ws_handler.handle)
+event_bus.subscribe_all(logging_handler.handle)
+```
+
 ## Common Patterns
 
 ### 1. Dependency Injection

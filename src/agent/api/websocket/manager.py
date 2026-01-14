@@ -8,11 +8,49 @@ from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 import structlog
-from fastapi import WebSocket, WebSocketDisconnect
-
-from agent.cache import SessionCache
+from fastapi import WebSocketDisconnect
 
 from ..schemas import WSMessage
+
+
+class WebSocketProtocol(Protocol):
+    """Protocol for WebSocket connections."""
+
+    async def accept(self) -> None:
+        """Accept the WebSocket connection."""
+        ...
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        """Close the WebSocket connection."""
+        ...
+
+    async def send_json(self, data: dict[str, Any]) -> None:
+        """Send JSON data over the WebSocket."""
+        ...
+
+    async def receive_json(self) -> dict[str, Any]:
+        """Receive JSON data from the WebSocket."""
+        ...
+
+
+class SessionCacheProtocol(Protocol):
+    """Protocol for session cache used by ConnectionManager."""
+
+    async def register_ws_connection(
+        self,
+        session_id: UUID,
+        connection_id: str,
+    ) -> None:
+        """Register WebSocket connection."""
+        ...
+
+    async def unregister_ws_connection(
+        self,
+        session_id: UUID,
+        connection_id: str,
+    ) -> None:
+        """Unregister WebSocket connection."""
+        ...
 
 
 class McpToolExecutorProtocol(Protocol):
@@ -47,19 +85,10 @@ class Connection:
     """Represents a WebSocket connection."""
 
     id: str
-    websocket: WebSocket
+    websocket: WebSocketProtocol
     session_id: UUID | None = None
     user_id: str | None = None
     authenticated: bool = False
-
-
-@dataclass
-class BreakpointState:
-    """Simple breakpoint state for a task - just on/off and current paused milestone."""
-
-    enabled: bool = False
-    # Milestone index currently paused at (None if not paused)
-    paused_at: int | None = None
 
 
 @dataclass
@@ -72,16 +101,15 @@ class ConnectionManager:
     Also manages MCP tool executors for each session.
     """
 
-    cache: SessionCache
+    cache: SessionCacheProtocol
     _connections: dict[str, Connection] = field(default_factory=dict)
     _session_connections: dict[UUID, set[str]] = field(default_factory=dict)
     _mcp_executors: dict[UUID, McpToolExecutorProtocol] = field(default_factory=dict)
-    _breakpoint_states: dict[UUID, BreakpointState] = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def connect(
         self,
-        websocket: WebSocket,
+        websocket: WebSocketProtocol,
         user_id: str | None = None,
     ) -> Connection:
         """Accept a new WebSocket connection.
@@ -383,73 +411,3 @@ class ConnectionManager:
         executor = self._mcp_executors.pop(session_id, None)
         if executor:
             logger.debug("mcp_executor_unregistered", session_id=str(session_id))
-
-    # ==================== Breakpoint State Management ====================
-
-    def set_breakpoint_enabled(self, task_id: UUID, enabled: bool) -> None:
-        """Set breakpoint on/off for a task.
-
-        Args:
-            task_id: Task ID
-            enabled: Whether breakpoint is enabled
-        """
-        if task_id not in self._breakpoint_states:
-            self._breakpoint_states[task_id] = BreakpointState()
-        self._breakpoint_states[task_id].enabled = enabled
-        logger.info("breakpoint_enabled_changed", task_id=str(task_id), enabled=enabled)
-
-    def is_breakpoint_enabled(self, task_id: UUID) -> bool:
-        """Check if breakpoint is enabled for a task.
-
-        Args:
-            task_id: Task ID
-
-        Returns:
-            True if enabled, False otherwise
-        """
-        state = self._breakpoint_states.get(task_id)
-        return state.enabled if state else False
-
-    def set_paused_at(self, task_id: UUID, milestone_index: int) -> None:
-        """Set the milestone index where task is paused.
-
-        Args:
-            task_id: Task ID
-            milestone_index: Current milestone index
-        """
-        if task_id not in self._breakpoint_states:
-            self._breakpoint_states[task_id] = BreakpointState()
-        self._breakpoint_states[task_id].paused_at = milestone_index
-        logger.info("breakpoint_paused_at", task_id=str(task_id), milestone_index=milestone_index)
-
-    def is_paused_at(self, task_id: UUID, milestone_index: int) -> bool:
-        """Check if task is currently paused at this milestone (to skip re-trigger).
-
-        Args:
-            task_id: Task ID
-            milestone_index: Milestone index to check
-
-        Returns:
-            True if paused at this milestone, False otherwise
-        """
-        state = self._breakpoint_states.get(task_id)
-        return state.paused_at == milestone_index if state else False
-
-    def clear_paused_at(self, task_id: UUID) -> None:
-        """Clear the paused state (called after resume).
-
-        Args:
-            task_id: Task ID
-        """
-        state = self._breakpoint_states.get(task_id)
-        if state:
-            state.paused_at = None
-            logger.info("breakpoint_paused_cleared", task_id=str(task_id))
-
-    def remove_breakpoint_state(self, task_id: UUID) -> None:
-        """Remove breakpoint state for a completed task.
-
-        Args:
-            task_id: Task ID
-        """
-        self._breakpoint_states.pop(task_id, None)

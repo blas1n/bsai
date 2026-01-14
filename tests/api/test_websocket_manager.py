@@ -69,7 +69,7 @@ def mock_ws_cache() -> MockSessionCache:
 @pytest.fixture
 def manager(mock_ws_cache: MockSessionCache) -> ConnectionManager:
     """Create connection manager with mock cache."""
-    return ConnectionManager(cache=mock_ws_cache)  # type: ignore[arg-type]
+    return ConnectionManager(cache=mock_ws_cache)
 
 
 class TestConnectionManager:
@@ -83,8 +83,7 @@ class TestConnectionManager:
         """Connect creates and stores connection."""
         websocket = MockWebSocket()
 
-        connection = await manager.connect(websocket)  # type: ignore[arg-type]
-
+        connection = await manager.connect(websocket)
         assert connection.id is not None
         assert websocket.accepted
         assert manager.get_total_connections() == 1
@@ -98,7 +97,7 @@ class TestConnectionManager:
         websocket = MockWebSocket()
 
         connection = await manager.connect(
-            websocket,  # type: ignore[arg-type]
+            websocket,
             user_id="test-user",
         )
 
@@ -112,8 +111,7 @@ class TestConnectionManager:
     ) -> None:
         """Disconnect removes connection from manager."""
         websocket = MockWebSocket()
-        connection = await manager.connect(websocket)  # type: ignore[arg-type]
-
+        connection = await manager.connect(websocket)
         await manager.disconnect(connection)
 
         assert manager.get_total_connections() == 0
@@ -126,8 +124,7 @@ class TestConnectionManager:
         """Subscribe adds connection to session."""
         websocket = MockWebSocket()
         session_id = uuid4()
-        connection = await manager.connect(websocket)  # type: ignore[arg-type]
-
+        connection = await manager.connect(websocket)
         await manager.subscribe_to_session(connection, session_id)
 
         assert connection.session_id == session_id
@@ -140,7 +137,8 @@ class TestConnectionManager:
     ) -> None:
         """Send message delivers to connection."""
         websocket = MockWebSocket()
-        connection = await manager.connect(websocket)  # type: ignore[arg-type]
+        connection = await manager.connect(websocket)
+
         message = WSMessage(
             type=WSMessageType.PONG,
             payload={"test": "data"},
@@ -162,8 +160,9 @@ class TestConnectionManager:
         ws1 = MockWebSocket()
         ws2 = MockWebSocket()
 
-        conn1 = await manager.connect(ws1)  # type: ignore[arg-type]
-        conn2 = await manager.connect(ws2)  # type: ignore[arg-type]
+        conn1 = await manager.connect(ws1)
+        conn2 = await manager.connect(ws2)
+
         await manager.subscribe_to_session(conn1, session_id)
         await manager.subscribe_to_session(conn2, session_id)
 
@@ -198,7 +197,7 @@ class TestConnectionManager:
         """Unsubscribe removes connection from session."""
         websocket = MockWebSocket()
         session_id = uuid4()
-        connection = await manager.connect(websocket)  # type: ignore[arg-type]
+        connection = await manager.connect(websocket)
         await manager.subscribe_to_session(connection, session_id)
 
         await manager.unsubscribe_from_session(connection)

@@ -225,8 +225,9 @@ class TestAuthenticateWebsocketConnection:
 
         async def mock_wait_for(coro: object, timeout: float) -> None:
             # Close the coroutine to prevent "was never awaited" warning
-            if hasattr(coro, "close"):
-                coro.close()  # type: ignore[union-attr]
+            close_method = getattr(coro, "close", None)
+            if close_method is not None:
+                close_method()
             raise TimeoutError()
 
         with patch("agent.api.auth.asyncio.wait_for", side_effect=mock_wait_for):

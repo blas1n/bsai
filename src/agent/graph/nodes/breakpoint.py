@@ -14,10 +14,10 @@ from langgraph.types import interrupt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.db.models.enums import TaskStatus
+from agent.events import BreakpointHitEvent, EventType
 
-from ..broadcast import broadcast_breakpoint_hit
 from ..state import AgentState, MilestoneData
-from . import check_task_cancelled, get_ws_manager
+from . import check_task_cancelled, get_breakpoint_service, get_event_bus
 
 logger = structlog.get_logger()
 
@@ -41,12 +41,13 @@ async def qa_breakpoint_node(
     Returns:
         Partial state with optional user input
     """
-    # Check if breakpoints are enabled - first from dynamic config (WebSocket), then from state
-    ws_manager = get_ws_manager(config)
+    # Check if breakpoints are enabled - first from dynamic config, then from state
+    event_bus = get_event_bus(config)
+    breakpoint_service = get_breakpoint_service(config)
     task_id = state["task_id"]
 
-    # Dynamic config (from WebSocket) takes precedence over initial state
-    breakpoint_enabled = ws_manager.is_breakpoint_enabled(task_id)
+    # Dynamic config takes precedence over initial state
+    breakpoint_enabled = breakpoint_service.is_breakpoint_enabled(task_id)
     if not breakpoint_enabled:
         # Fall back to initial state if no dynamic config
         breakpoint_enabled = state.get("breakpoint_enabled", False)
@@ -70,7 +71,7 @@ async def qa_breakpoint_node(
     milestone_idx = state.get("current_milestone_index", 0)
 
     # Skip if already paused at this milestone (prevents re-triggering after resume)
-    if ws_manager.is_paused_at(task_id, milestone_idx):
+    if breakpoint_service.is_paused_at(task_id, milestone_idx):
         logger.info(
             "qa_breakpoint_already_paused_at",
             task_id=str(task_id),
@@ -110,17 +111,19 @@ async def qa_breakpoint_node(
             }
         )
 
-    # Broadcast breakpoint hit notification
-    await broadcast_breakpoint_hit(
-        ws_manager=ws_manager,
-        session_id=state["session_id"],
-        task_id=state["task_id"],
-        node_name="qa_breakpoint",
-        agent_type="qa",
-        current_milestone_index=idx,
-        total_milestones=len(milestones),
-        milestones=milestones_data,
-        last_worker_output=last_worker_output,
+    # Emit breakpoint hit event
+    await event_bus.emit(
+        BreakpointHitEvent(
+            type=EventType.BREAKPOINT_HIT,
+            session_id=state["session_id"],
+            task_id=state["task_id"],
+            node_name="qa_breakpoint",
+            agent_type="qa",
+            current_milestone_index=idx,
+            total_milestones=len(milestones),
+            milestones=milestones_data,
+            last_worker_output=last_worker_output,
+        )
     )
 
     logger.info(
@@ -130,7 +133,7 @@ async def qa_breakpoint_node(
     )
 
     # Record which milestone is paused (cleared on resume, not cleared on reject with feedback)
-    ws_manager.set_paused_at(task_id, idx)
+    breakpoint_service.set_paused_at(task_id, idx)
 
     # Interrupt workflow and wait for user input
     # User can either:

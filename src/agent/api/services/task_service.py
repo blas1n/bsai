@@ -18,8 +18,10 @@ from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.db.session import get_db_session
+from agent.events import EventBus
 from agent.graph.state import AgentState
 from agent.graph.workflow import WorkflowResult, WorkflowRunner
+from agent.services import BreakpointService
 
 from ..exceptions import AccessDeniedError, InvalidStateError, NotFoundError
 from ..schemas import (
@@ -52,18 +54,24 @@ class TaskService:
         self,
         db_session: AsyncSession,
         cache: SessionCache,
-        ws_manager: ConnectionManager | None = None,
+        event_bus: EventBus,
+        ws_manager: ConnectionManager,
+        breakpoint_service: BreakpointService,
     ) -> None:
         """Initialize task service.
 
         Args:
             db_session: Database session
             cache: Session cache
-            ws_manager: Optional WebSocket manager for streaming
+            event_bus: EventBus for event-driven notifications
+            ws_manager: WebSocket manager for streaming
+            breakpoint_service: BreakpointService for HITL workflows
         """
         self.db = db_session
         self.cache = cache
+        self.event_bus = event_bus
         self.ws_manager = ws_manager
+        self.breakpoint_service = breakpoint_service
         self.session_repo = SessionRepository(db_session)
         self.task_repo = TaskRepository(db_session)
         self.milestone_repo = MilestoneRepository(db_session)
@@ -276,6 +284,9 @@ class TaskService:
         # Invalidate progress cache
         await self.cache.invalidate_task_progress(task_id)
 
+        # Cleanup breakpoint state
+        self.breakpoint_service.cleanup_task(task_id)
+
         logger.info("task_cancelled", task_id=str(task_id))
 
         return TaskResponse.model_validate(cancelled_task)
@@ -367,18 +378,20 @@ class TaskService:
         # Invalidate progress cache
         await self.cache.invalidate_task_progress(task_id)
 
+        # Cleanup breakpoint state
+        self.breakpoint_service.cleanup_task(task_id)
+
         # Notify via WebSocket
-        if self.ws_manager:
-            await self.ws_manager.broadcast_to_session(
-                task.session_id,
-                WSMessage(
-                    type=WSMessageType.TASK_FAILED,
-                    payload=TaskFailedPayload(
-                        task_id=task_id,
-                        error=final_result,
-                    ).model_dump(),
-                ),
-            )
+        await self.ws_manager.broadcast_to_session(
+            task.session_id,
+            WSMessage(
+                type=WSMessageType.TASK_FAILED,
+                payload=TaskFailedPayload(
+                    task_id=task_id,
+                    error=final_result,
+                ).model_dump(),
+            ),
+        )
 
         logger.info(
             "task_rejected",
@@ -407,8 +420,8 @@ class TaskService:
             # Clear the paused state before resuming (only if not rejected with feedback)
             # If rejected with feedback, we want to re-run worker, so keep paused state
             # If rejected without feedback, task will be cancelled anyway
-            if self.ws_manager and not (rejected and user_input):
-                self.ws_manager.clear_paused_at(task_id)
+            if not (rejected and user_input):
+                self.breakpoint_service.clear_paused_at(task_id)
                 logger.info(
                     "breakpoint_paused_state_cleared",
                     task_id=str(task_id),
@@ -419,6 +432,8 @@ class TaskService:
                     db_session,
                     ws_manager=self.ws_manager,
                     cache=self.cache,
+                    event_bus=self.event_bus,
+                    breakpoint_service=self.breakpoint_service,
                 )
 
                 # Prepare resume input with rejected flag if needed
@@ -489,24 +504,26 @@ class TaskService:
                 )
                 await db_session.commit()
 
+                # Cleanup breakpoint state
+                self.breakpoint_service.cleanup_task(task_id)
+
                 # Notify completion
-                if self.ws_manager:
-                    total_tokens = final_state.get("total_input_tokens", 0) + final_state.get(
-                        "total_output_tokens", 0
-                    )
-                    await self.ws_manager.broadcast_to_session(
-                        session_id,
-                        WSMessage(
-                            type=WSMessageType.TASK_COMPLETED,
-                            payload=TaskCompletedPayload(
-                                task_id=task_id,
-                                final_result=final_result or "Task completed",
-                                total_tokens=total_tokens,
-                                total_cost_usd=Decimal(final_state.get("total_cost_usd", "0")),
-                                duration_seconds=0,  # Not tracked for resumed tasks
-                            ).model_dump(),
-                        ),
-                    )
+                total_tokens = final_state.get("total_input_tokens", 0) + final_state.get(
+                    "total_output_tokens", 0
+                )
+                await self.ws_manager.broadcast_to_session(
+                    session_id,
+                    WSMessage(
+                        type=WSMessageType.TASK_COMPLETED,
+                        payload=TaskCompletedPayload(
+                            task_id=task_id,
+                            final_result=final_result or "Task completed",
+                            total_tokens=total_tokens,
+                            total_cost_usd=Decimal(final_state.get("total_cost_usd", "0")),
+                            duration_seconds=0,  # Not tracked for resumed tasks
+                        ).model_dump(),
+                    ),
+                )
 
         except Exception as e:
             logger.exception(
@@ -515,23 +532,25 @@ class TaskService:
                 error=str(e),
             )
 
+            # Cleanup breakpoint state
+            self.breakpoint_service.cleanup_task(task_id)
+
             # Notify failure
-            if self.ws_manager:
-                async for db_session in get_db_session():
-                    task_repo = TaskRepository(db_session)
-                    task = await task_repo.get_by_id(task_id)
-                    if task:
-                        await self.ws_manager.broadcast_to_session(
-                            task.session_id,
-                            WSMessage(
-                                type=WSMessageType.TASK_FAILED,
-                                payload=TaskFailedPayload(
-                                    task_id=task_id,
-                                    error=str(e),
-                                ).model_dump(),
-                            ),
-                        )
-                    break
+            async for db_session in get_db_session():
+                task_repo = TaskRepository(db_session)
+                task = await task_repo.get_by_id(task_id)
+                if task:
+                    await self.ws_manager.broadcast_to_session(
+                        task.session_id,
+                        WSMessage(
+                            type=WSMessageType.TASK_FAILED,
+                            payload=TaskFailedPayload(
+                                task_id=task_id,
+                                error=str(e),
+                            ).model_dump(),
+                        ),
+                    )
+                break
 
     async def get_milestone(
         self,
@@ -636,7 +655,7 @@ class TaskService:
                 break
 
             # Notify task started (streaming only)
-            if stream and self.ws_manager:
+            if stream:
                 # Get previous milestones for session continuity
                 previous_milestones: list[PreviousMilestoneInfo] = []
                 async for db_session in get_db_session():
@@ -670,11 +689,12 @@ class TaskService:
                 )
 
             async for db_session in get_db_session():
-                # Pass ws_manager only when streaming
                 runner = WorkflowRunner(
                     db_session,
-                    ws_manager=self.ws_manager if stream else None,
+                    ws_manager=self.ws_manager,
                     cache=self.cache,
+                    event_bus=self.event_bus,
+                    breakpoint_service=self.breakpoint_service,
                 )
 
                 # Execute workflow
@@ -781,8 +801,11 @@ class TaskService:
                     final_state=final_state,
                 )
 
+                # Cleanup breakpoint state
+                self.breakpoint_service.cleanup_task(task_id)
+
                 # Notify completion after commit (streaming only)
-                if stream and self.ws_manager:
+                if stream:
                     await self.ws_manager.broadcast_to_session(
                         session_id,
                         WSMessage(
@@ -805,7 +828,7 @@ class TaskService:
             )
 
             # Notify failure (streaming only)
-            if stream and self.ws_manager:
+            if stream:
                 await self.ws_manager.broadcast_to_session(
                     session_id,
                     WSMessage(
@@ -827,6 +850,9 @@ class TaskService:
                     final_result=str(e),
                 )
                 await db_session.commit()
+
+            # Cleanup breakpoint state
+            self.breakpoint_service.cleanup_task(task_id)
 
     async def _handle_task_failure(
         self,
@@ -883,8 +909,11 @@ class TaskService:
 
         await db_session.commit()
 
+        # Cleanup breakpoint state
+        self.breakpoint_service.cleanup_task(task_id)
+
         # Notify failure (streaming only)
-        if stream and self.ws_manager:
+        if stream:
             current_idx = final_state.get("current_milestone_index", 0)
             await self.ws_manager.broadcast_to_session(
                 session_id,

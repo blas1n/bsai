@@ -8,8 +8,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from agent.db.models.enums import MilestoneStatus
-
 
 class WSMessageType(StrEnum):
     """WebSocket message types."""
@@ -135,15 +133,21 @@ class TaskFailedPayload(BaseModel):
 
 
 class MilestoneProgressPayload(BaseModel):
-    """Payload for milestone progress events."""
+    """Payload for milestone progress events.
+
+    Used for both milestone status changes and agent activity updates.
+    Status can be:
+    - MilestoneStatus values: pending, in_progress, passed, failed
+    - AgentStatus values: started, completed, failed
+    """
 
     milestone_id: UUID
     task_id: UUID
     sequence_number: int
-    status: MilestoneStatus
+    status: str  # MilestoneStatus or AgentStatus as string
     agent: str
     message: str
-    details: dict[str, Any] = Field(default_factory=dict)  # Additional agent-specific details
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class LLMChunkPayload(BaseModel):

@@ -4,7 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter
 
-from ..dependencies import Cache, CurrentUserId, DBSession
+from ..dependencies import (
+    AppBreakpointService,
+    AppEventBus,
+    Cache,
+    CurrentUserId,
+    DBSession,
+    WSManager,
+)
 from ..schemas import MilestoneDetailResponse, MilestoneResponse
 from ..services import TaskService
 
@@ -20,6 +27,9 @@ async def list_milestones(
     task_id: UUID,
     db: DBSession,
     cache: Cache,
+    event_bus: AppEventBus,
+    ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
     user_id: CurrentUserId,
 ) -> list[MilestoneResponse]:
     """List all milestones for a task.
@@ -28,12 +38,15 @@ async def list_milestones(
         task_id: Task UUID
         db: Database session
         cache: Session cache
+        event_bus: EventBus for event-driven notifications
+        ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
         user_id: Current user ID
 
     Returns:
         List of milestones
     """
-    service = TaskService(db, cache)
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
     return await service.list_milestones(task_id, user_id)
 
 
@@ -47,6 +60,9 @@ async def get_milestone(
     milestone_id: UUID,
     db: DBSession,
     cache: Cache,
+    event_bus: AppEventBus,
+    ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
     user_id: CurrentUserId,
 ) -> MilestoneDetailResponse:
     """Get detailed milestone information.
@@ -56,6 +72,9 @@ async def get_milestone(
         milestone_id: Milestone UUID
         db: Database session
         cache: Session cache
+        event_bus: EventBus for event-driven notifications
+        ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
         user_id: Current user ID
 
     Returns:
@@ -63,5 +82,5 @@ async def get_milestone(
     """
     # task_id is included in path for REST consistency
     _ = task_id
-    service = TaskService(db, cache)
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
     return await service.get_milestone(milestone_id, user_id)

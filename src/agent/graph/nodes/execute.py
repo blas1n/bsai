@@ -14,11 +14,11 @@ from agent.core.artifact_extractor import extract_artifacts
 from agent.db.models.enums import TaskStatus
 from agent.db.repository.artifact_repo import ArtifactRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
+from agent.events import AgentActivityEvent, AgentStatus, EventType
 from agent.llm import ChatMessage
 
-from ..broadcast import broadcast_agent_completed, broadcast_agent_started
 from ..state import AgentState, MilestoneData
-from . import check_task_cancelled, get_container, get_ws_manager
+from . import check_task_cancelled, get_container, get_event_bus, get_ws_manager_optional
 
 logger = structlog.get_logger()
 
@@ -42,7 +42,8 @@ async def execute_worker_node(
         Partial state with worker output and updated context
     """
     container = get_container(config)
-    ws_manager = get_ws_manager(config)
+    event_bus = get_event_bus(config)
+    ws_manager = get_ws_manager_optional(config)  # Optional: for MCP stdio tools only
 
     # Check if task was cancelled before starting
     if await check_task_cancelled(session, state["task_id"]):
@@ -72,18 +73,21 @@ async def execute_worker_node(
         milestone = milestones[idx]
         retry_count = state.get("retry_count", 0)
 
-        # Broadcast worker started
+        # Emit worker started event
         message = (
             "Executing task" if retry_count == 0 else f"Retrying task (attempt {retry_count + 1})"
         )
-        await broadcast_agent_started(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=milestone["id"],
-            sequence_number=idx + 1,
-            agent="worker",
-            message=message,
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_STARTED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=milestone["id"],
+                sequence_number=idx + 1,
+                agent="worker",
+                status=AgentStatus.STARTED,
+                message=message,
+            )
         )
 
         worker = WorkerAgent(
@@ -237,16 +241,19 @@ async def execute_worker_node(
             "artifacts": saved_artifacts,  # Include artifacts in broadcast
         }
 
-        # Broadcast worker completed with output details
-        await broadcast_agent_completed(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=milestone["id"],
-            sequence_number=idx + 1,
-            agent="worker",
-            message=f"Task executed ({response.usage.total_tokens} tokens)",
-            details=worker_details,
+        # Emit worker completed event with output details
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_COMPLETED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=milestone["id"],
+                sequence_number=idx + 1,
+                agent="worker",
+                status=AgentStatus.COMPLETED,
+                message=f"Task executed ({response.usage.total_tokens} tokens)",
+                details=worker_details,
+            )
         )
 
         return {

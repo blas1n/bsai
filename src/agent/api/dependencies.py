@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.cache import SessionCache, get_redis
 from agent.db.session import get_db_session
+from agent.events.bus import EventBus
+from agent.services import BreakpointService
 
 from .auth import get_current_user_id
 from .websocket import ConnectionManager
@@ -45,8 +47,36 @@ def get_ws_manager(request: Request) -> ConnectionManager:
     return manager
 
 
+def get_event_bus(request: Request) -> EventBus:
+    """Get EventBus from app state.
+
+    Args:
+        request: FastAPI request
+
+    Returns:
+        EventBus instance
+    """
+    event_bus: EventBus = request.app.state.event_bus
+    return event_bus
+
+
+def get_breakpoint_service(request: Request) -> BreakpointService:
+    """Get BreakpointService from app state.
+
+    Args:
+        request: FastAPI request
+
+    Returns:
+        BreakpointService instance
+    """
+    breakpoint_service: BreakpointService = request.app.state.breakpoint_service
+    return breakpoint_service
+
+
 # Type aliases for cleaner route signatures
 DBSession = Annotated[AsyncSession, Depends(get_db)]
 Cache = Annotated[SessionCache, Depends(get_cache)]
 CurrentUserId = Annotated[str, Depends(get_current_user_id)]
 WSManager = Annotated[ConnectionManager, Depends(get_ws_manager)]
+AppEventBus = Annotated[EventBus, Depends(get_event_bus)]
+AppBreakpointService = Annotated[BreakpointService, Depends(get_breakpoint_service)]

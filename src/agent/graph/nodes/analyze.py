@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.core import ConductorAgent
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
 from agent.db.repository.milestone_repo import MilestoneRepository
+from agent.events import AgentActivityEvent, AgentStatus, EventType
 
-from ..broadcast import broadcast_agent_completed, broadcast_agent_started
 from ..state import AgentState, MilestoneData
-from . import get_container, get_ws_manager
+from . import get_container, get_event_bus
 
 logger = structlog.get_logger()
 
@@ -39,17 +39,20 @@ async def analyze_task_node(
         Partial state with milestones list and initial status
     """
     container = get_container(config)
-    ws_manager = get_ws_manager(config)
+    event_bus = get_event_bus(config)
 
-    # Broadcast conductor started
-    await broadcast_agent_started(
-        ws_manager=ws_manager,
-        session_id=state["session_id"],
-        task_id=state["task_id"],
-        milestone_id=state["task_id"],  # Use task_id as placeholder
-        sequence_number=0,
-        agent="conductor",
-        message="Analyzing task and planning milestones",
+    # Emit conductor started event
+    await event_bus.emit(
+        AgentActivityEvent(
+            type=EventType.AGENT_STARTED,
+            session_id=state["session_id"],
+            task_id=state["task_id"],
+            milestone_id=state["task_id"],  # Use task_id as placeholder
+            sequence_number=0,
+            agent="conductor",
+            status=AgentStatus.STARTED,
+            message="Analyzing task and planning milestones",
+        )
     )
 
     try:
@@ -127,16 +130,19 @@ async def analyze_task_node(
             ]
         }
 
-        # Broadcast conductor completed with milestone details
-        await broadcast_agent_completed(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=state["task_id"],
-            sequence_number=0,
-            agent="conductor",
-            message=f"Created {len(new_milestones)} milestones (total: {len(all_milestones)})",
-            details=milestone_details,
+        # Emit conductor completed event with milestone details
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_COMPLETED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=state["task_id"],
+                sequence_number=0,
+                agent="conductor",
+                status=AgentStatus.COMPLETED,
+                message=f"Created {len(new_milestones)} milestones (total: {len(all_milestones)})",
+                details=milestone_details,
+            )
         )
 
         # Return combined milestones, starting index after existing ones
