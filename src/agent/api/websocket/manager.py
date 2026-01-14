@@ -16,13 +16,17 @@ from ..schemas import WSMessage
 class WebSocketProtocol(Protocol):
     """Protocol for WebSocket connections."""
 
-    async def accept(self) -> None: ...
+    async def accept(self) -> None:
+        pass
 
-    async def close(self, code: int = 1000, reason: str = "") -> None: ...
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        pass
 
-    async def send_json(self, data: dict[str, Any]) -> None: ...
+    async def send_json(self, data: dict[str, Any]) -> None:
+        pass
 
-    async def receive_json(self) -> dict[str, Any]: ...
+    async def receive_json(self) -> dict[str, Any]:
+        pass
 
 
 class SessionCacheProtocol(Protocol):
@@ -34,7 +38,7 @@ class SessionCacheProtocol(Protocol):
         connection_id: str,
     ) -> None:
         """Register WebSocket connection."""
-        ...
+        pass
 
     async def unregister_ws_connection(
         self,
@@ -42,7 +46,7 @@ class SessionCacheProtocol(Protocol):
         connection_id: str,
     ) -> None:
         """Unregister WebSocket connection."""
-        ...
+        pass
 
 
 class McpToolExecutorProtocol(Protocol):
@@ -57,6 +61,7 @@ class McpToolExecutorProtocol(Protocol):
         success: bool,
         output: dict[str, Any] | None = None,
         error: str | None = None,
+        pass
         execution_time_ms: int | None = None,
     ) -> None:
         """Handle stdio tool execution response from frontend."""
@@ -64,6 +69,7 @@ class McpToolExecutorProtocol(Protocol):
     def handle_approval_response(
         self,
         request_id: str,
+        pass
         approved: bool,
     ) -> None:
         """Handle user approval response from frontend."""
