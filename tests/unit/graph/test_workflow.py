@@ -1,5 +1,6 @@
 """Tests for workflow graph composition."""
 
+import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -133,10 +134,17 @@ class TestWorkflowRunner:
         assert runner.session is mock_session
         assert runner.ws_manager is mock_ws_manager
 
-    def test_initialization_requires_all_arguments(self, mock_session: AsyncMock) -> None:
+    def test_initialization_requires_all_arguments(self) -> None:
         """Test WorkflowRunner requires all arguments."""
-        with pytest.raises(TypeError):
-            WorkflowRunner(mock_session)  # type: ignore[call-arg]
+        sig = inspect.signature(WorkflowRunner.__init__)
+        # Count required parameters (no default value, excluding 'self')
+        required_params = [
+            p
+            for p in sig.parameters.values()
+            if p.name != "self" and p.default is inspect.Parameter.empty
+        ]
+        # WorkflowRunner should require at least 5 parameters
+        assert len(required_params) >= 5, "WorkflowRunner should require all dependencies"
 
     @pytest.mark.asyncio
     async def test_run_calls_ainvoke(
