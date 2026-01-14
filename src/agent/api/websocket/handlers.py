@@ -8,16 +8,16 @@ from uuid import UUID
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
-from agent.cache import SessionCache
 from agent.db.repository.session_repo import SessionRepository
 from agent.db.session import get_db_session
+from agent.services import BreakpointService
 
 from ..auth import authenticate_websocket
 from ..schemas import (
     WSMessage,
     WSMessageType,
 )
-from .manager import Connection, ConnectionManager
+from .manager import Connection, ConnectionManager, SessionCacheProtocol
 
 logger = structlog.get_logger()
 
@@ -31,16 +31,19 @@ class WebSocketHandler:
     def __init__(
         self,
         manager: ConnectionManager,
-        cache: SessionCache,
+        cache: SessionCacheProtocol,
+        breakpoint_service: BreakpointService | None = None,
     ) -> None:
         """Initialize handler.
 
         Args:
             manager: Connection manager
             cache: Session cache
+            breakpoint_service: Breakpoint state manager (optional for compatibility)
         """
         self.manager = manager
         self.cache = cache
+        self.breakpoint_service = breakpoint_service
 
     async def handle_connection(
         self,
@@ -413,8 +416,9 @@ class WebSocketHandler:
             await self._send_error(connection, "Invalid task_id")
             return
 
-        # Update breakpoint enabled state in manager
-        self.manager.set_breakpoint_enabled(task_id, breakpoint_enabled)
+        # Update breakpoint enabled state in breakpoint service
+        if self.breakpoint_service:
+            self.breakpoint_service.set_breakpoint_enabled(task_id, breakpoint_enabled)
 
         logger.info(
             "breakpoint_config_received",

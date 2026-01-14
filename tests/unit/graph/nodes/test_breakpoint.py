@@ -21,19 +21,41 @@ if TYPE_CHECKING:
 def mock_ws_manager() -> MagicMock:
     """Create mock WebSocket manager."""
     manager = MagicMock()
-    manager.is_breakpoint_enabled = MagicMock(return_value=True)
-    manager.is_paused_at = MagicMock(return_value=False)
-    manager.set_paused_at = MagicMock()
     manager.broadcast_to_session = AsyncMock()
     return manager
 
 
 @pytest.fixture
-def mock_config(mock_ws_manager: MagicMock) -> RunnableConfig:
+def mock_event_bus() -> MagicMock:
+    """Create mock event bus."""
+    event_bus = MagicMock()
+    event_bus.emit = AsyncMock()
+    return event_bus
+
+
+@pytest.fixture
+def mock_breakpoint_service() -> MagicMock:
+    """Create mock breakpoint service."""
+    service = MagicMock()
+    service.is_breakpoint_enabled = MagicMock(return_value=True)
+    service.is_paused_at = MagicMock(return_value=False)
+    service.set_paused_at = MagicMock()
+    service.clear_paused_at = MagicMock()
+    return service
+
+
+@pytest.fixture
+def mock_config(
+    mock_ws_manager: MagicMock,
+    mock_event_bus: MagicMock,
+    mock_breakpoint_service: MagicMock,
+) -> RunnableConfig:
     """Create mock RunnableConfig."""
     return RunnableConfig(
         configurable={
             "ws_manager": mock_ws_manager,
+            "event_bus": mock_event_bus,
+            "breakpoint_service": mock_breakpoint_service,
         }
     )
 
@@ -94,30 +116,30 @@ class TestQaBreakpointNode:
     @pytest.mark.asyncio
     async def test_skips_breakpoint_when_disabled(
         self,
-        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
     ) -> None:
         """Skips breakpoint when breakpoints are disabled."""
-        mock_ws_manager.is_breakpoint_enabled.return_value = False
+        mock_breakpoint_service.is_breakpoint_enabled.return_value = False
         base_state["breakpoint_enabled"] = False
 
         result = await qa_breakpoint_node(base_state, mock_config, mock_session)
 
         assert result == {}
-        mock_ws_manager.set_paused_at.assert_not_called()
+        mock_breakpoint_service.set_paused_at.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_skips_when_already_paused_at_milestone(
         self,
-        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
     ) -> None:
         """Skips breakpoint when already paused at this milestone."""
-        mock_ws_manager.is_paused_at.return_value = True
+        mock_breakpoint_service.is_paused_at.return_value = True
 
         result = await qa_breakpoint_node(base_state, mock_config, mock_session)
 
@@ -126,7 +148,6 @@ class TestQaBreakpointNode:
     @pytest.mark.asyncio
     async def test_returns_cancelled_when_task_cancelled(
         self,
-        mock_ws_manager: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
@@ -147,10 +168,11 @@ class TestQaBreakpointNode:
     @pytest.mark.asyncio
     async def test_broadcasts_breakpoint_hit_and_interrupts(
         self,
-        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Broadcasts breakpoint hit and interrupts workflow."""
         with (
@@ -158,10 +180,6 @@ class TestQaBreakpointNode:
                 "agent.graph.nodes.breakpoint.check_task_cancelled",
                 new_callable=AsyncMock,
             ) as mock_check,
-            patch(
-                "agent.graph.nodes.breakpoint.broadcast_breakpoint_hit",
-                new_callable=AsyncMock,
-            ) as mock_broadcast,
             patch("agent.graph.nodes.breakpoint.interrupt") as mock_interrupt,
         ):
             mock_check.return_value = False
@@ -169,15 +187,14 @@ class TestQaBreakpointNode:
 
             result = await qa_breakpoint_node(base_state, mock_config, mock_session)
 
-            mock_broadcast.assert_called_once()
-            mock_ws_manager.set_paused_at.assert_called_once_with(base_state["task_id"], 0)
+            mock_event_bus.emit.assert_called_once()
+            mock_breakpoint_service.set_paused_at.assert_called_once_with(base_state["task_id"], 0)
             mock_interrupt.assert_called_once()
             assert result == {}
 
     @pytest.mark.asyncio
     async def test_handles_user_modified_input(
         self,
-        mock_ws_manager: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
@@ -188,10 +205,6 @@ class TestQaBreakpointNode:
                 "agent.graph.nodes.breakpoint.check_task_cancelled",
                 new_callable=AsyncMock,
             ) as mock_check,
-            patch(
-                "agent.graph.nodes.breakpoint.broadcast_breakpoint_hit",
-                new_callable=AsyncMock,
-            ),
             patch("agent.graph.nodes.breakpoint.interrupt") as mock_interrupt,
         ):
             mock_check.return_value = False
@@ -209,7 +222,6 @@ class TestQaBreakpointNode:
     @pytest.mark.asyncio
     async def test_handles_rejected_with_feedback(
         self,
-        mock_ws_manager: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
@@ -220,10 +232,6 @@ class TestQaBreakpointNode:
                 "agent.graph.nodes.breakpoint.check_task_cancelled",
                 new_callable=AsyncMock,
             ) as mock_check,
-            patch(
-                "agent.graph.nodes.breakpoint.broadcast_breakpoint_hit",
-                new_callable=AsyncMock,
-            ),
             patch("agent.graph.nodes.breakpoint.interrupt") as mock_interrupt,
         ):
             mock_check.return_value = False
@@ -241,7 +249,6 @@ class TestQaBreakpointNode:
     @pytest.mark.asyncio
     async def test_handles_rejected_without_feedback_cancels_task(
         self,
-        mock_ws_manager: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
@@ -252,10 +259,6 @@ class TestQaBreakpointNode:
                 "agent.graph.nodes.breakpoint.check_task_cancelled",
                 new_callable=AsyncMock,
             ) as mock_check,
-            patch(
-                "agent.graph.nodes.breakpoint.broadcast_breakpoint_hit",
-                new_callable=AsyncMock,
-            ),
             patch("agent.graph.nodes.breakpoint.interrupt") as mock_interrupt,
         ):
             mock_check.return_value = False
@@ -274,25 +277,21 @@ class TestQaBreakpointNode:
     @pytest.mark.asyncio
     async def test_uses_dynamic_config_over_state(
         self,
-        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
     ) -> None:
-        """Uses dynamic config from WebSocket over initial state."""
+        """Uses dynamic config from BreakpointService over initial state."""
         # State says disabled, but dynamic config says enabled
         base_state["breakpoint_enabled"] = False
-        mock_ws_manager.is_breakpoint_enabled.return_value = True
+        mock_breakpoint_service.is_breakpoint_enabled.return_value = True
 
         with (
             patch(
                 "agent.graph.nodes.breakpoint.check_task_cancelled",
                 new_callable=AsyncMock,
             ) as mock_check,
-            patch(
-                "agent.graph.nodes.breakpoint.broadcast_breakpoint_hit",
-                new_callable=AsyncMock,
-            ),
             patch("agent.graph.nodes.breakpoint.interrupt") as mock_interrupt,
         ):
             mock_check.return_value = False
@@ -306,10 +305,10 @@ class TestQaBreakpointNode:
     @pytest.mark.asyncio
     async def test_handles_empty_milestones(
         self,
-        mock_ws_manager: MagicMock,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Handles case with no milestones."""
         base_state["milestones"] = []
@@ -320,10 +319,6 @@ class TestQaBreakpointNode:
                 "agent.graph.nodes.breakpoint.check_task_cancelled",
                 new_callable=AsyncMock,
             ) as mock_check,
-            patch(
-                "agent.graph.nodes.breakpoint.broadcast_breakpoint_hit",
-                new_callable=AsyncMock,
-            ) as mock_broadcast,
             patch("agent.graph.nodes.breakpoint.interrupt") as mock_interrupt,
         ):
             mock_check.return_value = False
@@ -331,7 +326,7 @@ class TestQaBreakpointNode:
 
             result = await qa_breakpoint_node(base_state, mock_config, mock_session)
 
-            mock_broadcast.assert_called_once()
+            mock_event_bus.emit.assert_called_once()
             # Should handle empty milestones gracefully
             assert result == {}
 
@@ -339,25 +334,26 @@ class TestQaBreakpointNode:
 class TestNodeHelpers:
     """Tests for helper functions in nodes __init__."""
 
-    def test_get_ws_manager_returns_manager(self) -> None:
+    def test_get_ws_manager_optional_returns_manager(self) -> None:
         """Returns ws_manager from config."""
-        from agent.graph.nodes import get_ws_manager
+        from agent.graph.nodes import get_ws_manager_optional
 
         mock_manager = MagicMock()
         config = RunnableConfig(configurable={"ws_manager": mock_manager})
 
-        result = get_ws_manager(config)
+        result = get_ws_manager_optional(config)
 
         assert result is mock_manager
 
-    def test_get_ws_manager_raises_without_manager(self) -> None:
-        """Raises RuntimeError when ws_manager not in config."""
-        from agent.graph.nodes import get_ws_manager
+    def test_get_ws_manager_optional_returns_none_without_manager(self) -> None:
+        """Returns None when ws_manager not in config."""
+        from agent.graph.nodes import get_ws_manager_optional
 
         config = RunnableConfig(configurable={})
 
-        with pytest.raises(RuntimeError, match="WebSocket manager not found"):
-            get_ws_manager(config)
+        result = get_ws_manager_optional(config)
+
+        assert result is None
 
     def test_get_container_returns_container(self) -> None:
         """Returns container from config."""

@@ -11,6 +11,7 @@ import pytest
 from agent.api.schemas import WSMessageType
 from agent.api.websocket.handlers import WebSocketHandler
 from agent.api.websocket.manager import Connection
+from agent.services import BreakpointService
 
 if TYPE_CHECKING:
     pass
@@ -36,9 +37,21 @@ def mock_cache() -> MagicMock:
 
 
 @pytest.fixture
-def handler(mock_manager: MagicMock, mock_cache: MagicMock) -> WebSocketHandler:
+def mock_breakpoint_service() -> MagicMock:
+    """Create mock breakpoint service."""
+    service = MagicMock(spec=BreakpointService)
+    service.set_breakpoint_enabled = MagicMock()
+    return service
+
+
+@pytest.fixture
+def handler(
+    mock_manager: MagicMock,
+    mock_cache: MagicMock,
+    mock_breakpoint_service: MagicMock,
+) -> WebSocketHandler:
     """Create WebSocket handler."""
-    return WebSocketHandler(mock_manager, mock_cache)
+    return WebSocketHandler(mock_manager, mock_cache, mock_breakpoint_service)
 
 
 @pytest.fixture
@@ -286,7 +299,7 @@ class TestHandleBreakpointConfig:
     async def test_enables_breakpoint(
         self,
         handler: WebSocketHandler,
-        mock_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
         mock_connection: Connection,
     ) -> None:
         """Enables breakpoint for task."""
@@ -300,13 +313,13 @@ class TestHandleBreakpointConfig:
             },
         )
 
-        mock_manager.set_breakpoint_enabled.assert_called_once_with(task_id, True)
+        mock_breakpoint_service.set_breakpoint_enabled.assert_called_once_with(task_id, True)
 
     @pytest.mark.asyncio
     async def test_disables_breakpoint(
         self,
         handler: WebSocketHandler,
-        mock_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
         mock_connection: Connection,
     ) -> None:
         """Disables breakpoint for task."""
@@ -320,7 +333,7 @@ class TestHandleBreakpointConfig:
             },
         )
 
-        mock_manager.set_breakpoint_enabled.assert_called_once_with(task_id, False)
+        mock_breakpoint_service.set_breakpoint_enabled.assert_called_once_with(task_id, False)
 
     @pytest.mark.asyncio
     async def test_fails_without_authentication(

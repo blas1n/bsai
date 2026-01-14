@@ -9,7 +9,7 @@ from typing import Any
 
 import structlog
 import yaml
-from mako.template import Template  # type: ignore[import-untyped]
+from mako.template import Template
 
 logger = structlog.get_logger()
 
@@ -182,7 +182,7 @@ class PromptManager:
         template = self._get_template(template_str, cache_key)
 
         try:
-            rendered: str = template.render(**kwargs)
+            rendered = str(template.render(**kwargs))
             return rendered.strip()
         except Exception as e:
             logger.error(
@@ -267,7 +267,7 @@ class PromptManager:
                 self._template_cache[cache_key] = template
 
         try:
-            rendered: str = template.render(**kwargs)
+            rendered = str(template.render(**kwargs))
             return rendered.strip()
         except Exception as e:
             logger.error(

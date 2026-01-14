@@ -333,6 +333,50 @@ function Component() {
 }
 ```
 
+### 4. Event-Driven WebSocket Handling
+
+The frontend uses explicit status from backend events (no heuristic-based detection):
+
+```tsx
+// hooks/chatEventHandlers.ts - Separated event handlers
+
+// Backend sends explicit status values:
+// AgentStatus: 'started' | 'completed' | 'failed'
+// MilestoneStatus: 'pending' | 'in_progress' | 'passed' | 'failed'
+
+export function handleMilestoneProgress(
+  payload: MilestoneProgressPayload,
+  ctx: ChatEventContext
+): void {
+  // Use EXPLICIT status from payload - no keyword detection needed
+  const isCompletion =
+    payload.status === 'completed' ||
+    payload.status === 'passed' ||
+    payload.status === 'failed';
+
+  // Update UI based on explicit status
+  const activity: AgentActivity = {
+    agent: payload.agent as AgentType,
+    status: isCompletion ? 'completed' : 'running',
+    message: payload.message,
+    // ...
+  };
+}
+
+// useChat.ts - Uses handler map pattern
+const handleWebSocketMessage = useCallback((message: WSMessage) => {
+  const handlers: Record<string, (payload: unknown, ctx: ChatEventContext) => void> = {
+    [WSMessageType.TASK_STARTED]: (p, c) => handleTaskStarted(p as TaskStartedPayload, c),
+    [WSMessageType.MILESTONE_PROGRESS]: (p, c) => handleMilestoneProgress(p as MilestoneProgressPayload, c),
+    [WSMessageType.TASK_COMPLETED]: (p, c) => handleTaskCompleted(p as TaskCompletedPayload, c),
+    // ... other handlers
+  };
+
+  const handler = handlers[message.type];
+  if (handler) handler(message.payload, eventContext);
+}, [eventContext]);
+```
+
 ## File Naming
 
 - Components: `PascalCase.tsx` (e.g., `ChatInput.tsx`)
@@ -340,3 +384,19 @@ function Component() {
 - Utilities: `camelCase.ts` (e.g., `utils.ts`)
 - Types: `camelCase.ts` (e.g., `session.ts`)
 - Pages: `page.tsx` (Next.js App Router convention)
+
+## TODO
+
+### Remember Me Feature
+
+Currently, `offline_access` scope is always included in Keycloak OAuth requests, enabling 30-day refresh tokens for all users.
+
+**Future Enhancement**: Implement "Remember Me" checkbox on login page:
+- When checked: Include `offline_access` scope (30-day session via Keycloak Offline Session)
+- When unchecked: Exclude `offline_access` scope (10-hour session via Keycloak SSO Session)
+
+**Implementation Notes**:
+- Keycloak handles session duration, not frontend
+- SSO Session Max: 10 hours (configured in Keycloak)
+- Offline Session: 30 days idle / 60 days max (configured in Keycloak)
+- See `app/api/auth/[...nextauth]/route.ts` for current implementation

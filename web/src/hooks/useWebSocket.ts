@@ -248,9 +248,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     // Handle initial connection or reconnection due to changes
     if (token) {
       if (isFirstMount) {
-        // Initial connection
+        // Initial connection with small delay to allow port forwarding to stabilize
         console.log('[useWebSocket] Initial connection');
-        connect();
+        setTimeout(() => connect(), 500);
       } else if (tokenChanged) {
         // Token changed - need full reconnect
         console.log('[useWebSocket] Token changed, reconnecting...');

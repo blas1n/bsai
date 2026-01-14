@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.api.config import get_agent_settings
 from agent.db.models.enums import MilestoneStatus, TaskStatus
+from agent.events import EventType, MilestoneRetryEvent, MilestoneStatusChangedEvent
 
-from ..broadcast import broadcast_milestone_completed, broadcast_milestone_retry
 from ..state import AgentState
-from . import get_ws_manager
+from . import get_event_bus
 
 logger = structlog.get_logger()
 
@@ -41,7 +41,7 @@ async def advance_node(
     milestones = state.get("milestones")
     idx = state.get("current_milestone_index")
     qa_decision = state.get("current_qa_decision")
-    ws_manager = get_ws_manager(config)
+    event_bus = get_event_bus(config)
 
     # If workflow is already complete (e.g., cancelled or error), just finalize
     if state.get("workflow_complete") or state.get("error"):
@@ -76,15 +76,20 @@ async def advance_node(
                 max_retries=max_retries,
             )
 
-            # Broadcast milestone failed due to max retries
+            # Emit milestone failed event due to max retries
             if milestone:
-                await broadcast_milestone_completed(
-                    ws_manager=ws_manager,
-                    session_id=state["session_id"],
-                    task_id=state["task_id"],
-                    milestone_id=milestone["id"],
-                    sequence_number=idx + 1,
-                    status=MilestoneStatus.FAILED,
+                await event_bus.emit(
+                    MilestoneStatusChangedEvent(
+                        type=EventType.MILESTONE_FAILED,
+                        session_id=state["session_id"],
+                        task_id=state["task_id"],
+                        milestone_id=milestone["id"],
+                        sequence_number=idx + 1,
+                        previous_status=MilestoneStatus.IN_PROGRESS,
+                        new_status=MilestoneStatus.FAILED,
+                        agent="advance",
+                        message="Failed after maximum retries",
+                    )
                 )
 
             return {
@@ -102,16 +107,19 @@ async def advance_node(
             max_retries=max_retries,
         )
 
-        # Broadcast milestone retry
+        # Emit milestone retry event
         if milestone:
-            await broadcast_milestone_retry(
-                ws_manager=ws_manager,
-                session_id=state["session_id"],
-                task_id=state["task_id"],
-                milestone_id=milestone["id"],
-                sequence_number=idx + 1,
-                retry_count=new_retry,
-                feedback=state.get("current_qa_feedback"),
+            await event_bus.emit(
+                MilestoneRetryEvent(
+                    type=EventType.MILESTONE_RETRY,
+                    session_id=state["session_id"],
+                    task_id=state["task_id"],
+                    milestone_id=milestone["id"],
+                    sequence_number=idx + 1,
+                    retry_count=new_retry,
+                    max_retries=max_retries,
+                    feedback=state.get("current_qa_feedback"),
+                )
             )
 
         return {
@@ -128,15 +136,20 @@ async def advance_node(
             milestone_index=idx,
         )
 
-        # Broadcast milestone failed
+        # Emit milestone failed event
         if milestone:
-            await broadcast_milestone_completed(
-                ws_manager=ws_manager,
-                session_id=state["session_id"],
-                task_id=state["task_id"],
-                milestone_id=milestone["id"],
-                sequence_number=idx + 1,
-                status=MilestoneStatus.FAILED,
+            await event_bus.emit(
+                MilestoneStatusChangedEvent(
+                    type=EventType.MILESTONE_FAILED,
+                    session_id=state["session_id"],
+                    task_id=state["task_id"],
+                    milestone_id=milestone["id"],
+                    sequence_number=idx + 1,
+                    previous_status=MilestoneStatus.IN_PROGRESS,
+                    new_status=MilestoneStatus.FAILED,
+                    agent="advance",
+                    message="Milestone failed QA validation",
+                )
             )
 
         return {
@@ -146,15 +159,20 @@ async def advance_node(
         }
 
     else:  # pass
-        # Broadcast milestone passed
+        # Emit milestone passed event
         if milestone:
-            await broadcast_milestone_completed(
-                ws_manager=ws_manager,
-                session_id=state["session_id"],
-                task_id=state["task_id"],
-                milestone_id=milestone["id"],
-                sequence_number=idx + 1,
-                status=MilestoneStatus.PASSED,
+            await event_bus.emit(
+                MilestoneStatusChangedEvent(
+                    type=EventType.MILESTONE_COMPLETED,
+                    session_id=state["session_id"],
+                    task_id=state["task_id"],
+                    milestone_id=milestone["id"],
+                    sequence_number=idx + 1,
+                    previous_status=MilestoneStatus.IN_PROGRESS,
+                    new_status=MilestoneStatus.PASSED,
+                    agent="advance",
+                    message="Milestone passed QA validation",
+                )
             )
 
         # Move to next milestone

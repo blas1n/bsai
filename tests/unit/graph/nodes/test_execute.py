@@ -25,8 +25,6 @@ class TestExecuteWorkerNode:
         """Test successful worker execution."""
         with (
             patch("agent.graph.nodes.execute.WorkerAgent") as MockWorker,
-            patch("agent.graph.nodes.execute.broadcast_agent_started", new_callable=AsyncMock),
-            patch("agent.graph.nodes.execute.broadcast_agent_completed", new_callable=AsyncMock),
             patch("agent.graph.nodes.execute.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
             patch("agent.graph.nodes.execute.extract_artifacts", return_value=[]),
@@ -97,8 +95,6 @@ class TestExecuteWorkerNode:
 
         with (
             patch("agent.graph.nodes.execute.WorkerAgent") as MockWorker,
-            patch("agent.graph.nodes.execute.broadcast_agent_started", new_callable=AsyncMock),
-            patch("agent.graph.nodes.execute.broadcast_agent_completed", new_callable=AsyncMock),
             patch("agent.graph.nodes.execute.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
             patch("agent.graph.nodes.execute.extract_artifacts", return_value=[]),

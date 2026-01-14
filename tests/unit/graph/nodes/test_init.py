@@ -13,9 +13,11 @@ from agent.db.models.enums import TaskStatus
 from agent.graph.nodes import (
     Node,
     check_task_cancelled,
+    get_breakpoint_service,
     get_container,
+    get_event_bus,
     get_mcp_executor,
-    get_ws_manager,
+    get_ws_manager_optional,
 )
 
 
@@ -40,31 +42,73 @@ class TestNode:
         assert str(Node.ANALYZE_TASK) == "analyze_task"
 
 
-class TestGetWsManager:
-    """Tests for get_ws_manager function."""
+class TestGetWsManagerOptional:
+    """Tests for get_ws_manager_optional function."""
 
-    def test_get_ws_manager_success(self) -> None:
+    def test_get_ws_manager_optional_success(self) -> None:
         """Test getting WebSocket manager from config."""
         mock_manager = MagicMock()
         config: dict[str, Any] = {"configurable": {"ws_manager": mock_manager}}
 
-        result = get_ws_manager(cast(RunnableConfig, config))
+        result = get_ws_manager_optional(cast(RunnableConfig, config))
 
         assert result is mock_manager
 
-    def test_get_ws_manager_not_found(self) -> None:
-        """Test error when WebSocket manager not in config."""
+    def test_get_ws_manager_optional_not_found(self) -> None:
+        """Test returns None when WebSocket manager not in config."""
         config: dict[str, Any] = {"configurable": {}}
 
-        with pytest.raises(RuntimeError, match="WebSocket manager not found"):
-            get_ws_manager(cast(RunnableConfig, config))
+        result = get_ws_manager_optional(cast(RunnableConfig, config))
 
-    def test_get_ws_manager_no_configurable(self) -> None:
-        """Test error when configurable key missing."""
+        assert result is None
+
+    def test_get_ws_manager_optional_no_configurable(self) -> None:
+        """Test returns None when configurable key missing."""
         config: dict[str, Any] = {}
 
-        with pytest.raises(RuntimeError, match="WebSocket manager not found"):
-            get_ws_manager(cast(RunnableConfig, config))
+        result = get_ws_manager_optional(cast(RunnableConfig, config))
+
+        assert result is None
+
+
+class TestGetBreakpointService:
+    """Tests for get_breakpoint_service function."""
+
+    def test_get_breakpoint_service_success(self) -> None:
+        """Test getting BreakpointService from config."""
+        mock_service = MagicMock()
+        config: dict[str, Any] = {"configurable": {"breakpoint_service": mock_service}}
+
+        result = get_breakpoint_service(cast(RunnableConfig, config))
+
+        assert result is mock_service
+
+    def test_get_breakpoint_service_not_found(self) -> None:
+        """Test error when BreakpointService not in config."""
+        config: dict[str, Any] = {"configurable": {}}
+
+        with pytest.raises(RuntimeError, match="BreakpointService not found"):
+            get_breakpoint_service(cast(RunnableConfig, config))
+
+
+class TestGetEventBus:
+    """Tests for get_event_bus function."""
+
+    def test_get_event_bus_success(self) -> None:
+        """Test getting EventBus from config."""
+        mock_bus = MagicMock()
+        config: dict[str, Any] = {"configurable": {"event_bus": mock_bus}}
+
+        result = get_event_bus(cast(RunnableConfig, config))
+
+        assert result is mock_bus
+
+    def test_get_event_bus_not_found(self) -> None:
+        """Test error when EventBus not in config."""
+        config: dict[str, Any] = {"configurable": {}}
+
+        with pytest.raises(RuntimeError, match="EventBus not found"):
+            get_event_bus(cast(RunnableConfig, config))
 
 
 class TestGetContainer:

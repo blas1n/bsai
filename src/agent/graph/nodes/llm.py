@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import ConductorAgent, MetaPrompterAgent
 from agent.db.models.enums import MilestoneStatus
+from agent.events import AgentActivityEvent, AgentStatus, EventType, TaskProgressEvent
 
-from ..broadcast import broadcast_agent_completed, broadcast_agent_started, broadcast_task_progress
 from ..state import AgentState, MilestoneData
-from . import get_container, get_ws_manager
+from . import get_container, get_event_bus
 
 logger = structlog.get_logger()
 
@@ -37,7 +37,7 @@ async def select_llm_node(
         Partial state with selected model in milestone
     """
     container = get_container(config)
-    ws_manager = get_ws_manager(config)
+    event_bus = get_event_bus(config)
 
     try:
         milestones = state.get("milestones")
@@ -47,15 +47,20 @@ async def select_llm_node(
             return {"error": "No milestones available", "error_node": "select_llm"}
 
         milestone = milestones[idx]
+        total_milestones = len(milestones)
 
-        # Broadcast task progress
-        await broadcast_task_progress(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            current_milestone=idx,
-            total_milestones=len(milestones),
-            current_milestone_title=milestone["description"][:50],
+        # Emit task progress event
+        progress = (idx + 1) / total_milestones if total_milestones > 0 else 0.0
+        await event_bus.emit(
+            TaskProgressEvent(
+                type=EventType.TASK_PROGRESS,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                current_milestone=idx + 1,  # 1-based for UI
+                total_milestones=total_milestones,
+                progress=progress,
+                current_milestone_title=milestone["description"][:50],
+            )
         )
 
         conductor = ConductorAgent(
@@ -112,7 +117,7 @@ async def generate_prompt_node(
         Partial state with generated prompt
     """
     container = get_container(config)
-    ws_manager = get_ws_manager(config)
+    event_bus = get_event_bus(config)
 
     try:
         milestones = state.get("milestones")
@@ -123,15 +128,18 @@ async def generate_prompt_node(
 
         milestone = milestones[idx]
 
-        # Broadcast meta_prompter started
-        await broadcast_agent_started(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=milestone["id"],
-            sequence_number=idx + 1,
-            agent="meta_prompter",
-            message="Optimizing prompt for task execution",
+        # Emit meta_prompter started event
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_STARTED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=milestone["id"],
+                sequence_number=idx + 1,
+                agent="meta_prompter",
+                status=AgentStatus.STARTED,
+                message="Optimizing prompt for task execution",
+            )
         )
 
         meta_prompter = MetaPrompterAgent(
@@ -175,16 +183,19 @@ async def generate_prompt_node(
             "milestone_description": milestone["description"],
         }
 
-        # Broadcast meta_prompter completed with prompt details
-        await broadcast_agent_completed(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=milestone["id"],
-            sequence_number=idx + 1,
-            agent="meta_prompter",
-            message="Prompt optimized",
-            details=prompt_details,
+        # Emit meta_prompter completed event with prompt details
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_COMPLETED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=milestone["id"],
+                sequence_number=idx + 1,
+                agent="meta_prompter",
+                status=AgentStatus.COMPLETED,
+                message="Prompt optimized",
+                details=prompt_details,
+            )
         )
 
         return {

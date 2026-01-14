@@ -12,6 +12,9 @@ from fastapi_keycloak_middleware import setup_keycloak_middleware
 from agent.cache import SessionCache
 from agent.cache.redis_client import close_redis, get_redis, init_redis
 from agent.db import close_db, init_db
+from agent.events import EventBus
+from agent.events.handlers import LoggingEventHandler, WebSocketEventHandler
+from agent.services import BreakpointService
 
 from .auth import get_keycloak_config, user_mapper
 from .config import get_api_settings, get_auth_settings, get_database_settings
@@ -56,6 +59,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     cache = SessionCache(get_redis())
     app.state.ws_manager = ConnectionManager(cache=cache)
     logger.info("websocket_manager_initialized")
+
+    # Initialize BreakpointService (singleton for all tasks)
+    app.state.breakpoint_service = BreakpointService()
+    logger.info("breakpoint_service_initialized")
+
+    # Initialize EventBus with handlers (DI via app.state)
+    event_bus = EventBus()
+    ws_handler = WebSocketEventHandler(app.state.ws_manager)
+    logging_handler = LoggingEventHandler()
+    event_bus.subscribe_all(ws_handler.handle)
+    event_bus.subscribe_all(logging_handler.handle)
+    app.state.event_bus = event_bus
+    logger.info("event_bus_initialized")
 
     yield
 

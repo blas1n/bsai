@@ -23,8 +23,9 @@ Exports:
 Example:
     >>> from agent.graph import WorkflowRunner
     >>> async with get_db_session() as session:
-    ...     runner = WorkflowRunner(session)
-    ...     await runner.initialize()
+    ...     runner = WorkflowRunner(
+    ...         session, ws_manager, cache, event_bus, breakpoint_service
+    ...     )
     ...     result = await runner.run(
     ...         session_id="...",
     ...         task_id="...",

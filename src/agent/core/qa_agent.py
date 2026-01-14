@@ -55,7 +55,7 @@ class QAAgent:
         router: LLMRouter,
         prompt_manager: PromptManager,
         session: AsyncSession,
-        ws_manager: ConnectionManager,
+        ws_manager: ConnectionManager | None = None,
     ) -> None:
         """Initialize QA agent.
 
@@ -64,7 +64,7 @@ class QAAgent:
             router: Router for model selection
             prompt_manager: Prompt manager for template rendering
             session: Database session
-            ws_manager: WebSocket manager
+            ws_manager: Optional WebSocket manager for MCP stdio tools
         """
         self.llm_client = llm_client
         self.router = router
@@ -158,7 +158,8 @@ class QAAgent:
                     ws_manager=self.ws_manager,
                 )
                 # Register executor in ConnectionManager for WebSocket access
-                self.ws_manager.register_mcp_executor(session_id, tool_executor)
+                if self.ws_manager:
+                    self.ws_manager.register_mcp_executor(session_id, tool_executor)
                 logger.info(
                     "qa_mcp_enabled",
                     milestone_id=str(milestone_id),

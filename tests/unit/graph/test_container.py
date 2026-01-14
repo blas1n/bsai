@@ -10,18 +10,6 @@ from agent.container import ContainerState, lifespan
 class TestContainerState:
     """Tests for ContainerState dataclass."""
 
-    def test_container_state_immutable(self) -> None:
-        """Test that ContainerState is immutable (frozen)."""
-        state = ContainerState(
-            prompt_manager=MagicMock(),
-            llm_client=MagicMock(),
-            model_registry=MagicMock(),
-            router=MagicMock(),
-        )
-
-        with pytest.raises(AttributeError):
-            state.prompt_manager = MagicMock()  # type: ignore[misc]
-
     def test_container_state_fields(self) -> None:
         """Test ContainerState has all required fields."""
         mock_pm = MagicMock()

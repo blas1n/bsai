@@ -50,4 +50,6 @@ export interface Milestone {
 
 export type TaskComplexity = 'trivial' | 'simple' | 'moderate' | 'complex' | 'context_heavy';
 
-export type MilestoneStatus = 'pending' | 'in_progress' | 'completed' | 'passed' | 'failed';
+// MilestoneStatus - matches backend enum exactly
+// Note: Backend uses 'passed' for successful completion, not 'completed'
+export type MilestoneStatus = 'pending' | 'in_progress' | 'passed' | 'failed';

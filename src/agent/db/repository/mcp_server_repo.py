@@ -38,7 +38,7 @@ class McpServerRepository(BaseRepository[McpServerConfig]):
         stmt = select(McpServerConfig).where(McpServerConfig.user_id == user_id)
 
         if is_active_only:
-            stmt = stmt.where(McpServerConfig.is_active == True)  # noqa: E712
+            stmt = stmt.where(McpServerConfig.is_active.is_(True))
 
         stmt = stmt.order_by(McpServerConfig.created_at.desc())
         result = await self.session.execute(stmt)
@@ -105,13 +105,13 @@ class McpServerRepository(BaseRepository[McpServerConfig]):
         stmt = (
             select(McpServerConfig)
             .where(McpServerConfig.user_id == user_id)
-            .where(McpServerConfig.is_active == True)  # noqa: E712
+            .where(McpServerConfig.is_active.is_(True))
         )
 
         if agent_type == "worker":
-            stmt = stmt.where(McpServerConfig.enabled_for_worker == True)  # noqa: E712
+            stmt = stmt.where(McpServerConfig.enabled_for_worker.is_(True))
         elif agent_type == "qa":
-            stmt = stmt.where(McpServerConfig.enabled_for_qa == True)  # noqa: E712
+            stmt = stmt.where(McpServerConfig.enabled_for_qa.is_(True))
 
         stmt = stmt.order_by(McpServerConfig.created_at.desc())
         result = await self.session.execute(stmt)

@@ -14,6 +14,7 @@ from agent.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundE
 from agent.api.schemas import TaskCreate
 from agent.api.services.task_service import TaskService
 from agent.db.models.enums import SessionStatus, TaskStatus
+from agent.services import BreakpointService
 
 if TYPE_CHECKING:
     pass
@@ -38,9 +39,47 @@ def mock_cache() -> MagicMock:
 
 
 @pytest.fixture
-def task_service(mock_db: AsyncMock, mock_cache: MagicMock) -> TaskService:
+def mock_event_bus() -> MagicMock:
+    """Create mock event bus."""
+    event_bus = MagicMock()
+    event_bus.emit = AsyncMock()
+    return event_bus
+
+
+@pytest.fixture
+def mock_breakpoint_service() -> BreakpointService:
+    """Create real breakpoint service instance.
+
+    BreakpointService is a simple in-memory state manager with no external dependencies,
+    so using a real instance is cleaner and avoids MagicMock coroutine warnings.
+    """
+    return BreakpointService()
+
+
+@pytest.fixture
+def mock_ws_manager() -> MagicMock:
+    """Create mock WebSocket connection manager."""
+    manager = MagicMock()
+    manager.broadcast_to_session = AsyncMock()
+    return manager
+
+
+@pytest.fixture
+def task_service(
+    mock_db: AsyncMock,
+    mock_cache: MagicMock,
+    mock_event_bus: MagicMock,
+    mock_ws_manager: MagicMock,
+    mock_breakpoint_service: MagicMock,
+) -> TaskService:
     """Create task service with mocked dependencies."""
-    return TaskService(mock_db, mock_cache)
+    return TaskService(
+        mock_db,
+        mock_cache,
+        mock_event_bus,
+        mock_ws_manager,
+        mock_breakpoint_service,
+    )
 
 
 class TestCreateAndExecuteTask:
@@ -811,10 +850,16 @@ class TestRejectTask:
         task_id = uuid4()
         user_id = "user-123"
 
+        mock_event_bus = MagicMock()
+        mock_event_bus.emit = AsyncMock()
+
         mock_ws_manager = MagicMock()
         mock_ws_manager.broadcast_to_session = AsyncMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        breakpoint_service = BreakpointService()
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, breakpoint_service
+        )
 
         mock_session = MagicMock()
         mock_session.id = session_id
@@ -1479,10 +1524,15 @@ class TestSaveContextToCache:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Saves context messages to cache."""
         mock_cache.cache_context = AsyncMock()
-        task_service = TaskService(mock_db, mock_cache)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
 
@@ -1514,10 +1564,15 @@ class TestSaveContextToCache:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Skips caching when no context messages."""
         mock_cache.cache_context = AsyncMock()
-        task_service = TaskService(mock_db, mock_cache)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         final_state = AgentState(
@@ -1539,10 +1594,15 @@ class TestSaveContextToCache:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Skips caching when token count is missing."""
         mock_cache.cache_context = AsyncMock()
-        task_service = TaskService(mock_db, mock_cache)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
 
@@ -1578,12 +1638,18 @@ class TestExecuteTask:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Executes task and updates status on success."""
+        mock_event_bus = MagicMock()
+        mock_event_bus.emit = AsyncMock()
+
         mock_ws_manager = MagicMock()
         mock_ws_manager.broadcast_to_session = AsyncMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -1670,9 +1736,14 @@ class TestExecuteTask:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Handles workflow interruption at breakpoint."""
-        task_service = TaskService(mock_db, mock_cache)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -1721,9 +1792,14 @@ class TestExecuteTask:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Handles task failure from workflow."""
-        task_service = TaskService(mock_db, mock_cache)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -1790,12 +1866,18 @@ class TestExecuteTask:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Handles exception during execution."""
+        mock_event_bus = MagicMock()
+        mock_event_bus.emit = AsyncMock()
+
         mock_ws_manager = MagicMock()
         mock_ws_manager.broadcast_to_session = AsyncMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -1812,6 +1894,9 @@ class TestExecuteTask:
             ),
             patch("agent.api.services.task_service.WorkflowRunner") as mock_runner_class,
             patch("agent.api.services.task_service.TaskRepository") as mock_task_repo_class,
+            patch(
+                "agent.api.services.task_service.MilestoneRepository"
+            ) as mock_milestone_repo_class,
         ):
             mock_runner = MagicMock()
             mock_runner.run = AsyncMock(side_effect=Exception("Workflow error"))
@@ -1820,6 +1905,10 @@ class TestExecuteTask:
             mock_task_repo = MagicMock()
             mock_task_repo.update = AsyncMock()
             mock_task_repo_class.return_value = mock_task_repo
+
+            mock_milestone_repo = MagicMock()
+            mock_milestone_repo.get_by_session_id = AsyncMock(return_value=[])
+            mock_milestone_repo_class.return_value = mock_milestone_repo
 
             await task_service._execute_task(
                 session_id=session_id,
@@ -1837,9 +1926,14 @@ class TestExecuteTask:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Uses fallback result from last milestone when final_response is empty."""
-        task_service = TaskService(mock_db, mock_cache)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -1917,9 +2011,14 @@ class TestHandleTaskFailure:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Updates task status to FAILED."""
-        task_service = TaskService(mock_db, mock_cache)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -1977,9 +2076,14 @@ class TestHandleTaskFailure:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Updates session totals even on failure."""
-        task_service = TaskService(mock_db, mock_cache)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2037,12 +2141,18 @@ class TestHandleTaskFailure:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Broadcasts failure notification via WebSocket when streaming."""
+        mock_event_bus = MagicMock()
+        mock_event_bus.emit = AsyncMock()
+
         mock_ws_manager = MagicMock()
         mock_ws_manager.broadcast_to_session = AsyncMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2096,9 +2206,14 @@ class TestHandleTaskFailure:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
+        mock_ws_manager: MagicMock,
+        mock_breakpoint_service: MagicMock,
     ) -> None:
         """Uses default error message when error is not in state."""
-        task_service = TaskService(mock_db, mock_cache)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2147,13 +2262,18 @@ class TestResumeTaskExecution:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Resumes workflow and completes successfully."""
         mock_ws_manager = MagicMock()
         mock_ws_manager.broadcast_to_session = AsyncMock()
-        mock_ws_manager.clear_paused_at = MagicMock()
+        mock_breakpoint_service = MagicMock()
+        mock_breakpoint_service.clear_paused_at = MagicMock()
+        mock_breakpoint_service.cleanup_task = MagicMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2195,7 +2315,7 @@ class TestResumeTaskExecution:
                 user_input="Approved",
             )
 
-            mock_ws_manager.clear_paused_at.assert_called_once_with(task_id)
+            mock_breakpoint_service.clear_paused_at.assert_called_once_with(task_id)
             mock_runner.resume.assert_called_once()
 
     @pytest.mark.asyncio
@@ -2203,12 +2323,17 @@ class TestResumeTaskExecution:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Handles when workflow pauses at another breakpoint after resume."""
         mock_ws_manager = MagicMock()
-        mock_ws_manager.clear_paused_at = MagicMock()
+        mock_breakpoint_service = MagicMock()
+        mock_breakpoint_service.clear_paused_at = MagicMock()
+        mock_breakpoint_service.cleanup_task = MagicMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2246,12 +2371,17 @@ class TestResumeTaskExecution:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Handles when resume returns None (no checkpoint found)."""
         mock_ws_manager = MagicMock()
-        mock_ws_manager.clear_paused_at = MagicMock()
+        mock_breakpoint_service = MagicMock()
+        mock_breakpoint_service.clear_paused_at = MagicMock()
+        mock_breakpoint_service.cleanup_task = MagicMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2282,12 +2412,17 @@ class TestResumeTaskExecution:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Handles task failure after resume."""
         mock_ws_manager = MagicMock()
-        mock_ws_manager.clear_paused_at = MagicMock()
+        mock_breakpoint_service = MagicMock()
+        mock_breakpoint_service.clear_paused_at = MagicMock()
+        mock_breakpoint_service.cleanup_task = MagicMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2341,13 +2476,18 @@ class TestResumeTaskExecution:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Handles exception during resume."""
         mock_ws_manager = MagicMock()
-        mock_ws_manager.clear_paused_at = MagicMock()
         mock_ws_manager.broadcast_to_session = AsyncMock()
+        mock_breakpoint_service = MagicMock()
+        mock_breakpoint_service.clear_paused_at = MagicMock()
+        mock_breakpoint_service.cleanup_task = MagicMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2389,13 +2529,18 @@ class TestResumeTaskExecution:
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Does not clear paused state when rejected with feedback."""
         mock_ws_manager = MagicMock()
-        mock_ws_manager.clear_paused_at = MagicMock()
         mock_ws_manager.broadcast_to_session = AsyncMock()
+        mock_breakpoint_service = MagicMock()
+        mock_breakpoint_service.clear_paused_at = MagicMock()
+        mock_breakpoint_service.cleanup_task = MagicMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2439,20 +2584,25 @@ class TestResumeTaskExecution:
             )
 
             # Should NOT clear paused state when rejected with feedback
-            mock_ws_manager.clear_paused_at.assert_not_called()
+            mock_breakpoint_service.clear_paused_at.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_clears_paused_state_when_rejected_without_feedback(
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Clears paused state and cancels when rejected without feedback."""
         mock_ws_manager = MagicMock()
-        mock_ws_manager.clear_paused_at = MagicMock()
         mock_ws_manager.broadcast_to_session = AsyncMock()
+        mock_breakpoint_service = MagicMock()
+        mock_breakpoint_service.clear_paused_at = MagicMock()
+        mock_breakpoint_service.cleanup_task = MagicMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()
@@ -2496,20 +2646,25 @@ class TestResumeTaskExecution:
             )
 
             # Should clear paused state when rejected without feedback
-            mock_ws_manager.clear_paused_at.assert_called_once_with(task_id)
+            mock_breakpoint_service.clear_paused_at.assert_called_once_with(task_id)
 
     @pytest.mark.asyncio
     async def test_uses_fallback_result_from_milestone_on_resume(
         self,
         mock_db: AsyncMock,
         mock_cache: MagicMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Uses fallback result from milestone when final_response is empty on resume."""
         mock_ws_manager = MagicMock()
         mock_ws_manager.broadcast_to_session = AsyncMock()
-        mock_ws_manager.clear_paused_at = MagicMock()
+        mock_breakpoint_service = MagicMock()
+        mock_breakpoint_service.clear_paused_at = MagicMock()
+        mock_breakpoint_service.cleanup_task = MagicMock()
 
-        task_service = TaskService(mock_db, mock_cache, mock_ws_manager)
+        task_service = TaskService(
+            mock_db, mock_cache, mock_event_bus, mock_ws_manager, mock_breakpoint_service
+        )
 
         session_id = uuid4()
         task_id = uuid4()

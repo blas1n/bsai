@@ -9,11 +9,11 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import SummarizerAgent
+from agent.events import AgentActivityEvent, AgentStatus, EventType
 from agent.llm import ChatMessage
 
-from ..broadcast import broadcast_agent_completed, broadcast_agent_started
 from ..state import AgentState
-from . import get_container, get_ws_manager
+from . import get_container, get_event_bus
 
 logger = structlog.get_logger()
 
@@ -80,22 +80,25 @@ async def summarize_node(
         Partial state with compressed context
     """
     container = get_container(config)
-    ws_manager = get_ws_manager(config)
+    event_bus = get_event_bus(config)
     idx = state.get("current_milestone_index", 0)
     milestones = state.get("milestones", [])
     milestone_id = (
         milestones[idx]["id"] if milestones and idx < len(milestones) else state["task_id"]
     )
 
-    # Broadcast summarizer started
-    await broadcast_agent_started(
-        ws_manager=ws_manager,
-        session_id=state["session_id"],
-        task_id=state["task_id"],
-        milestone_id=milestone_id,
-        sequence_number=idx + 1,
-        agent="summarizer",
-        message="Compressing context to preserve memory",
+    # Emit summarizer started event
+    await event_bus.emit(
+        AgentActivityEvent(
+            type=EventType.AGENT_STARTED,
+            session_id=state["session_id"],
+            task_id=state["task_id"],
+            milestone_id=milestone_id,
+            sequence_number=idx + 1,
+            agent="summarizer",
+            status=AgentStatus.STARTED,
+            message="Compressing context to preserve memory",
+        )
     )
 
     try:
@@ -142,16 +145,19 @@ async def summarize_node(
             * 100,  # Rough estimate
         }
 
-        # Broadcast summarizer completed with details
-        await broadcast_agent_completed(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=milestone_id,
-            sequence_number=idx + 1,
-            agent="summarizer",
-            message=f"Context compressed ({len(context_messages)} → {len(new_context)} messages)",
-            details=summarizer_details,
+        # Emit summarizer completed event with details
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_COMPLETED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=milestone_id,
+                sequence_number=idx + 1,
+                agent="summarizer",
+                status=AgentStatus.COMPLETED,
+                message=f"Context compressed ({len(context_messages)} → {len(new_context)} messages)",
+                details=summarizer_details,
+            )
         )
 
         return {

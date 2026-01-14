@@ -12,7 +12,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agent.api.auth import get_current_user_id
-from agent.api.dependencies import get_cache, get_db, get_ws_manager
+from agent.api.dependencies import (
+    get_breakpoint_service,
+    get_cache,
+    get_db,
+    get_event_bus,
+    get_ws_manager,
+)
 from agent.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
 from agent.api.handlers import register_exception_handlers
 from agent.api.routers.tasks import router
@@ -43,12 +49,22 @@ def app() -> FastAPI:
     def mock_get_ws_manager():
         return MagicMock()
 
+    def mock_get_event_bus():
+        mock_bus = MagicMock()
+        mock_bus.emit = AsyncMock()
+        return mock_bus
+
+    def mock_get_breakpoint_service():
+        return MagicMock()
+
     async def mock_get_user_id():
         return "test-user-123"
 
     app.dependency_overrides[get_db] = mock_get_db
     app.dependency_overrides[get_cache] = mock_get_cache
     app.dependency_overrides[get_ws_manager] = mock_get_ws_manager
+    app.dependency_overrides[get_event_bus] = mock_get_event_bus
+    app.dependency_overrides[get_breakpoint_service] = mock_get_breakpoint_service
     app.dependency_overrides[get_current_user_id] = mock_get_user_id
 
     return app

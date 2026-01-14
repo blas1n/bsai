@@ -9,10 +9,10 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import ResponderAgent
+from agent.events import AgentActivityEvent, AgentStatus, EventType
 
-from ..broadcast import broadcast_agent_completed, broadcast_agent_started
 from ..state import AgentState
-from . import get_container, get_ws_manager
+from . import get_container, get_event_bus
 
 logger = structlog.get_logger()
 
@@ -36,7 +36,7 @@ async def generate_response_node(
         Partial state with final_response
     """
     container = get_container(config)
-    ws_manager = get_ws_manager(config)
+    event_bus = get_event_bus(config)
 
     # If there was an error or cancellation, return the error message as final response
     if state.get("error"):
@@ -51,15 +51,18 @@ async def generate_response_node(
         }
 
     try:
-        # Broadcast responder started
-        await broadcast_agent_started(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=state["task_id"],  # Use task_id as placeholder
-            sequence_number=0,
-            agent="responder",
-            message="Generating final response",
+        # Emit responder started event
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_STARTED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=state["task_id"],  # Use task_id as placeholder
+                sequence_number=0,
+                agent="responder",
+                status=AgentStatus.STARTED,
+                message="Generating final response",
+            )
         )
 
         responder = ResponderAgent(
@@ -99,16 +102,19 @@ async def generate_response_node(
             "has_artifacts": has_artifacts,
         }
 
-        # Broadcast responder completed
-        await broadcast_agent_completed(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=state["task_id"],
-            sequence_number=0,
-            agent="responder",
-            message="Response ready",
-            details=response_details,
+        # Emit responder completed event
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_COMPLETED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=state["task_id"],
+                sequence_number=0,
+                agent="responder",
+                status=AgentStatus.COMPLETED,
+                message="Response ready",
+                details=response_details,
+            )
         )
 
         return {

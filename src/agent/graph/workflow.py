@@ -25,7 +25,9 @@ from agent.db.repository.artifact_repo import ArtifactRepository
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
+from agent.events import EventBus
 from agent.llm import ChatMessage
+from agent.services import BreakpointService
 from agent.tracing import get_langfuse_callback, get_langfuse_tracer
 
 from .checkpointer import get_checkpointer
@@ -235,19 +237,25 @@ class WorkflowRunner:
     def __init__(
         self,
         session: AsyncSession,
-        ws_manager: ConnectionManager | None = None,
-        cache: SessionCache | None = None,
+        ws_manager: ConnectionManager,
+        cache: SessionCache,
+        event_bus: EventBus,
+        breakpoint_service: BreakpointService,
     ) -> None:
         """Initialize workflow runner.
 
         Args:
             session: Database session for the workflow
-            ws_manager: Optional WebSocket manager for real-time updates
-            cache: Optional session cache for context persistence
+            ws_manager: WebSocket manager for MCP stdio tools
+            cache: Session cache for context persistence
+            event_bus: EventBus for event-driven notifications
+            breakpoint_service: BreakpointService for HITL workflows
         """
         self.session = session
         self.ws_manager = ws_manager
         self.cache = cache
+        self.event_bus = event_bus
+        self.breakpoint_service = breakpoint_service
         self._tracer = get_langfuse_tracer()
 
     async def _load_previous_milestones(
@@ -330,23 +338,22 @@ class WorkflowRunner:
         token_count = 0
 
         # Try cache first
-        if self.cache:
-            cached = await self.cache.get_cached_context(session_id)
-            if cached:
-                messages_data = cached.get("messages", [])
-                context_messages = [
-                    ChatMessage(role=m["role"], content=m["content"]) for m in messages_data
-                ]
-                context_summary = cached.get("summary")
-                token_count = cached["token_count"]
-                logger.info(
-                    "context_loaded_from_cache",
-                    session_id=str(session_id),
-                    message_count=len(context_messages),
-                    has_summary=context_summary is not None,
-                    token_count=token_count,
-                )
-                return context_messages, context_summary, token_count
+        cached = await self.cache.get_cached_context(session_id)
+        if cached:
+            messages_data = cached.get("messages", [])
+            context_messages = [
+                ChatMessage(role=m["role"], content=m["content"]) for m in messages_data
+            ]
+            context_summary = cached.get("summary")
+            token_count = cached["token_count"]
+            logger.info(
+                "context_loaded_from_cache",
+                session_id=str(session_id),
+                message_count=len(context_messages),
+                has_summary=context_summary is not None,
+                token_count=token_count,
+            )
+            return context_messages, context_summary, token_count
 
         # Fall back to memory snapshot
         snapshot_repo = MemorySnapshotRepository(self.session)
@@ -521,6 +528,8 @@ class WorkflowRunner:
                         "ws_manager": self.ws_manager,
                         "container": container,
                         "trace_url": trace_url,
+                        "event_bus": self.event_bus,
+                        "breakpoint_service": self.breakpoint_service,
                     },
                 }
 
@@ -589,6 +598,8 @@ class WorkflowRunner:
                         "thread_id": thread_id,
                         "ws_manager": self.ws_manager,
                         "container": container,
+                        "event_bus": self.event_bus,
+                        "breakpoint_service": self.breakpoint_service,
                     },
                 }
 

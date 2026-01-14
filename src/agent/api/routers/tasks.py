@@ -6,7 +6,14 @@ from fastapi import APIRouter, status
 
 from agent.db.models.enums import TaskStatus
 
-from ..dependencies import Cache, CurrentUserId, DBSession, WSManager
+from ..dependencies import (
+    AppBreakpointService,
+    AppEventBus,
+    Cache,
+    CurrentUserId,
+    DBSession,
+    WSManager,
+)
 from ..schemas import (
     PaginatedResponse,
     TaskCreate,
@@ -31,7 +38,9 @@ async def create_task(
     request: TaskCreate,
     db: DBSession,
     cache: Cache,
+    event_bus: AppEventBus,
     ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
     user_id: CurrentUserId,
 ) -> TaskResponse:
     """Create a new task and start execution.
@@ -44,13 +53,15 @@ async def create_task(
         request: Task creation request
         db: Database session
         cache: Session cache
+        event_bus: EventBus for event-driven notifications
         ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
         user_id: Current user ID
 
     Returns:
         Created task (202 Accepted)
     """
-    service = TaskService(db, cache, ws_manager)
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
     return await service.create_and_execute_task(
         session_id=session_id,
         user_id=user_id,
@@ -67,7 +78,9 @@ async def list_tasks(
     session_id: UUID,
     db: DBSession,
     cache: Cache,
+    event_bus: AppEventBus,
     ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
     user_id: CurrentUserId,
     status: TaskStatus | None = None,
     limit: int = 20,
@@ -79,7 +92,9 @@ async def list_tasks(
         session_id: Session UUID
         db: Database session
         cache: Session cache
+        event_bus: EventBus for event-driven notifications
         ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
         user_id: Current user ID
         status: Optional status filter
         limit: Maximum results per page
@@ -88,7 +103,7 @@ async def list_tasks(
     Returns:
         Paginated list of tasks
     """
-    service = TaskService(db, cache, ws_manager)
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
     return await service.list_tasks(
         session_id=session_id,
         user_id=user_id,
@@ -108,7 +123,9 @@ async def get_task(
     task_id: UUID,
     db: DBSession,
     cache: Cache,
+    event_bus: AppEventBus,
     ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
     user_id: CurrentUserId,
 ) -> TaskDetailResponse:
     """Get detailed task information including milestones.
@@ -118,7 +135,9 @@ async def get_task(
         task_id: Task UUID
         db: Database session
         cache: Session cache
+        event_bus: EventBus for event-driven notifications
         ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
         user_id: Current user ID
 
     Returns:
@@ -127,7 +146,7 @@ async def get_task(
     # session_id is included in path for REST consistency
     # but task_id is globally unique
     _ = session_id
-    service = TaskService(db, cache, ws_manager)
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
     return await service.get_task(task_id, user_id)
 
 
@@ -141,7 +160,9 @@ async def cancel_task(
     task_id: UUID,
     db: DBSession,
     cache: Cache,
+    event_bus: AppEventBus,
     ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
     user_id: CurrentUserId,
 ) -> TaskResponse:
     """Cancel a running task.
@@ -153,14 +174,16 @@ async def cancel_task(
         task_id: Task UUID
         db: Database session
         cache: Session cache
+        event_bus: EventBus for event-driven notifications
         ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
         user_id: Current user ID
 
     Returns:
         Updated task
     """
     _ = session_id
-    service = TaskService(db, cache, ws_manager)
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
     return await service.cancel_task(task_id, user_id)
 
 
@@ -175,7 +198,9 @@ async def resume_task(
     request: TaskResume,
     db: DBSession,
     cache: Cache,
+    event_bus: AppEventBus,
     ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
     user_id: CurrentUserId,
 ) -> TaskResponse:
     """Resume a task that is paused at a breakpoint.
@@ -189,14 +214,16 @@ async def resume_task(
         request: Resume request with optional user input
         db: Database session
         cache: Session cache
+        event_bus: EventBus for event-driven notifications
         ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
         user_id: Current user ID
 
     Returns:
         Updated task
     """
     _ = session_id
-    service = TaskService(db, cache, ws_manager)
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
     return await service.resume_task(task_id, user_id, request.user_input, request.rejected)
 
 
@@ -211,7 +238,9 @@ async def reject_task(
     request: TaskReject,
     db: DBSession,
     cache: Cache,
+    event_bus: AppEventBus,
     ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
     user_id: CurrentUserId,
 ) -> TaskResponse:
     """Reject and cancel a task at a breakpoint.
@@ -225,12 +254,14 @@ async def reject_task(
         request: Reject request with optional reason
         db: Database session
         cache: Session cache
+        event_bus: EventBus for event-driven notifications
         ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
         user_id: Current user ID
 
     Returns:
         Updated task (with FAILED status)
     """
     _ = session_id
-    service = TaskService(db, cache, ws_manager)
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
     return await service.reject_task(task_id, user_id, request.reason)

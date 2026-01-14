@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import QAAgent, QADecision
 from agent.db.models.enums import MilestoneStatus, TaskStatus
+from agent.events import AgentActivityEvent, AgentStatus, EventType
 
-from ..broadcast import broadcast_agent_completed, broadcast_agent_started
 from ..state import AgentState, MilestoneData
-from . import check_task_cancelled, get_container, get_ws_manager
+from . import check_task_cancelled, get_container, get_event_bus, get_ws_manager_optional
 
 logger = structlog.get_logger()
 
@@ -37,7 +37,8 @@ async def verify_qa_node(
         Partial state with QA decision and feedback
     """
     container = get_container(config)
-    ws_manager = get_ws_manager(config)
+    event_bus = get_event_bus(config)
+    ws_manager = get_ws_manager_optional(config)  # Optional: for MCP stdio tools only
 
     # Check if task was cancelled before starting
     if await check_task_cancelled(session, state["task_id"]):
@@ -59,15 +60,18 @@ async def verify_qa_node(
         milestone = milestones[idx]
         retry_count = state.get("retry_count", 0)
 
-        # Broadcast QA started
-        await broadcast_agent_started(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=milestone["id"],
-            sequence_number=idx + 1,
-            agent="qa",
-            message="Validating output quality",
+        # Emit QA started event
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_STARTED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=milestone["id"],
+                sequence_number=idx + 1,
+                agent="qa",
+                status=AgentStatus.STARTED,
+                message="Validating output quality",
+            )
         )
 
         qa = QAAgent(
@@ -128,18 +132,25 @@ async def verify_qa_node(
             "max_retries": 3,
         }
 
-        # Use the status from the typed MilestoneData
+        # Emit QA completed event with decision
         qa_status = MilestoneStatus(updated_milestone["status"])
-        await broadcast_agent_completed(
-            ws_manager=ws_manager,
-            session_id=state["session_id"],
-            task_id=state["task_id"],
-            milestone_id=milestone["id"],
-            sequence_number=idx + 1,
-            agent="qa",
-            message=qa_message,
-            status=qa_status,
-            details=qa_details,
+        # Determine agent status based on QA decision
+        agent_status = (
+            AgentStatus.COMPLETED if decision == QADecision.PASS else AgentStatus.COMPLETED
+        )
+        qa_details["milestone_status"] = qa_status.value
+        await event_bus.emit(
+            AgentActivityEvent(
+                type=EventType.AGENT_COMPLETED,
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=milestone["id"],
+                sequence_number=idx + 1,
+                agent="qa",
+                status=agent_status,
+                message=qa_message,
+                details=qa_details,
+            )
         )
 
         return {

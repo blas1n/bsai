@@ -1,6 +1,6 @@
 """Tests for QA verification node."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -48,8 +48,6 @@ class TestVerifyQaNode:
 
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
-            patch("agent.graph.nodes.qa.broadcast_agent_started", new_callable=AsyncMock),
-            patch("agent.graph.nodes.qa.broadcast_agent_completed", new_callable=AsyncMock),
             patch(
                 "agent.graph.nodes.qa.check_task_cancelled",
                 new_callable=AsyncMock,
@@ -99,8 +97,6 @@ class TestVerifyQaNode:
 
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
-            patch("agent.graph.nodes.qa.broadcast_agent_started", new_callable=AsyncMock),
-            patch("agent.graph.nodes.qa.broadcast_agent_completed", new_callable=AsyncMock),
             patch(
                 "agent.graph.nodes.qa.check_task_cancelled",
                 new_callable=AsyncMock,
@@ -150,8 +146,6 @@ class TestVerifyQaNode:
 
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
-            patch("agent.graph.nodes.qa.broadcast_agent_started", new_callable=AsyncMock),
-            patch("agent.graph.nodes.qa.broadcast_agent_completed", new_callable=AsyncMock),
             patch(
                 "agent.graph.nodes.qa.check_task_cancelled",
                 new_callable=AsyncMock,
@@ -219,15 +213,13 @@ class TestVerifyQaNode:
         mock_session: AsyncMock,
     ) -> None:
         """Test QA returns error when no milestones."""
-        state = AgentState(
-            session_id=uuid4(),
-            task_id=uuid4(),
-            user_id="test-user-123",
-            original_request="Test",
-            milestones=None,
-            current_milestone_index=None,
-            retry_count=0,
-        )
+        # Create state without milestones key to test None check
+        state: AgentState = {
+            "session_id": uuid4(),
+            "task_id": uuid4(),
+            "user_id": "test-user-123",
+            "original_request": "Test",
+        }
 
         with patch(
             "agent.graph.nodes.qa.check_task_cancelled",
@@ -271,7 +263,6 @@ class TestVerifyQaNode:
 
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
-            patch("agent.graph.nodes.qa.broadcast_agent_started", new_callable=AsyncMock),
             patch(
                 "agent.graph.nodes.qa.check_task_cancelled",
                 new_callable=AsyncMock,
@@ -292,6 +283,7 @@ class TestVerifyQaNode:
         self,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Test QA broadcasts started and completed events."""
         from agent.core import QADecision
@@ -322,12 +314,6 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.broadcast_agent_started", new_callable=AsyncMock
-            ) as mock_started,
-            patch(
-                "agent.graph.nodes.qa.broadcast_agent_completed", new_callable=AsyncMock
-            ) as mock_completed,
-            patch(
                 "agent.graph.nodes.qa.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
@@ -339,23 +325,25 @@ class TestVerifyQaNode:
 
             await verify_qa_node(state, mock_config, mock_session)
 
-            mock_started.assert_called_once()
-            mock_completed.assert_called_once()
+            # Verify event bus emit was called twice (started + completed)
+            assert mock_event_bus.emit.call_count == 2
 
-            # Verify broadcast parameters
-            started_kwargs = mock_started.call_args.kwargs
-            assert started_kwargs["agent"] == "qa"
-            assert started_kwargs["message"] == "Validating output quality"
+            # Verify started event
+            started_event = mock_event_bus.emit.call_args_list[0][0][0]
+            assert started_event.agent == "qa"
+            assert started_event.message == "Validating output quality"
 
-            completed_kwargs = mock_completed.call_args.kwargs
-            assert completed_kwargs["agent"] == "qa"
-            assert "decision" in completed_kwargs["details"]
+            # Verify completed event
+            completed_event = mock_event_bus.emit.call_args_list[1][0][0]
+            assert completed_event.agent == "qa"
+            assert "decision" in completed_event.details
 
     @pytest.mark.asyncio
     async def test_empty_feedback_messages(
         self,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
+        mock_event_bus: MagicMock,
     ) -> None:
         """Test QA with empty feedback generates appropriate messages."""
         from agent.core import QADecision
@@ -385,10 +373,6 @@ class TestVerifyQaNode:
 
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
-            patch("agent.graph.nodes.qa.broadcast_agent_started", new_callable=AsyncMock),
-            patch(
-                "agent.graph.nodes.qa.broadcast_agent_completed", new_callable=AsyncMock
-            ) as mock_completed,
             patch(
                 "agent.graph.nodes.qa.check_task_cancelled",
                 new_callable=AsyncMock,
@@ -401,6 +385,6 @@ class TestVerifyQaNode:
 
             await verify_qa_node(state, mock_config, mock_session)
 
-            # Check the message for empty feedback
-            completed_kwargs = mock_completed.call_args.kwargs
-            assert completed_kwargs["message"] == "Retry needed"
+            # Check the message for empty feedback from completed event
+            completed_event = mock_event_bus.emit.call_args_list[1][0][0]
+            assert completed_event.message == "Retry needed"
