@@ -227,10 +227,18 @@ export function WebSocketProvider({
   }, [disconnect, connect]);
 
   // Connect when authenticated, disconnect when not
+  const hasConnectedRef = useRef(false);
   useEffect(() => {
     if (status === 'authenticated' && accessToken) {
-      connect();
+      if (!hasConnectedRef.current) {
+        // Initial connection with delay to allow port forwarding to stabilize
+        hasConnectedRef.current = true;
+        setTimeout(() => connect(), 500);
+      } else {
+        connect();
+      }
     } else if (status === 'unauthenticated') {
+      hasConnectedRef.current = false;
       disconnect();
     }
 

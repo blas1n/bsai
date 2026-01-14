@@ -18,7 +18,7 @@ export function MilestoneProgressCard({
 }: MilestoneProgressCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
-  const completed = milestones.filter((m) => m.status === 'completed' || m.status === 'passed').length;
+  const completed = milestones.filter((m) => m.status === 'passed').length;
   const inProgress = milestones.filter((m) => m.status === 'in_progress').length;
   const failed = milestones.filter((m) => m.status === 'failed').length;
   const total = milestones.length;

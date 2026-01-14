@@ -384,3 +384,19 @@ const handleWebSocketMessage = useCallback((message: WSMessage) => {
 - Utilities: `camelCase.ts` (e.g., `utils.ts`)
 - Types: `camelCase.ts` (e.g., `session.ts`)
 - Pages: `page.tsx` (Next.js App Router convention)
+
+## TODO
+
+### Remember Me Feature
+
+Currently, `offline_access` scope is always included in Keycloak OAuth requests, enabling 30-day refresh tokens for all users.
+
+**Future Enhancement**: Implement "Remember Me" checkbox on login page:
+- When checked: Include `offline_access` scope (30-day session via Keycloak Offline Session)
+- When unchecked: Exclude `offline_access` scope (10-hour session via Keycloak SSO Session)
+
+**Implementation Notes**:
+- Keycloak handles session duration, not frontend
+- SSO Session Max: 10 hours (configured in Keycloak)
+- Offline Session: 30 days idle / 60 days max (configured in Keycloak)
+- See `app/api/auth/[...nextauth]/route.ts` for current implementation

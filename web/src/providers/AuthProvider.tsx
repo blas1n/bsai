@@ -1,7 +1,7 @@
 'use client';
 
-import { SessionProvider } from 'next-auth/react';
-import { ReactNode } from 'react';
+import { SessionProvider, useSession, signOut } from 'next-auth/react';
+import { ReactNode, useEffect } from 'react';
 import { WebSocketProvider } from './WebSocketProvider';
 
 interface AuthProviderProps {
@@ -9,11 +9,29 @@ interface AuthProviderProps {
 }
 
 /**
+ * SessionErrorHandler - Handles session errors like expired tokens
+ */
+function SessionErrorHandler({ children }: { children: ReactNode }) {
+  const { data: session } = useSession();
+
+  useEffect(() => {
+    if (session?.error === 'RefreshAccessTokenError') {
+      console.warn('[AuthProvider] Token refresh failed, signing out...');
+      // Sign out and redirect to login when refresh fails
+      signOut({ callbackUrl: '/login' });
+    }
+  }, [session?.error]);
+
+  return <>{children}</>;
+}
+
+/**
  * AuthProvider - Authentication and WebSocket connection management
  *
  * Wraps the application with:
  * 1. SessionProvider - next-auth session management with token refresh
- * 2. WebSocketProvider - centralized WebSocket connection management
+ * 2. SessionErrorHandler - automatic sign out on token refresh failure
+ * 3. WebSocketProvider - centralized WebSocket connection management
  */
 export function AuthProvider({ children }: AuthProviderProps) {
   return (
@@ -23,7 +41,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Refetch when window regains focus
       refetchOnWindowFocus={true}
     >
-      <WebSocketProvider>{children}</WebSocketProvider>
+      <SessionErrorHandler>
+        <WebSocketProvider>{children}</WebSocketProvider>
+      </SessionErrorHandler>
     </SessionProvider>
   );
 }
