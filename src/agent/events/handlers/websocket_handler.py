@@ -139,8 +139,6 @@ class WebSocketEventHandler:
                 logger.debug("unhandled_event_type", event_type=str(event.type))
                 return None
 
-        return None
-
     # =========================================================================
     # Task Event Converters
     # =========================================================================
