@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 import structlog
 from langchain_core.runnables import RunnableConfig
@@ -17,7 +17,7 @@ from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.events import AgentActivityEvent, AgentStatus, EventType
 from agent.llm import ChatMessage
 
-from ..state import AgentState, MilestoneData
+from ..state import AgentState, update_milestone
 from . import check_task_cancelled, get_container, get_event_bus, get_ws_manager_optional
 
 logger = structlog.get_logger()
@@ -136,9 +136,7 @@ async def execute_worker_node(
 
         # Update milestone with output (immutable)
         updated_milestones = list(milestones)
-        updated_milestone = dict(milestone)
-        updated_milestone["worker_output"] = response.content
-        updated_milestones[idx] = cast(MilestoneData, updated_milestone)
+        updated_milestones[idx] = update_milestone(milestone, worker_output=response.content)
 
         # Update context with new exchange
         context_messages = list(state.get("context_messages", []))

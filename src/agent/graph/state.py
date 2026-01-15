@@ -4,7 +4,7 @@ Immutable state structure for multi-agent orchestration.
 All updates should return new dicts, not mutate existing state.
 """
 
-from typing import NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 from uuid import UUID
 
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
@@ -99,3 +99,28 @@ class AgentState(TypedDict):
     breakpoint_enabled: NotRequired[bool]  # Whether breakpoints are enabled
     breakpoint_nodes: NotRequired[list[str]]  # List of node names to pause at
     breakpoint_user_input: NotRequired[str | None]  # User input at breakpoint
+
+
+def update_milestone(milestone: MilestoneData, **updates: Any) -> MilestoneData:
+    """Create an updated copy of a milestone with the given changes.
+
+    Args:
+        milestone: Original milestone data
+        **updates: Fields to update
+
+    Returns:
+        New MilestoneData with updates applied
+    """
+    merged: dict[str, Any] = {**milestone, **updates}
+    return MilestoneData(
+        id=merged["id"],
+        description=merged["description"],
+        complexity=merged["complexity"],
+        acceptance_criteria=merged["acceptance_criteria"],
+        status=merged["status"],
+        selected_model=merged["selected_model"],
+        generated_prompt=merged["generated_prompt"],
+        worker_output=merged["worker_output"],
+        qa_feedback=merged["qa_feedback"],
+        retry_count=merged["retry_count"],
+    )

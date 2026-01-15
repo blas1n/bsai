@@ -5,7 +5,7 @@ Converts domain events to WebSocket messages and broadcasts them.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -27,7 +27,6 @@ from agent.events.types import (
     BreakpointHitEvent,
     ContextCompressedEvent,
     Event,
-    EventType,
     LLMChunkEvent,
     LLMCompleteEvent,
     MilestoneRetryEvent,
@@ -96,44 +95,40 @@ class WebSocketEventHandler:
         Returns:
             WSMessage or None if event type is not handled
         """
-        match event.type:
+        match event:
             # Task events
-            case EventType.TASK_STARTED:
-                return self._task_started(cast(TaskStartedEvent, event))
-            case EventType.TASK_PROGRESS:
-                return self._task_progress(cast(TaskProgressEvent, event))
-            case EventType.TASK_COMPLETED:
-                return self._task_completed(cast(TaskCompletedEvent, event))
-            case EventType.TASK_FAILED:
-                return self._task_failed(cast(TaskFailedEvent, event))
+            case TaskStartedEvent():
+                return self._task_started(event)
+            case TaskProgressEvent():
+                return self._task_progress(event)
+            case TaskCompletedEvent():
+                return self._task_completed(event)
+            case TaskFailedEvent():
+                return self._task_failed(event)
 
             # Agent activity events
-            case EventType.AGENT_STARTED | EventType.AGENT_COMPLETED | EventType.AGENT_FAILED:
-                return self._agent_activity(cast(AgentActivityEvent, event))
+            case AgentActivityEvent():
+                return self._agent_activity(event)
 
             # Milestone events
-            case EventType.MILESTONE_STATUS_CHANGED:
-                return self._milestone_status_changed(cast(MilestoneStatusChangedEvent, event))
-            case EventType.MILESTONE_COMPLETED:
-                return self._milestone_completed(cast(MilestoneStatusChangedEvent, event))
-            case EventType.MILESTONE_FAILED:
-                return self._milestone_failed(cast(MilestoneStatusChangedEvent, event))
-            case EventType.MILESTONE_RETRY:
-                return self._milestone_retry(cast(MilestoneRetryEvent, event))
+            case MilestoneStatusChangedEvent():
+                return self._milestone_status_changed(event)
+            case MilestoneRetryEvent():
+                return self._milestone_retry(event)
 
             # LLM streaming events
-            case EventType.LLM_CHUNK:
-                return self._llm_chunk(cast(LLMChunkEvent, event))
-            case EventType.LLM_COMPLETE:
-                return self._llm_complete(cast(LLMCompleteEvent, event))
+            case LLMChunkEvent():
+                return self._llm_chunk(event)
+            case LLMCompleteEvent():
+                return self._llm_complete(event)
 
             # Context events
-            case EventType.CONTEXT_COMPRESSED:
-                return self._context_compressed(cast(ContextCompressedEvent, event))
+            case ContextCompressedEvent():
+                return self._context_compressed(event)
 
             # Breakpoint events
-            case EventType.BREAKPOINT_HIT:
-                return self._breakpoint_hit(cast(BreakpointHitEvent, event))
+            case BreakpointHitEvent():
+                return self._breakpoint_hit(event)
 
             case _:
                 logger.debug("unhandled_event_type", event_type=str(event.type))
