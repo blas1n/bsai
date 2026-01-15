@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 import structlog
 from langchain_core.runnables import RunnableConfig
@@ -12,7 +12,7 @@ from agent.core import QAAgent, QADecision
 from agent.db.models.enums import MilestoneStatus, TaskStatus
 from agent.events import AgentActivityEvent, AgentStatus, EventType
 
-from ..state import AgentState, MilestoneData
+from ..state import AgentState, update_milestone
 from . import check_task_cancelled, get_container, get_event_bus, get_ws_manager_optional
 
 logger = structlog.get_logger()
@@ -93,16 +93,18 @@ async def verify_qa_node(
 
         # Update milestone with QA result (immutable)
         updated_milestones = list(milestones)
-        updated_milestone = dict(milestone)
-        updated_milestone["qa_feedback"] = feedback
-
+        new_status = milestone["status"]
         if decision == QADecision.PASS:
-            updated_milestone["status"] = MilestoneStatus.PASSED
+            new_status = MilestoneStatus.PASSED
         elif decision == QADecision.FAIL:
-            updated_milestone["status"] = MilestoneStatus.FAILED
+            new_status = MilestoneStatus.FAILED
         # RETRY keeps IN_PROGRESS status
 
-        updated_milestones[idx] = cast(MilestoneData, updated_milestone)
+        updated_milestones[idx] = update_milestone(
+            milestone,
+            qa_feedback=feedback,
+            status=new_status,
+        )
 
         logger.info(
             "qa_verified",
@@ -133,7 +135,7 @@ async def verify_qa_node(
         }
 
         # Emit QA completed event with decision
-        qa_status = MilestoneStatus(updated_milestone["status"])
+        qa_status = new_status
         # Determine agent status based on QA decision
         agent_status = (
             AgentStatus.COMPLETED if decision == QADecision.PASS else AgentStatus.COMPLETED

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 import structlog
 from langchain_core.runnables import RunnableConfig
@@ -12,7 +12,7 @@ from agent.core import ConductorAgent, MetaPrompterAgent
 from agent.db.models.enums import MilestoneStatus
 from agent.events import AgentActivityEvent, AgentStatus, EventType, TaskProgressEvent
 
-from ..state import AgentState, MilestoneData
+from ..state import AgentState, update_milestone
 from . import get_container, get_event_bus
 
 logger = structlog.get_logger()
@@ -76,10 +76,11 @@ async def select_llm_node(
 
         # Update milestone with selected model (immutable update)
         updated_milestones = list(milestones)
-        updated_milestone = dict(milestone)
-        updated_milestone["selected_model"] = model_name
-        updated_milestone["status"] = MilestoneStatus.IN_PROGRESS
-        updated_milestones[idx] = cast(MilestoneData, updated_milestone)
+        updated_milestones[idx] = update_milestone(
+            milestone,
+            selected_model=model_name,
+            status=MilestoneStatus.IN_PROGRESS,
+        )
 
         logger.info(
             "llm_selected",
@@ -166,9 +167,7 @@ async def generate_prompt_node(
 
         # Update milestone with prompt (immutable)
         updated_milestones = list(milestones)
-        updated_milestone = dict(milestone)
-        updated_milestone["generated_prompt"] = prompt
-        updated_milestones[idx] = cast(MilestoneData, updated_milestone)
+        updated_milestones[idx] = update_milestone(milestone, generated_prompt=prompt)
 
         logger.info(
             "prompt_generated",

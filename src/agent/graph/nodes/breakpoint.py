@@ -6,7 +6,7 @@ to let users review the current state before proceeding.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 import structlog
 from langchain_core.runnables import RunnableConfig
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.db.models.enums import TaskStatus
 from agent.events import BreakpointHitEvent, EventType
 
-from ..state import AgentState, MilestoneData
+from ..state import AgentState, update_milestone
 from . import check_task_cancelled, get_breakpoint_service, get_event_bus
 
 logger = structlog.get_logger()
@@ -167,11 +167,12 @@ async def qa_breakpoint_node(
                 )
                 # Update milestone with QA-like feedback to trigger worker retry
                 updated_milestones = list(milestones)
-                updated_milestone = dict(current_milestone) if current_milestone else {}
-                updated_milestone["qa_decision"] = "fail"
-                updated_milestone["qa_feedback"] = user_input
-                updated_milestone["status"] = "fail"
-                updated_milestones[idx] = cast(MilestoneData, updated_milestone)
+                if current_milestone:
+                    updated_milestones[idx] = update_milestone(
+                        current_milestone,
+                        qa_feedback=user_input,
+                        status="fail",
+                    )
                 return {
                     "milestones": updated_milestones,
                     "qa_decision": "fail",  # Signal to route back to worker
@@ -200,9 +201,11 @@ async def qa_breakpoint_node(
             )
             # Update current milestone with user's modified output
             updated_milestones = list(milestones)
-            updated_milestone = dict(current_milestone) if current_milestone else {}
-            updated_milestone["worker_output"] = user_input
-            updated_milestones[idx] = cast(MilestoneData, updated_milestone)
+            if current_milestone:
+                updated_milestones[idx] = update_milestone(
+                    current_milestone,
+                    worker_output=user_input,
+                )
             return {
                 "milestones": updated_milestones,
                 "breakpoint_user_input": user_input,

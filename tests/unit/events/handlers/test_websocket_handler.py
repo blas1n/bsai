@@ -15,6 +15,7 @@ from agent.events.types import (
     AgentStatus,
     BreakpointHitEvent,
     ContextCompressedEvent,
+    Event,
     EventType,
     LLMChunkEvent,
     LLMCompleteEvent,
@@ -76,14 +77,14 @@ class TestHandleMethod:
     ) -> None:
         """Test that unhandled event types don't broadcast."""
 
-        # Create a custom event type not handled
-        class CustomEvent(TaskStartedEvent):
+        # Create a custom event class that is not handled
+        # Must inherit from Event directly, not a handled subclass
+        class CustomEvent(Event):
             type: EventType = EventType.TASK_CANCELLED
 
         event = CustomEvent(
             session_id=uuid4(),
             task_id=uuid4(),
-            original_request="Test",
         )
 
         await handler.handle(event)
