@@ -100,6 +100,10 @@ class AgentState(TypedDict):
     breakpoint_nodes: NotRequired[list[str]]  # List of node names to pause at
     breakpoint_user_input: NotRequired[str | None]  # User input at breakpoint
 
+    # Long-term memory (retrieved from past experiences)
+    relevant_memories: NotRequired[list[dict[str, Any]]]  # Retrieved memories
+    memory_context: NotRequired[str | None]  # Formatted memory context for LLM
+
 
 def update_milestone(milestone: MilestoneData, **updates: Any) -> MilestoneData:
     """Create an updated copy of a milestone with the given changes.

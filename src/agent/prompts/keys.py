@@ -41,3 +41,13 @@ class ResponderPrompts(str, Enum):
 
     SYSTEM_PROMPT = "system_prompt"
     GENERATE_RESPONSE = "generate_response"
+
+
+class MemoryPrompts(str, Enum):
+    """Prompt keys for Memory content templates."""
+
+    TASK_RESULT_CONTENT = "task_result_content"
+    QA_LEARNING_CONTENT = "qa_learning_content"
+    ERROR_CONTENT = "error_content"
+    CONTEXT_HEADER = "context_header"
+    CONTEXT_MEMORY_ITEM = "context_memory_item"

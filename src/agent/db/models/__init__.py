@@ -6,12 +6,14 @@ from .base import Base
 from .custom_llm_model import CustomLLMModel
 from .enums import (
     AgentType,
+    MemoryType,
     MilestoneStatus,
     SessionStatus,
     SnapshotType,
     TaskComplexity,
     TaskStatus,
 )
+from .episodic_memory import EpisodicMemory
 from .generated_prompt import GeneratedPrompt
 from .llm_usage_log import LLMUsageLog
 from .mcp_server_config import McpServerConfig
@@ -34,6 +36,7 @@ __all__ = [
     "Task",
     "Milestone",
     "MemorySnapshot",
+    "EpisodicMemory",
     "LLMUsageLog",
     "CustomLLMModel",
     "SystemPrompt",
@@ -48,4 +51,5 @@ __all__ = [
     "TaskComplexity",
     "AgentType",
     "SnapshotType",
+    "MemoryType",
 ]

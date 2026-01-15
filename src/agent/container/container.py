@@ -18,7 +18,9 @@ from dataclasses import dataclass
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.cache import SessionCache, get_redis
 from agent.llm import LiteLLMClient, LLMRouter, ModelRegistry
+from agent.memory import EmbeddingService
 from agent.prompts import PromptManager
 
 logger = structlog.get_logger()
@@ -35,6 +37,7 @@ class ContainerState:
     llm_client: LiteLLMClient
     model_registry: ModelRegistry
     router: LLMRouter
+    embedding_service: EmbeddingService
 
 
 @asynccontextmanager
@@ -62,11 +65,19 @@ async def lifespan(
     model_registry = ModelRegistry(session)
     await model_registry.initialize()
 
+    # Initialize cache and embedding service for memory operations
+    redis_client = get_redis()
+    cache = SessionCache(redis_client)
+    embedding_service = EmbeddingService(cache=cache)
+
+    prompt_manager = PromptManager()
+
     state = ContainerState(
-        prompt_manager=PromptManager(),
+        prompt_manager=prompt_manager,
         llm_client=LiteLLMClient(),
         model_registry=model_registry,
         router=LLMRouter(model_registry),
+        embedding_service=embedding_service,
     )
 
     logger.info("agent_container_initialized")
