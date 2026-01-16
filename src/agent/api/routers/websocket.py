@@ -57,7 +57,11 @@ async def websocket_endpoint(
         session_id: Optional session ID to auto-subscribe
     """
     manager = _get_manager(websocket)
-    handler = WebSocketHandler(manager=manager, cache=manager.cache)
+    handler = WebSocketHandler(
+        manager=manager,
+        cache=manager.cache,
+        breakpoint_service=websocket.app.state.breakpoint_service,
+    )
 
     await handler.handle_connection(
         websocket=websocket,
@@ -82,7 +86,11 @@ async def websocket_session_endpoint(
         token: Optional JWT token for authentication
     """
     manager = _get_manager(websocket)
-    handler = WebSocketHandler(manager=manager, cache=manager.cache)
+    handler = WebSocketHandler(
+        manager=manager,
+        cache=manager.cache,
+        breakpoint_service=websocket.app.state.breakpoint_service,
+    )
 
     await handler.handle_connection(
         websocket=websocket,
