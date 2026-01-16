@@ -21,6 +21,12 @@ export function Header() {
               Sessions
             </Link>
             <Link
+              href="/memories"
+              className="transition-colors hover:text-foreground/80 text-foreground/60"
+            >
+              Memories
+            </Link>
+            <Link
               href="/monitoring"
               className="transition-colors hover:text-foreground/80 text-foreground/60"
             >
