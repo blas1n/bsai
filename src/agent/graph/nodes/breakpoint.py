@@ -216,5 +216,8 @@ async def qa_breakpoint_node(
         task_id=str(state["task_id"]),
     )
 
+    # Clear paused state after successful resume (prevents re-triggering)
+    breakpoint_service.clear_paused_at(task_id)
+
     # Continue as-is
     return {}

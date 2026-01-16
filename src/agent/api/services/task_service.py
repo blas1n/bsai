@@ -417,16 +417,6 @@ class TaskService:
             rejected: If True, pass rejected flag to workflow
         """
         try:
-            # Clear the paused state before resuming (only if not rejected with feedback)
-            # If rejected with feedback, we want to re-run worker, so keep paused state
-            # If rejected without feedback, task will be cancelled anyway
-            if not (rejected and user_input):
-                self.breakpoint_service.clear_paused_at(task_id)
-                logger.info(
-                    "breakpoint_paused_state_cleared",
-                    task_id=str(task_id),
-                )
-
             async for db_session in get_db_session():
                 runner = WorkflowRunner(
                     db_session,
