@@ -1,6 +1,7 @@
 """Pydantic schemas for memory API."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,7 +29,7 @@ class MemoryDetailResponse(MemoryResponse):
     """Detailed memory response with full content."""
 
     content: str
-    metadata_json: dict | None = None
+    metadata_json: dict[str, Any] | None = None
 
 
 class MemorySearchResult(BaseModel):

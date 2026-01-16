@@ -130,7 +130,7 @@ async def verify_qa_node(
                     user_id=state["user_id"],
                     session_id=state["session_id"],
                     task_id=state["task_id"],
-                    previous_output=state.get("current_output", ""),
+                    previous_output=state.get("current_output") or "",
                     qa_feedback=previous_feedback,
                     improved_output=milestone["worker_output"] or "",
                 )

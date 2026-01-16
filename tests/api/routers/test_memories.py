@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agent.api.auth import get_current_user_id
-from agent.api.dependencies import get_db
+from agent.api.dependencies import get_cache, get_db
 from agent.db.models.enums import MemoryType
 from agent.db.models.episodic_memory import EpisodicMemory
 
@@ -32,6 +32,15 @@ def mock_db() -> AsyncMock:
     session.delete = AsyncMock()
     session.refresh = AsyncMock()
     return session
+
+
+@pytest.fixture
+def mock_cache() -> MagicMock:
+    """Create mock cache."""
+    cache = MagicMock()
+    cache.get = AsyncMock(return_value=None)
+    cache.set = AsyncMock()
+    return cache
 
 
 @pytest.fixture
@@ -75,6 +84,7 @@ def sample_memory(sample_memory_id: str, sample_session_id: str, test_user_id: s
 @pytest.fixture
 def app(
     mock_db: AsyncMock,
+    mock_cache: MagicMock,
     test_user_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> FastAPI:
@@ -91,10 +101,14 @@ def app(
     async def override_get_db() -> AsyncGenerator[AsyncMock, None]:
         yield mock_db
 
+    async def override_get_cache() -> MagicMock:
+        return mock_cache
+
     async def override_get_current_user_id() -> str:
         return test_user_id
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_cache] = override_get_cache
     app.dependency_overrides[get_current_user_id] = override_get_current_user_id
 
     return app
@@ -117,19 +131,8 @@ class TestMemoriesSearch:
         """Test successful memory search."""
         with patch("agent.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
             mock_manager = MagicMock()
-            mock_manager.search_similar = AsyncMock(
-                return_value=[
-                    {
-                        "id": str(sample_memory.id),
-                        "summary": sample_memory.summary,
-                        "content": sample_memory.content,
-                        "memory_type": sample_memory.memory_type,
-                        "importance_score": sample_memory.importance_score,
-                        "similarity": 0.85,
-                        "created_at": sample_memory.created_at.isoformat(),
-                    }
-                ]
-            )
+            # Return list of tuples (memory, score) like the real implementation
+            mock_manager.search_similar = AsyncMock(return_value=[(sample_memory, 0.85)])
             mock_manager_class.return_value = mock_manager
 
             response = client.post(
@@ -141,6 +144,7 @@ class TestMemoriesSearch:
             data = response.json()
             assert len(data) == 1
             assert data[0]["similarity"] == 0.85
+            assert data[0]["memory"]["summary"] == sample_memory.summary
 
     def test_search_memories_empty_query(self, client: TestClient) -> None:
         """Test search with empty query."""
@@ -181,19 +185,24 @@ class TestMemoriesList:
         client: TestClient,
         mock_db: AsyncMock,
         sample_memory: MagicMock,
+        test_user_id: str,
     ) -> None:
         """Test listing memories."""
         with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_user_id = AsyncMock(return_value=[sample_memory])
+            mock_repo.count_by_user = AsyncMock(return_value=1)
             mock_repo_class.return_value = mock_repo
 
             response = client.get("/api/v1/memories")
 
             assert response.status_code == 200
             data = response.json()
-            assert len(data) == 1
-            assert data[0]["summary"] == sample_memory.summary
+            # Response is PaginatedResponse
+            assert "items" in data
+            assert len(data["items"]) == 1
+            assert data["items"][0]["summary"] == sample_memory.summary
+            assert data["total"] == 1
 
     def test_list_memories_with_pagination(
         self,
@@ -203,6 +212,7 @@ class TestMemoriesList:
         with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_user_id = AsyncMock(return_value=[])
+            mock_repo.count_by_user = AsyncMock(return_value=0)
             mock_repo_class.return_value = mock_repo
 
             response = client.get("/api/v1/memories?limit=10&offset=20")
@@ -221,6 +231,7 @@ class TestMemoriesList:
         with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_user_id = AsyncMock(return_value=[])
+            mock_repo.count_by_user = AsyncMock(return_value=0)
             mock_repo_class.return_value = mock_repo
 
             response = client.get("/api/v1/memories?memory_type=task_result")
@@ -326,21 +337,24 @@ class TestMemoriesStats:
         mock_db: AsyncMock,
     ) -> None:
         """Test getting memory statistics."""
-        # Mock the count query result
-        mock_result = MagicMock()
-        mock_result.scalar.return_value = 42
-        mock_db.execute.return_value = mock_result
-
-        with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
-            mock_repo = MagicMock()
-            mock_repo.get_by_user_id = AsyncMock(return_value=[])
-            mock_repo_class.return_value = mock_repo
+        with patch("agent.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager.get_memory_stats = AsyncMock(
+                return_value={
+                    "total_memories": 42,
+                    "by_type": {"task_result": 20, "learning": 22},
+                    "average_importance": 0.75,
+                }
+            )
+            mock_manager_class.return_value = mock_manager
 
             response = client.get("/api/v1/memories/stats")
 
             assert response.status_code == 200
             data = response.json()
-            assert "total_count" in data
+            assert "total_memories" in data
+            assert data["total_memories"] == 42
+            assert data["average_importance"] == 0.75
 
 
 class TestMemoriesConsolidate:
@@ -351,20 +365,24 @@ class TestMemoriesConsolidate:
         client: TestClient,
     ) -> None:
         """Test consolidating similar memories."""
-        with patch("agent.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
+        with (
+            patch("agent.api.routers.memories.LongTermMemoryManager") as mock_manager_class,
+            patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class,
+        ):
             mock_manager = MagicMock()
-            mock_manager.consolidate_memories = AsyncMock(return_value=(5, 3))
+            mock_manager.consolidate_memories = AsyncMock(return_value=5)
             mock_manager_class.return_value = mock_manager
 
-            response = client.post(
-                "/api/v1/memories/consolidate",
-                json={"similarity_threshold": 0.9},
-            )
+            mock_repo = MagicMock()
+            mock_repo.count_by_user = AsyncMock(return_value=10)
+            mock_repo_class.return_value = mock_repo
+
+            response = client.post("/api/v1/memories/consolidate")
 
             assert response.status_code == 200
             data = response.json()
-            assert data["deleted_count"] == 5
-            assert data["kept_count"] == 3
+            assert data["consolidated_count"] == 5
+            assert data["remaining_count"] == 10
 
 
 class TestMemoriesDecay:
@@ -380,11 +398,8 @@ class TestMemoriesDecay:
             mock_manager.decay_memories = AsyncMock(return_value=10)
             mock_manager_class.return_value = mock_manager
 
-            response = client.post(
-                "/api/v1/memories/decay",
-                json={"decay_factor": 0.95},
-            )
+            response = client.post("/api/v1/memories/decay")
 
             assert response.status_code == 200
             data = response.json()
-            assert data["affected_count"] == 10
+            assert data["decayed_count"] == 10

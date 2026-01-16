@@ -7,6 +7,7 @@ import json
 from typing import TYPE_CHECKING
 
 import litellm
+import numpy as np
 import structlog
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -151,11 +152,13 @@ class EmbeddingService:
         if len(embedding1) != len(embedding2):
             raise ValueError("Embeddings must have the same dimension")
 
-        dot_product = sum(a * b for a, b in zip(embedding1, embedding2, strict=True))
-        norm1 = sum(a * a for a in embedding1) ** 0.5
-        norm2 = sum(b * b for b in embedding2) ** 0.5
+        vec1 = np.asarray(embedding1)
+        vec2 = np.asarray(embedding2)
+
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
 
         if norm1 == 0 or norm2 == 0:
             return 0.0
 
-        return dot_product / (norm1 * norm2)
+        return float(np.dot(vec1, vec2) / (norm1 * norm2))

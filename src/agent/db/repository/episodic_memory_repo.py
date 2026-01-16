@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID
 
 import structlog
-from sqlalchemy import func, select, update
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -176,10 +177,10 @@ class EpisodicMemoryRepository(BaseRepository[EpisodicMemory]):
             .where(EpisodicMemory.id.in_(memory_ids))
             .values(importance_score=EpisodicMemory.importance_score * decay_factor)
         )
-        result = await self.session.execute(stmt)
+        result = cast(CursorResult[tuple[()]], await self.session.execute(stmt))
         await self.session.flush()
 
-        return result.rowcount  # type: ignore[return-value]
+        return result.rowcount if result.rowcount else 0
 
     async def count_by_user(self, user_id: str) -> int:
         """Count total memories for a user.

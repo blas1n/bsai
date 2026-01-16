@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -76,7 +77,7 @@ async def store_task_memory(
     task_id: UUID,
     original_request: str,
     final_response: str,
-    milestones: list[dict[str, Any]],
+    milestones: Sequence[Mapping[str, Any]],
 ) -> None:
     """Store completed task result as memory.
 
