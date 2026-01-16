@@ -13,9 +13,10 @@ from agent.core import ConductorAgent
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.events import AgentActivityEvent, AgentStatus, EventType
+from agent.memory import get_memory_context
 
 from ..state import AgentState, MilestoneData
-from . import get_container, get_event_bus
+from . import get_container, get_event_bus, get_memory_manager
 
 logger = structlog.get_logger()
 
@@ -56,6 +57,14 @@ async def analyze_task_node(
     )
 
     try:
+        # Retrieve relevant memories for context using DI container
+        memory_manager = get_memory_manager(config, session)
+        relevant_memories, memory_context = await get_memory_context(
+            manager=memory_manager,
+            user_id=state["user_id"],
+            original_request=state["original_request"],
+        )
+
         conductor = ConductorAgent(
             llm_client=container.llm_client,
             router=container.router,
@@ -66,6 +75,7 @@ async def analyze_task_node(
         milestones_raw = await conductor.analyze_and_plan(
             task_id=state["task_id"],
             original_request=state["original_request"],
+            memory_context=memory_context if memory_context else None,
         )
 
         # Fetch persisted milestones from database to get actual IDs
@@ -151,6 +161,9 @@ async def analyze_task_node(
             "current_milestone_index": len(existing_milestones),  # Start at first new milestone
             "task_status": TaskStatus.IN_PROGRESS,
             "retry_count": 0,
+            # Include memory data in state
+            "relevant_memories": relevant_memories,
+            "memory_context": memory_context if memory_context else None,
         }
 
     except Exception as e:

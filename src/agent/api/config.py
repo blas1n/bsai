@@ -376,3 +376,83 @@ def get_langfuse_settings() -> LangfuseSettings:
         LangfuseSettings instance
     """
     return LangfuseSettings()
+
+
+class MemorySettings(BaseSettings):
+    """Long-term memory configuration settings.
+
+    Controls embedding generation, semantic search, and memory management.
+    """
+
+    # Embedding settings
+    embedding_model: str = Field(
+        default="text-embedding-ada-002",
+        description="Model for generating embeddings",
+    )
+    embedding_dimension: int = Field(
+        default=1536,
+        description="Vector dimension (must match model)",
+    )
+    embedding_cache_ttl: int = Field(
+        default=86400,
+        description="Embedding cache TTL in seconds (24 hours)",
+    )
+
+    # Search settings
+    default_search_limit: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Default number of search results",
+    )
+    min_similarity_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum cosine similarity for search",
+    )
+
+    # Auto-storage settings
+    auto_store_task_results: bool = Field(
+        default=True,
+        description="Automatically store completed task results",
+    )
+    auto_store_qa_learnings: bool = Field(
+        default=True,
+        description="Automatically store QA learnings",
+    )
+
+    # Memory management settings
+    memory_decay_enabled: bool = Field(
+        default=True,
+        description="Enable importance decay",
+    )
+    memory_decay_interval_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Hours between decay runs",
+    )
+    memory_decay_factor: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Decay multiplication factor",
+    )
+    memory_consolidation_threshold: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold for consolidation",
+    )
+
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="MEMORY_", extra="ignore")
+
+
+@lru_cache
+def get_memory_settings() -> MemorySettings:
+    """Get cached memory settings.
+
+    Returns:
+        MemorySettings instance
+    """
+    return MemorySettings()

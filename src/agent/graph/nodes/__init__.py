@@ -26,6 +26,7 @@ from agent.db.models.enums import TaskStatus
 from agent.db.repository.task_repo import TaskRepository
 from agent.events import EventBus
 from agent.mcp.executor import McpToolExecutor
+from agent.memory import LongTermMemoryManager
 from agent.services import BreakpointService
 
 _logger = structlog.get_logger()
@@ -138,6 +139,30 @@ def get_ws_manager_optional(config: RunnableConfig) -> ConnectionManager | None:
     return configurable.get("ws_manager")
 
 
+def get_memory_manager(
+    config: RunnableConfig,
+    session: AsyncSession,
+) -> LongTermMemoryManager:
+    """Create a LongTermMemoryManager using container dependencies.
+
+    Uses the EmbeddingService and PromptManager from the container
+    to create a memory manager for the given database session.
+
+    Args:
+        config: LangGraph RunnableConfig
+        session: Database session for this request
+
+    Returns:
+        LongTermMemoryManager instance
+    """
+    container = get_container(config)
+    return LongTermMemoryManager(
+        session=session,
+        embedding_service=container.embedding_service,
+        prompt_manager=container.prompt_manager,
+    )
+
+
 async def check_task_cancelled(
     session: AsyncSession,
     task_id: UUID,
@@ -178,5 +203,6 @@ __all__ = [
     "get_mcp_executor",
     "get_event_bus",
     "get_ws_manager_optional",
+    "get_memory_manager",
     "check_task_cancelled",
 ]

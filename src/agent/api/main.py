@@ -24,6 +24,7 @@ from .routers import (
     artifacts_router,
     health_router,
     mcp_router,
+    memories_router,
     milestones_router,
     sessions_router,
     snapshots_router,
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
             {"name": "milestones", "description": "Session milestone tracking"},
             {"name": "snapshots", "description": "Memory snapshot management"},
             {"name": "mcp", "description": "MCP server configuration and tool logs"},
+            {"name": "memories", "description": "Long-term episodic memory management"},
             {"name": "websocket", "description": "Real-time WebSocket connections"},
         ],
     )
@@ -161,6 +163,7 @@ def create_app() -> FastAPI:
     app.include_router(snapshots_router, prefix=api_prefix)
     app.include_router(artifacts_router, prefix=api_prefix)
     app.include_router(mcp_router, prefix=api_prefix)
+    app.include_router(memories_router, prefix=api_prefix)
 
     # WebSocket (under api prefix)
     app.include_router(websocket_router, prefix=api_prefix)

@@ -56,12 +56,14 @@ class ConductorAgent:
         self,
         task_id: UUID,
         original_request: str,
+        memory_context: str | None = None,
     ) -> list[dict[str, str | TaskComplexity]]:
         """Analyze user request and create milestone plan.
 
         Args:
             task_id: Task ID to associate milestones with
             original_request: Original user request
+            memory_context: Optional context from long-term memory
 
         Returns:
             List of milestone definitions with:
@@ -76,13 +78,14 @@ class ConductorAgent:
             "conductor_analysis_start",
             task_id=str(task_id),
             request_length=len(original_request),
+            has_memory_context=bool(memory_context),
         )
 
         # Use TRIVIAL complexity for Conductor (lightweight LLM)
         model = self.router.select_model(TaskComplexity.TRIVIAL)
 
-        # Build analysis prompt
-        prompt = self._build_analysis_prompt(original_request)
+        # Build analysis prompt with optional memory context
+        prompt = self._build_analysis_prompt(original_request, memory_context)
         messages = [ChatMessage(role="user", content=prompt)]
 
         # Call LLM with structured output
@@ -129,19 +132,31 @@ class ConductorAgent:
 
         return milestones
 
-    def _build_analysis_prompt(self, original_request: str) -> str:
+    def _build_analysis_prompt(
+        self,
+        original_request: str,
+        memory_context: str | None = None,
+    ) -> str:
         """Build prompt for task analysis.
 
         Args:
             original_request: User's original request
+            memory_context: Optional context from long-term memory
 
         Returns:
             Formatted prompt for LLM
         """
+        # Include memory context if available
+        request_with_context = original_request
+        if memory_context:
+            request_with_context = (
+                f"{memory_context}\n\n---\n\n## Current Request\n{original_request}"
+            )
+
         return self.prompt_manager.render(
             "conductor",
             ConductorPrompts.ANALYSIS_PROMPT,
-            original_request=original_request,
+            original_request=request_with_context,
         )
 
     def _parse_milestones(self, response_content: str) -> list[dict[str, str | TaskComplexity]]:

@@ -15,6 +15,7 @@ from .enums import TaskStatus
 if TYPE_CHECKING:
     from .agent_step import AgentStep
     from .artifact import Artifact
+    from .episodic_memory import EpisodicMemory
     from .milestone import Milestone
     from .session import Session
 
@@ -52,6 +53,9 @@ class Task(Base):
     )
     agent_steps: Mapped[list[AgentStep]] = relationship(
         back_populates="task", lazy="selectin", cascade="all, delete-orphan"
+    )
+    episodic_memories: Mapped[list[EpisodicMemory]] = relationship(
+        back_populates="task", lazy="selectin"
     )
 
     def __repr__(self) -> str:

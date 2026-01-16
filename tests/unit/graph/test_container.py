@@ -16,18 +16,21 @@ class TestContainerState:
         mock_client = MagicMock()
         mock_registry = MagicMock()
         mock_router = MagicMock()
+        mock_embedding = MagicMock()
 
         state = ContainerState(
             prompt_manager=mock_pm,
             llm_client=mock_client,
             model_registry=mock_registry,
             router=mock_router,
+            embedding_service=mock_embedding,
         )
 
         assert state.prompt_manager is mock_pm
         assert state.llm_client is mock_client
         assert state.model_registry is mock_registry
         assert state.router is mock_router
+        assert state.embedding_service is mock_embedding
 
 
 class TestLifespan:
@@ -41,6 +44,7 @@ class TestLifespan:
             patch("agent.container.container.LiteLLMClient") as MockClient,
             patch("agent.container.container.ModelRegistry") as MockRegistry,
             patch("agent.container.container.LLMRouter") as MockRouter,
+            patch("agent.container.container.EmbeddingService") as MockEmbedding,
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()
@@ -52,6 +56,7 @@ class TestLifespan:
                 assert container.llm_client is MockClient.return_value
                 assert container.model_registry is mock_registry
                 assert container.router is MockRouter.return_value
+                assert container.embedding_service is MockEmbedding.return_value
 
     @pytest.mark.asyncio
     async def test_lifespan_initializes_model_registry(self) -> None:
@@ -61,6 +66,9 @@ class TestLifespan:
             patch("agent.container.container.LiteLLMClient"),
             patch("agent.container.container.ModelRegistry") as MockRegistry,
             patch("agent.container.container.LLMRouter"),
+            patch("agent.container.container.get_redis"),
+            patch("agent.container.container.SessionCache"),
+            patch("agent.container.container.EmbeddingService"),
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()
@@ -79,6 +87,9 @@ class TestLifespan:
             patch("agent.container.container.LiteLLMClient"),
             patch("agent.container.container.ModelRegistry") as MockRegistry,
             patch("agent.container.container.LLMRouter"),
+            patch("agent.container.container.get_redis"),
+            patch("agent.container.container.SessionCache"),
+            patch("agent.container.container.EmbeddingService"),
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()
@@ -95,6 +106,9 @@ class TestLifespan:
             patch("agent.container.container.LiteLLMClient"),
             patch("agent.container.container.ModelRegistry") as MockRegistry,
             patch("agent.container.container.LLMRouter") as MockRouter,
+            patch("agent.container.container.get_redis"),
+            patch("agent.container.container.SessionCache"),
+            patch("agent.container.container.EmbeddingService"),
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()
@@ -111,6 +125,9 @@ class TestLifespan:
             patch("agent.container.container.LiteLLMClient") as MockClient,
             patch("agent.container.container.ModelRegistry") as MockRegistry,
             patch("agent.container.container.LLMRouter"),
+            patch("agent.container.container.get_redis"),
+            patch("agent.container.container.SessionCache"),
+            patch("agent.container.container.EmbeddingService"),
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()

@@ -11,9 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.core import QAAgent, QADecision
 from agent.db.models.enums import MilestoneStatus, TaskStatus
 from agent.events import AgentActivityEvent, AgentStatus, EventType
+from agent.memory import store_qa_learning
 
 from ..state import AgentState, update_milestone
-from . import check_task_cancelled, get_container, get_event_bus, get_ws_manager_optional
+from . import (
+    check_task_cancelled,
+    get_container,
+    get_event_bus,
+    get_memory_manager,
+    get_ws_manager_optional,
+)
 
 logger = structlog.get_logger()
 
@@ -112,6 +119,21 @@ async def verify_qa_node(
             decision=decision.value,
             retry_count=retry_count,
         )
+
+        # Store QA learning when retry succeeds (pass after at least one retry)
+        if decision == QADecision.PASS and retry_count > 0:
+            previous_feedback = state.get("current_qa_feedback", "")
+            if previous_feedback:
+                memory_manager = get_memory_manager(config, session)
+                await store_qa_learning(
+                    manager=memory_manager,
+                    user_id=state["user_id"],
+                    session_id=state["session_id"],
+                    task_id=state["task_id"],
+                    previous_output=state.get("current_output") or "",
+                    qa_feedback=previous_feedback,
+                    improved_output=milestone["worker_output"] or "",
+                )
 
         # Broadcast QA completed with decision
         if decision == QADecision.PASS:

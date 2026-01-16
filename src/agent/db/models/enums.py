@@ -56,3 +56,14 @@ class SnapshotType(str, Enum):
     AUTO = "auto"
     MANUAL = "manual"
     MILESTONE = "milestone"
+
+
+class MemoryType(str, Enum):
+    """Episodic memory type classification."""
+
+    TASK_RESULT = "task_result"
+    DECISION = "decision"
+    LEARNING = "learning"
+    ERROR = "error"
+    USER_PREFERENCE = "user_preference"
+    DOMAIN_KNOWLEDGE = "domain_knowledge"

@@ -1,0 +1,44 @@
+# Memory Content Templates
+#
+# Mako template variables vary by template type.
+# These templates format memory content for storage.
+
+# Task result memory content
+# Variables: original_request, final_result, milestones_summary
+task_result_content: |
+  Task: ${original_request}
+
+  Result: ${final_result}
+
+  Milestones: ${milestones_summary}
+
+# QA learning memory content
+# Variables: qa_feedback
+qa_learning_content: |
+  QA Learning:
+
+  Original Output Issue: ${qa_feedback}
+
+  Improvement Applied: The output was revised from the initial version to address the QA feedback.
+
+  Key Lesson: ${qa_feedback[:500]}
+
+# Error case memory content
+# Variables: error_message, error_context
+error_content: |
+  Error Case:
+
+  Error: ${error_message}
+
+  Context: ${error_context}
+
+# Context header for relevant memories
+# Variables: (none)
+context_header: |
+  ${"##"} Relevant Past Experience
+
+# Memory item format in context
+# Variables: index, score, summary
+context_memory_item: |
+  ${"###"} Memory ${index} (relevance: ${"%.2f" % score})
+  ${summary}

@@ -11,9 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.api.config import get_agent_settings
 from agent.db.models.enums import MilestoneStatus, TaskStatus
 from agent.events import EventType, MilestoneRetryEvent, MilestoneStatusChangedEvent
+from agent.memory import store_task_memory
 
 from ..state import AgentState
-from . import get_event_bus
+from . import get_event_bus, get_memory_manager
 
 logger = structlog.get_logger()
 
@@ -21,7 +22,7 @@ logger = structlog.get_logger()
 async def advance_node(
     state: AgentState,
     config: RunnableConfig,
-    _: AsyncSession,
+    session: AsyncSession,
 ) -> dict[str, Any]:
     """Advance to next milestone or complete workflow.
 
@@ -184,6 +185,18 @@ async def advance_node(
                 "workflow_complete",
                 task_id=str(state["task_id"]),
                 milestone_count=len(milestones),
+            )
+
+            # Store completed task to long-term memory using DI container
+            memory_manager = get_memory_manager(config, session)
+            await store_task_memory(
+                manager=memory_manager,
+                user_id=state["user_id"],
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                original_request=state["original_request"],
+                final_response=state.get("final_response") or "",
+                milestones=state.get("milestones", []),
             )
 
             return {

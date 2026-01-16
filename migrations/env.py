@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Import all models to ensure they are registered with Base.metadata
 from src.agent.db.models import (  # noqa: F401
+    EpisodicMemory,
     GeneratedPrompt,
     LLMUsageLog,
     MemorySnapshot,

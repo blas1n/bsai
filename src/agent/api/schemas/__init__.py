@@ -1,5 +1,14 @@
 """Pydantic schemas for API request/response validation."""
 
+from .memory import (
+    ConsolidateResult,
+    DecayResult,
+    MemoryDetailResponse,
+    MemoryResponse,
+    MemorySearchRequest,
+    MemorySearchResult,
+    MemoryStatsResponse,
+)
 from .requests import (
     BulkSessionAction,
     SessionCreate,
@@ -56,6 +65,14 @@ __all__ = [
     "ArtifactResponse",
     "PaginatedResponse",
     "ErrorResponse",
+    # Memory
+    "MemoryResponse",
+    "MemoryDetailResponse",
+    "MemorySearchResult",
+    "MemorySearchRequest",
+    "ConsolidateResult",
+    "DecayResult",
+    "MemoryStatsResponse",
     # WebSocket
     "WSMessageType",
     "WSMessage",
