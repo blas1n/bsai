@@ -1,13 +1,20 @@
 """Tests for execute worker node."""
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from langchain_core.runnables import RunnableConfig
 
+from agent.core.artifact_extractor import ExtractionResult
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
-from agent.graph.nodes.execute import execute_worker_node
+from agent.graph.nodes.execute import (
+    _build_artifacts_context_message,
+    _get_artifact_key,
+    _prepare_worker_prompt,
+    execute_worker_node,
+)
 from agent.graph.state import AgentState, MilestoneData
 from agent.llm import LLMResponse, UsageInfo
 
@@ -27,7 +34,10 @@ class TestExecuteWorkerNode:
             patch("agent.graph.nodes.execute.WorkerAgent") as MockWorker,
             patch("agent.graph.nodes.execute.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
-            patch("agent.graph.nodes.execute.extract_artifacts", return_value=[]),
+            patch(
+                "agent.graph.nodes.execute.extract_artifacts",
+                return_value=ExtractionResult(artifacts=[], deleted_paths=[]),
+            ),
             patch(
                 "agent.graph.nodes.execute.check_task_cancelled",
                 new_callable=AsyncMock,
@@ -50,7 +60,8 @@ class TestExecuteWorkerNode:
             MockMilestoneRepo.return_value = mock_milestone_repo
 
             mock_artifact_repo = MagicMock()
-            mock_artifact_repo.create_artifact = AsyncMock()
+            mock_artifact_repo.get_by_task_id = AsyncMock(return_value=[])
+            mock_artifact_repo.get_latest_snapshot = AsyncMock(return_value=[])
             MockArtifactRepo.return_value = mock_artifact_repo
 
             result = await execute_worker_node(state_with_milestone, mock_config, mock_session)
@@ -97,7 +108,10 @@ class TestExecuteWorkerNode:
             patch("agent.graph.nodes.execute.WorkerAgent") as MockWorker,
             patch("agent.graph.nodes.execute.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
-            patch("agent.graph.nodes.execute.extract_artifacts", return_value=[]),
+            patch(
+                "agent.graph.nodes.execute.extract_artifacts",
+                return_value=ExtractionResult(artifacts=[], deleted_paths=[]),
+            ),
             patch(
                 "agent.graph.nodes.execute.check_task_cancelled",
                 new_callable=AsyncMock,
@@ -120,10 +134,150 @@ class TestExecuteWorkerNode:
             MockMilestoneRepo.return_value = mock_milestone_repo
 
             mock_artifact_repo = MagicMock()
-            mock_artifact_repo.create_artifact = AsyncMock()
+            mock_artifact_repo.get_by_task_id = AsyncMock(return_value=[])
+            mock_artifact_repo.get_latest_snapshot = AsyncMock(return_value=[])
             MockArtifactRepo.return_value = mock_artifact_repo
 
             result = await execute_worker_node(state, mock_config, mock_session)
 
             mock_worker.retry_with_feedback.assert_called_once()
             assert result["current_output"] == "Fixed output"
+
+
+class TestHelperFunctions:
+    """Tests for helper functions in execute module."""
+
+    def test_get_artifact_key_with_path(self) -> None:
+        """Test artifact key generation with path."""
+        mock_artifact = MagicMock()
+        mock_artifact.path = "src/components"
+        mock_artifact.filename = "Button.tsx"
+
+        key = _get_artifact_key(mock_artifact)
+
+        assert key == "src/components/Button.tsx"
+
+    def test_get_artifact_key_no_path(self) -> None:
+        """Test artifact key generation without path."""
+        mock_artifact = MagicMock()
+        mock_artifact.path = ""
+        mock_artifact.filename = "README.md"
+
+        key = _get_artifact_key(mock_artifact)
+
+        assert key == "README.md"
+
+    def test_get_artifact_key_none_path(self) -> None:
+        """Test artifact key generation with None path."""
+        mock_artifact = MagicMock()
+        mock_artifact.path = None
+        mock_artifact.filename = "config.json"
+
+        key = _get_artifact_key(mock_artifact)
+
+        assert key == "config.json"
+
+    def test_get_artifact_key_strips_slashes(self) -> None:
+        """Test artifact key strips leading/trailing slashes from path."""
+        mock_artifact = MagicMock()
+        mock_artifact.path = "/src/utils/"
+        mock_artifact.filename = "helper.py"
+
+        key = _get_artifact_key(mock_artifact)
+
+        assert key == "src/utils/helper.py"
+
+    def test_build_artifacts_context_message_with_artifacts(self) -> None:
+        """Test building context message with artifacts."""
+        artifact1 = MagicMock()
+        artifact1.path = "src"
+        artifact1.filename = "main.py"
+        artifact1.kind = "py"
+        artifact1.content = "print('hello')"
+
+        artifact2 = MagicMock()
+        artifact2.path = ""
+        artifact2.filename = "README.md"
+        artifact2.kind = "md"
+        artifact2.content = "# Project"
+
+        message = _build_artifacts_context_message([artifact1, artifact2])
+
+        assert message is not None
+        assert message.role == "system"
+        assert "Session Files" in message.content
+        assert "2 files" in message.content
+        assert "src/main.py" in message.content
+        assert "README.md" in message.content
+
+    def test_build_artifacts_context_message_empty(self) -> None:
+        """Test building context message with no artifacts."""
+        message = _build_artifacts_context_message([])
+
+        assert message is None
+
+    def test_prepare_worker_prompt_with_original_request(self) -> None:
+        """Test prompt preparation includes original request."""
+        state = cast(
+            AgentState,
+            {
+                "current_prompt": None,
+                "original_request": "Build a calculator app",
+            },
+        )
+        milestone = cast(
+            MilestoneData,
+            {
+                "description": "Implement add function",
+            },
+        )
+
+        prompt = _prepare_worker_prompt(state, milestone)
+
+        assert "Build a calculator app" in prompt
+        assert "Implement add function" in prompt
+        assert "Original user request:" in prompt
+
+    def test_prepare_worker_prompt_uses_current_prompt(self) -> None:
+        """Test prompt uses current_prompt over milestone description."""
+        state = cast(
+            AgentState,
+            {
+                "current_prompt": "Enhanced prompt from MetaPrompter",
+                "original_request": "Short request",
+            },
+        )
+        milestone = cast(
+            MilestoneData,
+            {
+                "description": "Basic description",
+            },
+        )
+
+        prompt = _prepare_worker_prompt(state, milestone)
+
+        assert "Enhanced prompt from MetaPrompter" in prompt
+        assert "Short request" in prompt
+
+    def test_prepare_worker_prompt_already_contains_request(self) -> None:
+        """Test prompt doesn't duplicate when already containing request."""
+        original = "Build a calculator"
+        state = cast(
+            AgentState,
+            {
+                "current_prompt": "Task: Build a calculator - enhanced version",
+                "original_request": original,
+            },
+        )
+        milestone = cast(
+            MilestoneData,
+            {
+                "description": "Basic",
+            },
+        )
+
+        prompt = _prepare_worker_prompt(state, milestone)
+
+        # Should not have "Original user request:" prefix since it's already included
+        assert "Original user request:" not in prompt
+        assert "Build a calculator" in prompt

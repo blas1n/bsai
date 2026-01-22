@@ -6,39 +6,48 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import INTEGER, TEXT, VARCHAR, ForeignKey, func
+from sqlalchemy import INTEGER, TEXT, VARCHAR, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
 if TYPE_CHECKING:
     from .milestone import Milestone
+    from .session import Session
     from .task import Task
 
 
 class Artifact(Base):
     """Generated artifact (code, file, document) from Worker output.
 
-    Artifacts are extracted from Worker output and stored separately
-    for easy retrieval and display in the frontend.
+    Artifacts are managed at TASK level as snapshots.
+    Each task creates a complete snapshot of all artifacts at that point.
+    The task_id identifies which snapshot the artifact belongs to.
 
     Attributes:
         id: Primary key (UUID)
-        task_id: Foreign key to tasks table
+        session_id: Foreign key to sessions table (for grouping)
+        task_id: Foreign key to tasks table (snapshot identifier)
         milestone_id: Foreign key to milestones table (optional)
         artifact_type: Type of artifact (code, file, document)
         filename: Filename or identifier
         kind: File type/extension (e.g., 'js', 'py', 'html', 'md', 'json')
         content: Full content of the artifact
         path: Optional path within project structure
-        sequence_number: Order within task (for multiple artifacts)
+        sequence_number: Order within task snapshot
         created_at: Creation timestamp
+        updated_at: Last update timestamp
     """
 
     __tablename__ = "artifacts"
+    __table_args__ = (
+        # Index for task-based snapshot queries (no unique constraint)
+        Index("ix_artifacts_task_path_filename", "task_id", "path", "filename"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id"), index=True)
+    session_id: Mapped[UUID] = mapped_column(ForeignKey("sessions.id"), index=True)
+    task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id"), index=True, nullable=False)
     milestone_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("milestones.id"), index=True, nullable=True
     )
@@ -49,9 +58,11 @@ class Artifact(Base):
     path: Mapped[str] = mapped_column(VARCHAR(500))
     sequence_number: Mapped[int] = mapped_column(INTEGER, default=0)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    task: Mapped[Task] = relationship(back_populates="artifacts")
+    session: Mapped[Session] = relationship(back_populates="artifacts")
+    task: Mapped[Task | None] = relationship(back_populates="artifacts")
     milestone: Mapped[Milestone | None] = relationship(back_populates="artifacts")
 
     def __repr__(self) -> str:
@@ -61,7 +72,8 @@ class Artifact(Base):
         """Convert artifact to dictionary for API response."""
         return {
             "id": str(self.id),
-            "task_id": str(self.task_id),
+            "session_id": str(self.session_id),
+            "task_id": str(self.task_id) if self.task_id else None,
             "milestone_id": str(self.milestone_id) if self.milestone_id else None,
             "type": self.artifact_type,
             "filename": self.filename,
@@ -70,4 +82,5 @@ class Artifact(Base):
             "path": self.path,
             "sequence_number": self.sequence_number,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

@@ -14,6 +14,7 @@ from .base import Base
 from .enums import SessionStatus
 
 if TYPE_CHECKING:
+    from .artifact import Artifact
     from .episodic_memory import EpisodicMemory
     from .llm_usage_log import LLMUsageLog
     from .memory_snapshot import MemorySnapshot
@@ -58,6 +59,9 @@ class Session(Base):
         back_populates="session", lazy="selectin", cascade="all, delete-orphan"
     )
     episodic_memories: Mapped[list[EpisodicMemory]] = relationship(
+        back_populates="session", lazy="selectin", cascade="all, delete-orphan"
+    )
+    artifacts: Mapped[list[Artifact]] = relationship(
         back_populates="session", lazy="selectin", cascade="all, delete-orphan"
     )
 

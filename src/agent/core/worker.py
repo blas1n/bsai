@@ -21,6 +21,7 @@ from agent.db.models.mcp_server_config import McpServerConfig
 from agent.db.repository.mcp_server_repo import McpServerRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMResponse, LLMRouter
+from agent.llm.builtin_tools import BuiltinToolExecutor
 from agent.llm.schemas import WorkerOutput
 from agent.mcp.executor import McpToolExecutor
 from agent.mcp.utils import load_user_mcp_servers
@@ -68,6 +69,7 @@ class WorkerAgent:
         complexity: TaskComplexity,
         user_id: str,
         session_id: UUID,
+        task_id: UUID | None = None,
         preferred_model: str | None = None,
         context_messages: list[ChatMessage] | None = None,
         mcp_enabled: bool = True,
@@ -80,6 +82,7 @@ class WorkerAgent:
             complexity: Milestone complexity level
             user_id: User ID for MCP tool ownership
             session_id: Session ID for MCP tool logging
+            task_id: Optional task ID for built-in tool context
             preferred_model: Optional user-preferred model override
             context_messages: Optional conversation history for context
             mcp_enabled: Enable MCP tool calling (default: True)
@@ -121,6 +124,15 @@ class WorkerAgent:
         if context_messages:
             messages.extend(context_messages)
         messages.append(ChatMessage(role="user", content=prompt))
+
+        # Create built-in tool executor for artifact access
+        builtin_tool_executor: BuiltinToolExecutor | None = None
+        if task_id:
+            builtin_tool_executor = BuiltinToolExecutor(
+                session=self.session,
+                session_id=session_id,
+                task_id=task_id,
+            )
 
         # Load MCP servers if enabled
         mcp_servers: list[McpServerConfig] = []
@@ -177,6 +189,7 @@ class WorkerAgent:
             request=request,
             mcp_servers=mcp_servers,
             tool_executor=tool_executor,
+            builtin_tool_executor=builtin_tool_executor,
         )
 
         # Calculate cost
@@ -206,6 +219,7 @@ class WorkerAgent:
         complexity: TaskComplexity,
         user_id: str,
         session_id: UUID,
+        task_id: UUID | None = None,
     ) -> LLMResponse:
         """Retry milestone execution with QA feedback.
 
@@ -217,6 +231,7 @@ class WorkerAgent:
             complexity: Milestone complexity
             user_id: User ID for MCP tool ownership
             session_id: Session ID for MCP tool logging
+            task_id: Optional task ID for built-in tool context
 
         Returns:
             LLM response from retry attempt
@@ -243,6 +258,7 @@ class WorkerAgent:
             complexity=complexity,
             user_id=user_id,
             session_id=session_id,
+            task_id=task_id,
         )
 
         logger.info(

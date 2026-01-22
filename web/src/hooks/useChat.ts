@@ -273,8 +273,29 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       const session = await api.getSession(targetSessionId);
       setSessionId(targetSessionId);
 
+      // Fetch all session artifacts once (session-level management)
+      let sessionArtifacts: ArtifactData[] = [];
+      try {
+        const artifactResult = await api.getArtifacts(targetSessionId);
+        if (artifactResult.items) {
+          sessionArtifacts = artifactResult.items.map((a) => ({
+            id: a.id,
+            type: a.artifact_type,
+            filename: a.filename,
+            language: a.language,
+            content: a.content,
+            path: a.path,
+          }));
+        }
+      } catch {
+        // Ignore error fetching artifacts
+      }
+
       // Convert tasks to messages
       const loadedMessages: ChatMessage[] = [];
+      const completedTasks = session.tasks.filter((t) => t.final_result);
+      const lastCompletedTaskId = completedTasks.length > 0 ? completedTasks[completedTasks.length - 1].id : null;
+
       for (const task of session.tasks) {
         // User message
         loadedMessages.push({
@@ -289,7 +310,6 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           // Get task details to include milestones
           let milestones: MilestoneInfo[] = [];
           let agentActivity: AgentActivity[] = [];
-          let artifacts: ArtifactData[] = [];
 
           try {
             const taskDetail = await api.getTask(targetSessionId, task.id);
@@ -353,22 +373,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             // Ignore error fetching task details, milestones will be empty
           }
 
-          // Fetch artifacts
-          try {
-            const artifactResult = await api.getArtifacts(targetSessionId, task.id);
-            if (artifactResult.items) {
-              artifacts = artifactResult.items.map((a) => ({
-                id: a.id,
-                type: a.artifact_type,
-                filename: a.filename,
-                language: a.language,
-                content: a.content,
-                path: a.path,
-              }));
-            }
-          } catch {
-            // Ignore error fetching artifacts
-          }
+          // Attach all session artifacts to the last completed task's message
+          // (artifacts are managed at session level, not task level)
+          const isLastTask = task.id === lastCompletedTaskId;
 
           loadedMessages.push({
             id: `assistant-${task.id}`,
@@ -378,7 +385,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             taskId: task.id,
             milestones,
             agentActivity,
-            artifacts: artifacts.length > 0 ? artifacts : undefined,
+            artifacts: isLastTask && sessionArtifacts.length > 0 ? sessionArtifacts : undefined,
             rawContent: task.final_result, // For artifact extraction
           });
         }

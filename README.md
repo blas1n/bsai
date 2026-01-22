@@ -40,7 +40,7 @@
 
 ## Architecture Overview
 
-### 7 Specialized Agents
+### 8 Specialized Agents
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -86,9 +86,17 @@
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
+│  Task Summary Agent (runs at task completion)               │
+│  - Summarize all milestones completed in the task           │
+│  - Generate handover context for next task's Conductor      │
+│  - Prepare comprehensive output for Responder               │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
 │  Responder Agent (Lightweight LLM)                          │
 │  - Detect user's language (75+ languages via lingua-py)    │
 │  - Generate localized, user-friendly response               │
+│  - Uses Task Summary for complete milestone coverage        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -98,7 +106,8 @@
 Entry → analyze_task → select_llm → [generate_prompt?] → execute_worker
          → verify_qa → [retry/fail/next]
          → check_context → [summarize?]
-         → advance → [next_milestone/complete]
+         → advance → [next_milestone/task_summary]
+         → task_summary → generate_response → END
 ```
 
 ### Database Schema (11 Tables)
@@ -242,12 +251,13 @@ bsai/
 │   │   ├── models.py         # Model definitions with pricing
 │   │   ├── schemas.py        # LLM request/response schemas
 │   │   └── logger.py         # Usage logging
-│   ├── core/                 # Agent implementations (7 agents)
+│   ├── core/                 # Agent implementations (8 agents)
 │   │   ├── conductor.py
 │   │   ├── meta_prompter.py
 │   │   ├── worker.py
 │   │   ├── qa_agent.py
 │   │   ├── summarizer.py
+│   │   ├── task_summary.py
 │   │   ├── artifact_extractor.py
 │   │   └── responder.py
 │   ├── graph/                # LangGraph workflow

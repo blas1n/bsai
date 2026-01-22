@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import DECIMAL, INTEGER, TEXT, VARCHAR, ForeignKey, func
+from sqlalchemy import DECIMAL, INTEGER, TEXT, VARCHAR, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -45,6 +45,9 @@ class Milestone(Base):
     """
 
     __tablename__ = "milestones"
+    __table_args__ = (
+        UniqueConstraint("task_id", "sequence_number", name="uq_milestone_task_sequence"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id"), index=True)

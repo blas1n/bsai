@@ -149,7 +149,7 @@ class EpisodicMemoryRepository(BaseRepository[EpisodicMemory]):
             .where(EpisodicMemory.id == memory_id)
             .values(
                 access_count=EpisodicMemory.access_count + 1,
-                last_accessed_at=datetime.now(UTC),
+                last_accessed_at=datetime.now(UTC).replace(tzinfo=None),
             )
         )
         await self.session.execute(stmt)

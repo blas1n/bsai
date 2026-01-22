@@ -1,7 +1,7 @@
 """LangGraph StateGraph composition and compilation.
 
 Builds and compiles the multi-agent workflow graph that orchestrates
-the 6 specialized agents for task execution.
+the 8 specialized agents for task execution.
 """
 
 from __future__ import annotations
@@ -21,10 +21,10 @@ from agent.api.websocket.manager import ConnectionManager
 from agent.cache import SessionCache
 from agent.container import lifespan
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
-from agent.db.repository.artifact_repo import ArtifactRepository
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
+from agent.db.repository.task_repo import TaskRepository
 from agent.events import EventBus
 from agent.llm import ChatMessage
 from agent.services import BreakpointService
@@ -50,6 +50,7 @@ from .nodes.execute import execute_worker_node
 from .nodes.llm import generate_prompt_node, select_llm_node
 from .nodes.qa import verify_qa_node
 from .nodes.response import generate_response_node
+from .nodes.task_summary import task_summary_node
 from .state import AgentState, MilestoneData
 
 if TYPE_CHECKING:
@@ -98,11 +99,15 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     """Build the agent orchestration workflow graph.
 
     Flow:
-        Entry -> analyze_task -> select_llm -> [generate_prompt?] -> execute_worker
-             -> verify_qa -> [retry/fail/next]
+        Entry -> analyze_task -> select_llm -> [generate_prompt?]
+             -> execute_worker -> verify_qa -> [retry/fail/next]
              -> check_context -> [summarize?]
-             -> advance -> [next_milestone/generate_response/complete]
-             -> generate_response -> END
+             -> advance -> [next_milestone/task_summary/retry]
+             -> task_summary -> generate_response -> END
+
+    The task_summary node generates a summary of all milestones for:
+    - Responder to create a complete user response
+    - Next task's Conductor to understand previous work
 
     Args:
         session: Database session for node operations
@@ -124,6 +129,7 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         Node.CHECK_CONTEXT: check_context_node,
         Node.SUMMARIZE: summarize_node,
         Node.ADVANCE: advance_node,
+        Node.TASK_SUMMARY: task_summary_node,
         Node.GENERATE_RESPONSE: generate_response_node,
     }
 
@@ -188,11 +194,12 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         route_advance,
         {
             AdvanceRoute.NEXT_MILESTONE: Node.SELECT_LLM,
-            AdvanceRoute.COMPLETE: Node.GENERATE_RESPONSE,
+            AdvanceRoute.COMPLETE: Node.TASK_SUMMARY,
             AdvanceRoute.RETRY_MILESTONE: Node.EXECUTE_WORKER,
         },
     )
 
+    graph.add_edge(Node.TASK_SUMMARY, Node.GENERATE_RESPONSE)
     graph.add_edge(Node.GENERATE_RESPONSE, END)
 
     logger.info("workflow_graph_built")
@@ -325,8 +332,6 @@ class WorkflowRunner:
     ) -> tuple[list[ChatMessage], str | None, int]:
         """Load previous conversation context from cache or memory snapshot.
 
-        Also includes recent artifacts from the session for better context.
-
         Args:
             session_id: Session UUID
 
@@ -375,33 +380,39 @@ class WorkflowRunner:
                 token_count=token_count,
             )
 
-        # Add recent artifacts as additional context
-        artifact_repo = ArtifactRepository(self.session)
-        recent_artifacts = await artifact_repo.get_by_session_id(session_id, limit=10)
-        if recent_artifacts:
-            artifact_summaries = []
-            for artifact in reversed(recent_artifacts):  # Oldest first
-                summary = f"- {artifact.filename} ({artifact.kind})"
-                if len(artifact.content) <= 500:
-                    summary += f":\n```{artifact.kind}\n{artifact.content}\n```"
-                else:
-                    # Truncate long content
-                    summary += f" [{len(artifact.content)} chars, truncated]:\n```{artifact.kind}\n{artifact.content[:300]}...\n```"
-                artifact_summaries.append(summary)
-
-            artifacts_context = "Previously created artifacts in this session:\n" + "\n".join(
-                artifact_summaries
-            )
-            context_messages.append(ChatMessage(role="system", content=artifacts_context))
-            # Update token estimate
-            token_count += len(artifacts_context) // 4
-            logger.info(
-                "artifacts_added_to_context",
-                session_id=str(session_id),
-                artifact_count=len(recent_artifacts),
-            )
-
         return context_messages, context_summary, token_count
+
+    async def _load_previous_task_handover(
+        self,
+        session_id: UUID,
+    ) -> str | None:
+        """Load handover context from the previous completed task.
+
+        This provides Conductor with context about what was done in the
+        previous task, including milestones completed and artifacts created.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Handover context string or None if no previous task
+        """
+        task_repo = TaskRepository(self.session)
+        handover = await task_repo.get_previous_task_handover(session_id)
+
+        if handover:
+            logger.info(
+                "previous_task_handover_loaded",
+                session_id=str(session_id),
+                handover_length=len(handover),
+            )
+        else:
+            logger.info(
+                "no_previous_task_handover",
+                session_id=str(session_id),
+            )
+
+        return handover
 
     def get_trace_url(self, task_id: str | UUID) -> str:
         """Get the Langfuse trace URL for a task.
@@ -458,6 +469,16 @@ class WorkflowRunner:
         )
         previous_milestones, max_sequence = await self._load_previous_milestones(session_id)
 
+        # Load handover context from previous completed task (if any)
+        previous_task_handover = await self._load_previous_task_handover(session_id)
+        if previous_task_handover:
+            # Prepend handover context for Conductor to reference
+            handover_message = ChatMessage(
+                role="system",
+                content=f"Context from previous task in this session:\n{previous_task_handover}",
+            )
+            context_messages = [handover_message] + context_messages
+
         # Create Langfuse callback handler for tracing
         langfuse_callback = get_langfuse_callback(
             session_id=session_id,
@@ -502,7 +523,8 @@ class WorkflowRunner:
             session_id=str(session_id),
             task_id=str(task_id),
             has_previous_context=len(context_messages) > 0,
-            prevㄴious_milestone_count=len(previous_milestones),
+            previous_milestone_count=len(previous_milestones),
+            has_handover_context=previous_task_handover is not None,
             trace_url=trace_url,
             tracing_enabled=langfuse_callback is not None,
         )

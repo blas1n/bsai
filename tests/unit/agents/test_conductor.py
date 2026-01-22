@@ -1,6 +1,7 @@
 """Tests for ConductorAgent."""
 
 from decimal import Decimal
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -107,7 +108,7 @@ class TestConductorAgent:
         mock_router.select_model.assert_called_once_with(TaskComplexity.TRIVIAL)
         mock_prompt_manager.render.assert_called_once()
         mock_llm_client.chat_completion.assert_called_once()
-        conductor.milestone_repo.create.assert_called_once()
+        cast(MagicMock, conductor.milestone_repo.create).assert_called_once()
 
     @pytest.mark.asyncio
     async def test_analyze_and_plan_invalid_json(
@@ -203,4 +204,65 @@ class TestConductorAgent:
         assert milestones[1]["complexity"] == TaskComplexity.COMPLEX
 
         # Should create both milestones in DB
-        assert conductor.milestone_repo.create.call_count == 2
+        assert cast(MagicMock, conductor.milestone_repo.create).call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_analyze_and_plan_with_sequence_offset(
+        self,
+        conductor: ConductorAgent,
+        mock_llm_client: MagicMock,
+    ) -> None:
+        """Test milestone sequence numbering with offset for multi-task sessions."""
+        task_id = uuid4()
+        original_request = "Add feature"
+        sequence_offset = 3  # Previous task had 3 milestones
+
+        # Mock LLM response with 2 milestones
+        mock_response = LLMResponse(
+            content='{"milestones": [{"description": "D1", "complexity": "SIMPLE", "acceptance_criteria": "AC1"}, {"description": "D2", "complexity": "MODERATE", "acceptance_criteria": "AC2"}]}',
+            usage=UsageInfo(input_tokens=100, output_tokens=50, total_tokens=150),
+            model="test-model",
+        )
+        mock_llm_client.chat_completion.return_value = mock_response
+
+        # Execute with sequence offset
+        milestones = await conductor.analyze_and_plan(
+            task_id, original_request, sequence_offset=sequence_offset
+        )
+
+        # Verify milestones created
+        assert len(milestones) == 2
+        assert cast(MagicMock, conductor.milestone_repo.create).call_count == 2
+
+        # Verify sequence numbers include offset (4, 5 instead of 1, 2)
+        mock_create = cast(MagicMock, conductor.milestone_repo.create)
+        first_call = mock_create.call_args_list[0]
+        second_call = mock_create.call_args_list[1]
+
+        assert first_call.kwargs["sequence_number"] == 4  # offset + 1
+        assert second_call.kwargs["sequence_number"] == 5  # offset + 2
+
+    @pytest.mark.asyncio
+    async def test_analyze_and_plan_without_sequence_offset(
+        self,
+        conductor: ConductorAgent,
+        mock_llm_client: MagicMock,
+    ) -> None:
+        """Test milestone sequence numbering defaults to 1-based without offset."""
+        task_id = uuid4()
+        original_request = "Add feature"
+
+        # Mock LLM response
+        mock_response = LLMResponse(
+            content='{"milestones": [{"description": "D1", "complexity": "SIMPLE", "acceptance_criteria": "AC1"}]}',
+            usage=UsageInfo(input_tokens=100, output_tokens=50, total_tokens=150),
+            model="test-model",
+        )
+        mock_llm_client.chat_completion.return_value = mock_response
+
+        # Execute without offset (default)
+        await conductor.analyze_and_plan(task_id, original_request)
+
+        # Verify sequence starts at 1
+        call_args = cast(MagicMock, conductor.milestone_repo.create).call_args
+        assert call_args.kwargs["sequence_number"] == 1

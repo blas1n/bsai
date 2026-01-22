@@ -15,6 +15,7 @@ import {
   Maximize2,
   Minimize2,
   Archive,
+  History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -48,11 +49,20 @@ export interface FileNode {
 
 export type Artifact = CodeArtifact | ProjectArtifact;
 
+export interface TaskVersion {
+  id: string;
+  sequence_number: number;
+  original_request: string;
+  created_at: string;
+}
+
 interface ArtifactPanelProps {
   artifacts: Artifact[];
   onClose?: () => void;
   sessionId?: string;
-  taskId?: string;
+  tasks?: TaskVersion[];
+  selectedTaskId?: string | null;
+  onVersionChange?: (taskId: string | null) => void;
 }
 
 // Language to syntax highlighting mapping
@@ -235,7 +245,21 @@ function ProjectViewer({ project }: { project: ProjectArtifact }) {
   );
 }
 
-export function ArtifactPanel({ artifacts, onClose, sessionId, taskId }: ArtifactPanelProps) {
+function formatVersionLabel(task: TaskVersion): string {
+  const date = new Date(task.created_at);
+  const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const preview = task.original_request.slice(0, 20) + (task.original_request.length > 20 ? '...' : '');
+  return `#${task.sequence_number} - ${timeStr} - ${preview}`;
+}
+
+export function ArtifactPanel({
+  artifacts,
+  onClose,
+  sessionId,
+  tasks,
+  selectedTaskId,
+  onVersionChange,
+}: ArtifactPanelProps) {
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     artifacts.length > 0 ? artifacts[0].id : null
   );
@@ -243,17 +267,25 @@ export function ArtifactPanel({ artifacts, onClose, sessionId, taskId }: Artifac
   const [isDownloading, setIsDownloading] = useState(false);
 
   const selectedArtifact = artifacts.find((a) => a.id === selectedArtifactId);
+  const hasVersions = tasks && tasks.length > 1;
+
+  const handleVersionChange = (value: string) => {
+    if (onVersionChange) {
+      onVersionChange(value === 'latest' ? null : value);
+    }
+  };
 
   const handleDownloadZip = async () => {
-    if (!sessionId || !taskId) return;
+    if (!sessionId) return;
 
     setIsDownloading(true);
     try {
-      const blob = await api.downloadArtifactsZip(sessionId, taskId);
+      const blob = await api.downloadArtifactsZip(sessionId, selectedTaskId || undefined);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
+      const versionSuffix = selectedTaskId ? `_${selectedTaskId.slice(0, 8)}` : '';
+      a.download = `artifacts_${sessionId.slice(0, 8)}${versionSuffix}.zip`;
       a.href = url;
-      a.download = `artifacts_${taskId.slice(0, 8)}.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -295,9 +327,26 @@ export function ArtifactPanel({ artifacts, onClose, sessionId, taskId }: Artifac
         <div className="flex items-center gap-2">
           <h2 className="font-semibold text-sm">Artifacts</h2>
           <span className="text-xs text-muted-foreground">({artifacts.length})</span>
+          {hasVersions && (
+            <div className="flex items-center gap-1">
+              <History className="h-3 w-3 text-muted-foreground" />
+              <select
+                value={selectedTaskId || 'latest'}
+                onChange={(e) => handleVersionChange(e.target.value)}
+                className="h-7 text-xs bg-background border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="latest">Latest</option>
+                {tasks.map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {formatVersionLabel(task)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1">
-          {sessionId && taskId && artifacts.length > 0 && (
+          {sessionId && artifacts.length > 0 && (
             <Button
               variant="ghost"
               size="icon"

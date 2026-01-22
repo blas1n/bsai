@@ -2,11 +2,23 @@
 
 import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID, uuid4
 
 import pytest
 
+from agent.api.websocket.manager import ConnectionManager
+from agent.cache import SessionCache
+from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.events.bus import EventBus
 from agent.graph.nodes import Node
-from agent.graph.workflow import WorkflowResult, WorkflowRunner, build_workflow, compile_workflow
+from agent.graph.workflow import (
+    WorkflowResult,
+    WorkflowRunner,
+    _create_node_with_session,
+    build_workflow,
+    compile_workflow,
+)
+from agent.services import BreakpointService
 
 
 @pytest.fixture
@@ -18,8 +30,6 @@ def mock_session() -> AsyncMock:
 @pytest.fixture
 def mock_event_bus() -> MagicMock:
     """Create mock event bus."""
-    from agent.events.bus import EventBus
-
     event_bus = MagicMock(spec=EventBus)
     event_bus.emit = AsyncMock()
     return event_bus
@@ -28,16 +38,12 @@ def mock_event_bus() -> MagicMock:
 @pytest.fixture
 def mock_ws_manager() -> MagicMock:
     """Create mock WebSocket manager."""
-    from agent.api.websocket.manager import ConnectionManager
-
     return MagicMock(spec=ConnectionManager)
 
 
 @pytest.fixture
 def mock_cache() -> MagicMock:
     """Create mock session cache."""
-    from agent.cache import SessionCache
-
     cache = MagicMock(spec=SessionCache)
     cache.get_cached_context = AsyncMock(return_value=None)
     return cache
@@ -46,8 +52,6 @@ def mock_cache() -> MagicMock:
 @pytest.fixture
 def mock_breakpoint_service() -> MagicMock:
     """Create mock breakpoint service."""
-    from agent.services import BreakpointService
-
     return MagicMock(spec=BreakpointService)
 
 
@@ -156,10 +160,6 @@ class TestWorkflowRunner:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that run calls ainvoke on the graph."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
@@ -176,6 +176,12 @@ class TestWorkflowRunner:
                 "_load_previous_milestones",
                 new_callable=AsyncMock,
                 return_value=([], 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_task_handover",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
         ):
             # Setup mock container from lifespan context manager
@@ -242,10 +248,6 @@ class TestWorkflowRunner:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that run accepts UUID objects."""
-        from uuid import UUID, uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
@@ -262,6 +264,12 @@ class TestWorkflowRunner:
                 "_load_previous_milestones",
                 new_callable=AsyncMock,
                 return_value=([], 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_task_handover",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
         ):
             mock_container = MagicMock()
@@ -326,10 +334,6 @@ class TestWorkflowRunner:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that run accepts custom max_context_tokens."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
@@ -346,6 +350,12 @@ class TestWorkflowRunner:
                 "_load_previous_milestones",
                 new_callable=AsyncMock,
                 return_value=([], 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_task_handover",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
         ):
             mock_container = MagicMock()
@@ -406,10 +416,6 @@ class TestWorkflowRunner:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that run passes container in config to ainvoke."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
@@ -426,6 +432,12 @@ class TestWorkflowRunner:
                 "_load_previous_milestones",
                 new_callable=AsyncMock,
                 return_value=([], 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_task_handover",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
         ):
             mock_container = MagicMock()
@@ -488,10 +500,6 @@ class TestWorkflowRunner:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that run uses lifespan context manager."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
@@ -508,6 +516,12 @@ class TestWorkflowRunner:
                 "_load_previous_milestones",
                 new_callable=AsyncMock,
                 return_value=([], 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_task_handover",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
         ):
             mock_container = MagicMock()
@@ -567,8 +581,6 @@ class TestWorkflowRunner:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that run raises ValueError when session not found."""
-        from uuid import uuid4
-
         with patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class:
             mock_session_repo = MagicMock()
             mock_session_repo.get_by_id = AsyncMock(return_value=None)
@@ -599,10 +611,6 @@ class TestWorkflowRunner:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that run returns interrupted result when workflow is paused."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
@@ -619,6 +627,12 @@ class TestWorkflowRunner:
                 "_load_previous_milestones",
                 new_callable=AsyncMock,
                 return_value=([], 0),
+            ),
+            patch.object(
+                WorkflowRunner,
+                "_load_previous_task_handover",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
         ):
             mock_container = MagicMock()
@@ -680,10 +694,6 @@ class TestWorkflowRunnerResume:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that resume calls ainvoke on the graph."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
@@ -729,10 +739,6 @@ class TestWorkflowRunnerResume:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that resume passes user_input to ainvoke."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
@@ -779,10 +785,6 @@ class TestWorkflowRunnerResume:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that resume detects when workflow is interrupted again."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.lifespan") as mock_lifespan,
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
@@ -832,10 +834,6 @@ class TestWorkflowRunnerGetState:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that get_state returns state from checkpoint."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import TaskStatus
-
         with (
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
@@ -876,8 +874,6 @@ class TestWorkflowRunnerGetState:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that get_state returns None when no state exists."""
-        from uuid import uuid4
-
         with (
             patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
             patch("agent.graph.workflow.compile_workflow") as mock_compile,
@@ -937,8 +933,6 @@ class TestWorkflowRunnerLoadContext:
             breakpoint_service=mock_breakpoint_service,
         )
 
-        from uuid import uuid4
-
         messages, summary, tokens = await runner._load_previous_context(uuid4())
 
         assert len(messages) == 1
@@ -955,8 +949,6 @@ class TestWorkflowRunnerLoadContext:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test loading context from memory snapshot."""
-        from uuid import uuid4
-
         mock_cache = MagicMock()
         mock_cache.get_cached_context = AsyncMock(return_value=None)
 
@@ -973,17 +965,14 @@ class TestWorkflowRunnerLoadContext:
         mock_snapshot.compressed_context = "Previous summary"
         mock_snapshot.token_count = 200
 
-        with (
-            patch("agent.graph.workflow.MemorySnapshotRepository") as mock_snapshot_repo,
-            patch("agent.graph.workflow.ArtifactRepository") as mock_artifact_repo,
-        ):
+        with patch("agent.graph.workflow.MemorySnapshotRepository") as mock_snapshot_repo:
             mock_snapshot_repo.return_value.get_latest_snapshot = AsyncMock(
                 return_value=mock_snapshot
             )
-            mock_artifact_repo.return_value.get_by_session_id = AsyncMock(return_value=[])
 
             messages, summary, tokens = await runner._load_previous_context(uuid4())
 
+        # Artifact context is now handled by Handover node, not _load_previous_context
         assert len(messages) == 1
         assert "Previous summary" in messages[0].content
         assert summary == "Previous summary"
@@ -999,10 +988,6 @@ class TestWorkflowRunnerLoadContext:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test loading previous milestones."""
-        from uuid import uuid4
-
-        from agent.db.models.enums import MilestoneStatus, TaskComplexity
-
         runner = WorkflowRunner(
             mock_session,
             ws_manager=mock_ws_manager,
@@ -1039,8 +1024,6 @@ class TestCreateNodeWithSession:
     @pytest.mark.asyncio
     async def test_wraps_node_with_session(self) -> None:
         """Test that node wrapper injects session."""
-        from agent.graph.workflow import _create_node_with_session
-
         mock_session = MagicMock()
         captured_args: dict = {}
 
@@ -1059,7 +1042,6 @@ class TestCreateNodeWithSession:
 
     def test_preserves_function_name(self) -> None:
         """Test that wrapper preserves original function name."""
-        from agent.graph.workflow import _create_node_with_session
 
         async def my_node(state, config, session):
             return {}

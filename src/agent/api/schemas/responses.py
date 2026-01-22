@@ -161,7 +161,8 @@ class ArtifactResponse(BaseModel):
     """Response schema for artifact data."""
 
     id: UUID
-    task_id: UUID
+    session_id: UUID
+    task_id: UUID | None = None
     milestone_id: UUID | None = None
     artifact_type: str = Field(description="Type of artifact (code, file, document)")
     filename: str
@@ -170,6 +171,7 @@ class ArtifactResponse(BaseModel):
     path: str | None = Field(default=None, description="Path within project structure")
     sequence_number: int = 0
     created_at: datetime
+    updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

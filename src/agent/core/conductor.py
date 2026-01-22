@@ -57,6 +57,7 @@ class ConductorAgent:
         task_id: UUID,
         original_request: str,
         memory_context: str | None = None,
+        sequence_offset: int = 0,
     ) -> list[dict[str, str | TaskComplexity]]:
         """Analyze user request and create milestone plan.
 
@@ -64,6 +65,7 @@ class ConductorAgent:
             task_id: Task ID to associate milestones with
             original_request: Original user request
             memory_context: Optional context from long-term memory
+            sequence_offset: Offset for milestone sequence numbers (for multi-task sessions)
 
         Returns:
             List of milestone definitions with:
@@ -120,13 +122,14 @@ class ConductorAgent:
             )
             raise ValueError(f"Failed to parse Conductor response: {e}") from e
 
-        # Persist milestones to database
-        await self._persist_milestones(task_id, milestones)
+        # Persist milestones to database with sequence offset
+        await self._persist_milestones(task_id, milestones, sequence_offset)
 
         logger.info(
             "conductor_analysis_complete",
             task_id=str(task_id),
             milestone_count=len(milestones),
+            sequence_offset=sequence_offset,
             total_tokens=response.usage.total_tokens,
         )
 
@@ -201,23 +204,28 @@ class ConductorAgent:
         self,
         task_id: UUID,
         milestones: list[dict[str, str | TaskComplexity]],
+        sequence_offset: int = 0,
     ) -> None:
         """Persist milestones to database.
 
         Args:
             task_id: Parent task ID
             milestones: List of milestone definitions
+            sequence_offset: Offset for sequence numbers (for multi-task sessions)
         """
-        for sequence, milestone in enumerate(milestones, start=1):
+        for i, milestone in enumerate(milestones):
+            # Apply sequence offset for correct session-wide numbering
+            sequence_number = sequence_offset + i + 1
+
             complexity_value = milestone["complexity"]
             assert isinstance(complexity_value, TaskComplexity)
 
             await self.milestone_repo.create(
                 task_id=task_id,
-                title=str(milestone.get("title", f"Milestone {sequence}")),
+                title=str(milestone.get("title", f"Milestone {sequence_number}")),
                 description=str(milestone["description"]),
                 complexity=complexity_value.value,
-                sequence_number=sequence,
+                sequence_number=sequence_number,
                 acceptance_criteria=str(milestone["acceptance_criteria"]),
             )
 
@@ -225,6 +233,7 @@ class ConductorAgent:
             "milestones_persisted",
             task_id=str(task_id),
             count=len(milestones),
+            sequence_offset=sequence_offset,
         )
 
     async def select_model_for_milestone(

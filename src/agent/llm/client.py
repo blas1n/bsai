@@ -20,6 +20,11 @@ from tenacity import (
 
 from agent.api.config import get_agent_settings
 from agent.db.models.mcp_server_config import McpServerConfig
+from agent.llm.builtin_tools import (
+    BUILTIN_TOOL_DEFINITIONS,
+    BUILTIN_TOOL_NAMES,
+    BuiltinToolExecutor,
+)
 from agent.mcp.executor import McpToolCall, McpToolExecutor
 from agent.mcp.utils import load_tools_from_mcp_server
 
@@ -48,6 +53,7 @@ class LiteLLMClient:
         request: LLMRequest,
         mcp_servers: list[McpServerConfig],
         tool_executor: McpToolExecutor | None = None,
+        builtin_tool_executor: BuiltinToolExecutor | None = None,
         max_tool_iterations: int | None = None,
     ) -> LLMResponse:
         """Call LLM with automatic retry (3 attempts).
@@ -58,6 +64,7 @@ class LiteLLMClient:
             request: LLM completion request
             mcp_servers: MCP servers for tool calling (pass empty list if none)
             tool_executor: Optional MCP tool executor for handling tool calls
+            builtin_tool_executor: Optional executor for built-in tools (read_artifact, etc.)
             max_tool_iterations: Maximum tool calling iterations (uses settings default if None)
 
         Returns:
@@ -66,7 +73,9 @@ class LiteLLMClient:
         Raises:
             Exception: If all retry attempts fail
         """
-        use_tools = len(mcp_servers) > 0 and tool_executor is not None
+        use_mcp_tools = len(mcp_servers) > 0 and tool_executor is not None
+        use_builtin_tools = builtin_tool_executor is not None
+        use_tools = use_mcp_tools or use_builtin_tools
         logger.info(
             "llm_chat_completion_start",
             model=request.model,
@@ -98,20 +107,35 @@ class LiteLLMClient:
         if request.response_format:
             params["response_format"] = request.response_format
 
-        # Add tools if MCP servers provided
+        # Build tools list (built-in + MCP)
         tool_to_server: dict[str, McpServerConfig] = {}
-        if use_tools:
-            tools, tool_to_server = await self._build_tools_from_mcp_servers(mcp_servers)
-            if tools:
-                params["tools"] = tools
-                logger.info(
-                    "llm_tools_added_to_params",
-                    tool_count=len(tools),
-                    tool_names=[t["function"]["name"] for t in tools],
-                )
-            else:
-                # No tools available, disable tool mode
-                use_tools = False
+        all_tools: list[dict[str, Any]] = []
+
+        # Add built-in tools if executor provided
+        if use_builtin_tools:
+            all_tools.extend(BUILTIN_TOOL_DEFINITIONS)
+            logger.info(
+                "llm_builtin_tools_added",
+                tool_count=len(BUILTIN_TOOL_DEFINITIONS),
+                tool_names=list(BUILTIN_TOOL_NAMES),
+            )
+
+        # Add MCP tools if servers provided
+        if use_mcp_tools:
+            mcp_tools, tool_to_server = await self._build_tools_from_mcp_servers(mcp_servers)
+            all_tools.extend(mcp_tools)
+
+        if all_tools:
+            params["tools"] = all_tools
+            logger.info(
+                "llm_tools_added_to_params",
+                tool_count=len(all_tools),
+                tool_names=[t["function"]["name"] for t in all_tools],
+            )
+        else:
+            # No tools available, disable tool mode
+            use_tools = False
+            if use_mcp_tools:
                 logger.warning("llm_no_tools_available", mcp_server_count=len(mcp_servers))
 
         # Use settings default if max_tool_iterations not specified
@@ -124,7 +148,8 @@ class LiteLLMClient:
             params=params,
             request=request,
             tool_to_server=tool_to_server,
-            tool_executor=tool_executor if use_tools else None,
+            tool_executor=tool_executor if use_mcp_tools else None,
+            builtin_tool_executor=builtin_tool_executor,
             max_iterations=max_tool_iterations if use_tools else 1,
         )
 
@@ -197,6 +222,7 @@ class LiteLLMClient:
         request: LLMRequest,
         tool_to_server: dict[str, McpServerConfig],
         tool_executor: McpToolExecutor | None,
+        builtin_tool_executor: BuiltinToolExecutor | None,
         max_iterations: int,
     ) -> LLMResponse:
         """Execute LLM completion with optional tool calling loop.
@@ -208,6 +234,7 @@ class LiteLLMClient:
             request: Original LLM request
             tool_to_server: Mapping from tool name to MCP server config
             tool_executor: Optional MCP tool executor for handling tool calls
+            builtin_tool_executor: Optional executor for built-in tools
             max_iterations: Maximum iterations (1 for simple, 5 for tool mode)
 
         Returns:
@@ -217,7 +244,9 @@ class LiteLLMClient:
         iteration = 0
         total_input_tokens = 0
         total_output_tokens = 0
-        use_tools = len(tool_to_server) > 0 and tool_executor is not None
+        use_mcp_tools = len(tool_to_server) > 0 and tool_executor is not None
+        use_builtin_tools = builtin_tool_executor is not None
+        use_tools = use_mcp_tools or use_builtin_tools
 
         while iteration < max_iterations:
             iteration += 1
@@ -282,11 +311,6 @@ class LiteLLMClient:
                 )
 
             # Execute tool calls (only reaches here in tool mode with tool_calls)
-            if not tool_executor:
-                # Should never happen (use_tools guarantees tool_executor), but for type safety
-                logger.error("llm_tool_executor_missing")
-                break
-
             logger.info(
                 "llm_executing_tool_calls",
                 tool_call_count=len(tool_calls),
@@ -320,40 +344,59 @@ class LiteLLMClient:
                 except json.JSONDecodeError:
                     tool_input = {}
 
-                # Find MCP server for this tool
-                mcp_server = tool_to_server.get(tool_name)
+                tool_content: str
 
-                if not mcp_server:
-                    logger.warning(
-                        "llm_tool_server_not_found",
-                        tool_name=tool_name,
-                    )
-                    # Add error result
-                    params["messages"].append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "content": json.dumps(
-                                {"error": f"MCP server not found for tool: {tool_name}"}
-                            ),
-                        }
-                    )
-                    continue
-
-                # Execute tool
-                mcp_tool_call = McpToolCall(
-                    tool_name=tool_name,
-                    tool_input=tool_input,
-                    mcp_server=mcp_server,
-                )
-
-                result = await tool_executor.execute_tool(mcp_tool_call)
-
-                # Add tool result to messages
-                if result.success:
-                    tool_content = json.dumps(result.output or {})
+                # Check if this is a built-in tool
+                if tool_name in BUILTIN_TOOL_NAMES:
+                    if builtin_tool_executor:
+                        result = await builtin_tool_executor.execute(tool_name, tool_input)
+                        tool_content = json.dumps(result)
+                        logger.info(
+                            "llm_builtin_tool_executed",
+                            tool_name=tool_name,
+                            success="error" not in result,
+                        )
+                    else:
+                        tool_content = json.dumps(
+                            {"error": f"Built-in tool executor not available: {tool_name}"}
+                        )
                 else:
-                    tool_content = json.dumps({"error": result.error or "Unknown error"})
+                    # MCP tool - find server and execute
+                    mcp_server = tool_to_server.get(tool_name)
+
+                    if not mcp_server:
+                        logger.warning(
+                            "llm_tool_server_not_found",
+                            tool_name=tool_name,
+                        )
+                        tool_content = json.dumps(
+                            {"error": f"MCP server not found for tool: {tool_name}"}
+                        )
+                    elif not tool_executor:
+                        tool_content = json.dumps(
+                            {"error": f"MCP tool executor not available: {tool_name}"}
+                        )
+                    else:
+                        # Execute MCP tool
+                        mcp_tool_call = McpToolCall(
+                            tool_name=tool_name,
+                            tool_input=tool_input,
+                            mcp_server=mcp_server,
+                        )
+
+                        result = await tool_executor.execute_tool(mcp_tool_call)
+
+                        if result.success:
+                            tool_content = json.dumps(result.output or {})
+                        else:
+                            tool_content = json.dumps({"error": result.error or "Unknown error"})
+
+                        logger.info(
+                            "llm_mcp_tool_executed",
+                            tool_name=tool_name,
+                            success=result.success,
+                            execution_time_ms=result.execution_time_ms,
+                        )
 
                 params["messages"].append(
                     {
@@ -361,13 +404,6 @@ class LiteLLMClient:
                         "tool_call_id": tool_call.id,
                         "content": tool_content,
                     }
-                )
-
-                logger.info(
-                    "llm_tool_executed",
-                    tool_name=tool_name,
-                    success=result.success,
-                    execution_time_ms=result.execution_time_ms,
                 )
 
         # Max iterations reached (only possible in tool mode)

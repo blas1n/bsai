@@ -24,16 +24,24 @@ class ExtractedArtifact:
     sequence_number: int = 0
 
 
-def extract_artifacts(response_content: str) -> list[ExtractedArtifact]:
-    """Extract file artifacts from structured Worker output.
+@dataclass
+class ExtractionResult:
+    """Result of artifact extraction including deletions."""
 
-    Parses the WorkerOutput JSON and extracts file artifacts.
+    artifacts: list[ExtractedArtifact]
+    deleted_paths: list[str]
+
+
+def extract_artifacts(response_content: str) -> ExtractionResult:
+    """Extract file artifacts and deletion requests from structured Worker output.
+
+    Parses the WorkerOutput JSON and extracts file artifacts and deleted file paths.
 
     Args:
         response_content: JSON string from Worker LLM response
 
     Returns:
-        List of extracted artifacts (empty list if parsing fails)
+        ExtractionResult with artifacts and deleted_paths (empty if parsing fails)
     """
     try:
         output = WorkerOutput.model_validate_json(response_content)
@@ -44,7 +52,7 @@ def extract_artifacts(response_content: str) -> list[ExtractedArtifact]:
             content_length=len(response_content),
             content_preview=response_content[:200] if response_content else "",
         )
-        return []
+        return ExtractionResult(artifacts=[], deleted_paths=[])
 
     artifacts: list[ExtractedArtifact] = []
 
@@ -66,7 +74,10 @@ def extract_artifacts(response_content: str) -> list[ExtractedArtifact]:
         )
         artifacts.append(artifact)
 
-    return artifacts
+    return ExtractionResult(
+        artifacts=artifacts,
+        deleted_paths=output.deleted_files,
+    )
 
 
 def get_explanation(response_content: str) -> str:

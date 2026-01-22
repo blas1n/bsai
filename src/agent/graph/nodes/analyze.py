@@ -65,6 +65,29 @@ async def analyze_task_node(
             original_request=state["original_request"],
         )
 
+        # Get handover context from previous task (passed via context_messages)
+        # This helps Conductor understand what was done in the previous task
+        handover_context = None
+        context_messages = state.get("context_messages", [])
+        for msg in context_messages:
+            if msg.role == "system" and "Context from previous task" in msg.content:
+                handover_context = msg.content
+                break
+
+        # Combine memory context with handover context
+        combined_context = None
+        if handover_context or memory_context:
+            parts = []
+            if handover_context:
+                parts.append(handover_context)
+            if memory_context:
+                parts.append(memory_context)
+            combined_context = "\n\n---\n\n".join(parts)
+
+        # Get existing milestones from state (from previous tasks in session)
+        existing_milestones: list[MilestoneData] = list(state.get("milestones", []))
+        sequence_offset = state.get("milestone_sequence_offset", 0)
+
         conductor = ConductorAgent(
             llm_client=container.llm_client,
             router=container.router,
@@ -72,19 +95,17 @@ async def analyze_task_node(
             session=session,
         )
 
+        # Pass sequence_offset to conductor so DB records have correct sequence numbers
         milestones_raw = await conductor.analyze_and_plan(
             task_id=state["task_id"],
             original_request=state["original_request"],
-            memory_context=memory_context if memory_context else None,
+            memory_context=combined_context,
+            sequence_offset=sequence_offset,
         )
 
         # Fetch persisted milestones from database to get actual IDs
         milestone_repo = MilestoneRepository(session)
         db_milestones = await milestone_repo.get_by_task_id(state["task_id"])
-
-        # Get existing milestones from state (from previous tasks in session)
-        existing_milestones: list[MilestoneData] = list(state.get("milestones", []))
-        sequence_offset = state.get("milestone_sequence_offset", 0)
 
         # Convert to MilestoneData format with actual DB IDs
         new_milestones: list[MilestoneData] = []
@@ -121,6 +142,8 @@ async def analyze_task_node(
             new_milestone_count=len(new_milestones),
             total_milestone_count=len(all_milestones),
             sequence_offset=sequence_offset,
+            has_handover_context=handover_context is not None,
+            has_memory_context=memory_context is not None,
         )
 
         # Build milestone details for broadcast (only new milestones)

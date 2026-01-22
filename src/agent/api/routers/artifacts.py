@@ -1,4 +1,8 @@
-"""Artifact management endpoints."""
+"""Artifact management endpoints.
+
+Artifacts use task-level snapshot system.
+Each task creates a complete snapshot of all artifacts.
+"""
 
 import io
 import zipfile
@@ -8,51 +12,67 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from agent.db.repository.artifact_repo import ArtifactRepository
-from agent.db.repository.task_repo import TaskRepository
+from agent.db.repository.session_repo import SessionRepository
 
 from ..dependencies import CurrentUserId, DBSession
 from ..exceptions import AccessDeniedError, NotFoundError
 from ..schemas import ArtifactResponse, PaginatedResponse
 
-router = APIRouter(prefix="/sessions/{session_id}/tasks/{task_id}/artifacts", tags=["artifacts"])
+router = APIRouter(prefix="/sessions/{session_id}/artifacts", tags=["artifacts"])
 
 
 @router.get(
     "",
     response_model=PaginatedResponse[ArtifactResponse],
-    summary="List task artifacts",
+    summary="List session artifacts",
 )
 async def list_artifacts(
     session_id: UUID,
-    task_id: UUID,
     db: DBSession,
     user_id: CurrentUserId,
-    limit: int = 50,
+    task_id: UUID | None = None,
+    all_tasks: bool = False,
+    limit: int = 100,
     offset: int = 0,
 ) -> PaginatedResponse[ArtifactResponse]:
-    """List artifacts for a task.
+    """List artifacts for a session.
+
+    Uses task-level snapshot system:
+    - With all_tasks=True: Returns ALL artifacts from all tasks in the session
+    - With task_id: Returns that specific task's snapshot (for version history)
+    - Without task_id: Returns latest completed task's snapshot (default)
 
     Args:
-        session_id: Session UUID (for URL consistency)
-        task_id: Task UUID
+        session_id: Session UUID
         db: Database session
         user_id: Current user ID
+        task_id: Optional task UUID to get specific snapshot
+        all_tasks: If True, return artifacts from ALL tasks in the session
         limit: Maximum results per page
         offset: Offset for pagination
 
     Returns:
         Paginated list of artifacts
     """
-    # Verify task exists and belongs to user (eagerly load session for user_id check)
-    task_repo = TaskRepository(db)
-    task = await task_repo.get_with_session(task_id)
-    if not task or task.session_id != session_id:
-        raise NotFoundError("Task", task_id)
-    if task.session.user_id != user_id:
-        raise AccessDeniedError("Task", task_id)
+    session_repo = SessionRepository(db)
+    session = await session_repo.get_by_id(session_id)
+    if not session:
+        raise NotFoundError("Session", session_id)
+    if session.user_id != user_id:
+        raise AccessDeniedError("Session", session_id)
 
     artifact_repo = ArtifactRepository(db)
-    artifacts = await artifact_repo.get_by_task_id(task_id)
+
+    # Get artifacts based on parameters
+    if task_id:
+        # Get specific task's snapshot
+        artifacts = await artifact_repo.get_by_task_id(task_id, limit=1000)
+    elif all_tasks:
+        # Get ALL artifacts from all tasks in the session
+        artifacts = await artifact_repo.get_all_session_artifacts(session_id)
+    else:
+        # Get latest snapshot (current state) - backward compatible default
+        artifacts = await artifact_repo.get_latest_snapshot(session_id)
 
     # Apply pagination
     total = len(artifacts)
@@ -74,16 +94,14 @@ async def list_artifacts(
 )
 async def get_artifact(
     session_id: UUID,
-    task_id: UUID,
     artifact_id: UUID,
     db: DBSession,
     user_id: CurrentUserId,
 ) -> ArtifactResponse:
-    """Get a specific artifact.
+    """Get a specific artifact by ID.
 
     Args:
-        session_id: Session UUID (for URL consistency)
-        task_id: Task UUID (for URL consistency)
+        session_id: Session UUID
         artifact_id: Artifact UUID
         db: Database session
         user_id: Current user ID
@@ -91,18 +109,17 @@ async def get_artifact(
     Returns:
         Artifact details
     """
-    # Verify task exists and belongs to user (eagerly load session for user_id check)
-    task_repo = TaskRepository(db)
-    task = await task_repo.get_with_session(task_id)
-    if not task or task.session_id != session_id:
-        raise NotFoundError("Task", task_id)
-    if task.session.user_id != user_id:
-        raise AccessDeniedError("Task", task_id)
+    session_repo = SessionRepository(db)
+    session = await session_repo.get_by_id(session_id)
+    if not session:
+        raise NotFoundError("Session", session_id)
+    if session.user_id != user_id:
+        raise AccessDeniedError("Session", session_id)
 
     artifact_repo = ArtifactRepository(db)
     artifact = await artifact_repo.get_by_id(artifact_id)
 
-    if not artifact or artifact.task_id != task_id:
+    if not artifact or artifact.session_id != session_id:
         raise NotFoundError("Artifact", artifact_id)
 
     return ArtifactResponse.model_validate(artifact)
@@ -114,52 +131,55 @@ async def get_artifact(
     responses={
         200: {
             "content": {"application/zip": {}},
-            "description": "ZIP file containing all artifacts",
+            "description": "ZIP file containing all session artifacts",
         }
     },
 )
 async def download_artifacts_zip(
     session_id: UUID,
-    task_id: UUID,
     db: DBSession,
     user_id: CurrentUserId,
+    task_id: UUID | None = None,
 ) -> StreamingResponse:
-    """Download all task artifacts as a ZIP file.
+    """Download session artifacts as a ZIP file.
 
     Creates a ZIP archive with proper folder structure based on
-    artifact paths. Files without paths are placed in the root.
+    artifact paths.
 
     Args:
-        session_id: Session UUID (for URL consistency)
-        task_id: Task UUID
+        session_id: Session UUID
         db: Database session
         user_id: Current user ID
+        task_id: Optional task UUID to download specific version
 
     Returns:
         ZIP file as streaming response
     """
-    # Verify task exists and belongs to user (eagerly load session for user_id check)
-    task_repo = TaskRepository(db)
-    task = await task_repo.get_with_session(task_id)
-    if not task or task.session_id != session_id:
-        raise NotFoundError("Task", task_id)
-    if task.session.user_id != user_id:
-        raise AccessDeniedError("Task", task_id)
+    session_repo = SessionRepository(db)
+    session = await session_repo.get_by_id(session_id)
+    if not session:
+        raise NotFoundError("Session", session_id)
+    if session.user_id != user_id:
+        raise AccessDeniedError("Session", session_id)
 
-    # Get all artifacts for task
     artifact_repo = ArtifactRepository(db)
-    artifacts = await artifact_repo.get_by_task_id(task_id)
+    if task_id:
+        artifacts = await artifact_repo.get_by_task_id(task_id)
+    else:
+        artifacts = await artifact_repo.get_latest_snapshot(session_id)
 
     if not artifacts:
-        raise NotFoundError("Artifacts", task_id)
+        raise NotFoundError("Artifacts", session_id)
+
+    # Get task_id from first artifact for filename
+    task_id = artifacts[0].task_id
 
     # Create ZIP in memory
     zip_buffer = io.BytesIO()
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        used_paths: set[str] = set()
-
         for artifact in artifacts:
+            # Build file path
             if artifact.path:
                 file_path = artifact.path.lstrip("/")
                 if not file_path.endswith(artifact.filename):
@@ -167,21 +187,10 @@ async def download_artifacts_zip(
             else:
                 file_path = artifact.filename
 
-            # Handle duplicate filenames
-            original_path = file_path
-            counter = 1
-            while file_path in used_paths:
-                name, ext = (
-                    original_path.rsplit(".", 1) if "." in original_path else (original_path, "")
-                )
-                file_path = f"{name}_{counter}.{ext}" if ext else f"{name}_{counter}"
-                counter += 1
-
-            used_paths.add(file_path)
             zf.writestr(file_path, artifact.content)
 
     zip_buffer.seek(0)
-    zip_filename = f"artifacts_{str(task_id)[:8]}.zip"
+    zip_filename = f"artifacts_{str(session_id)[:8]}_{str(task_id)[:8]}.zip"
 
     return StreamingResponse(
         zip_buffer,

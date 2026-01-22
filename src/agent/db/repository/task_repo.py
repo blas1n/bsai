@@ -128,3 +128,35 @@ class TaskRepository(BaseRepository[Task]):
             Updated task or None if not found
         """
         return await self.update(task_id, status="failed", final_result=error_message)
+
+    async def save_handover_context(self, task_id: UUID, handover_context: str) -> Task | None:
+        """Save handover context for next task's Conductor.
+
+        Args:
+            task_id: Task UUID
+            handover_context: Summary of completed work and artifacts
+
+        Returns:
+            Updated task or None if not found
+        """
+        return await self.update(task_id, handover_context=handover_context)
+
+    async def get_previous_task_handover(self, session_id: UUID) -> str | None:
+        """Get handover context from the most recent completed task in the session.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Handover context string or None if no previous completed task
+        """
+        stmt = (
+            select(Task.handover_context)
+            .where(Task.session_id == session_id)
+            .where(Task.status == "completed")
+            .where(Task.handover_context.isnot(None))
+            .order_by(Task.created_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

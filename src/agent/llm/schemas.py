@@ -93,6 +93,10 @@ class WorkerOutput(BaseModel):
     files: list[FileArtifact] = Field(
         ..., description="List of generated file artifacts with paths and content"
     )
+    deleted_files: list[str] = Field(
+        ...,
+        description="List of file paths to delete. Use empty array [] if no files to delete.",
+    )
 
 
 class UsageInfo(BaseModel):

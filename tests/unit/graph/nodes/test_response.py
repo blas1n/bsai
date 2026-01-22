@@ -232,3 +232,117 @@ class TestGenerateResponseNode:
         completed_event = mock_event_bus.emit.call_args_list[1][0][0]
         assert completed_event.agent == "responder"
         assert "final_response" in completed_event.details
+
+    async def test_response_uses_task_summary(
+        self,
+        mock_config,
+        mock_session,
+        mock_container,
+    ):
+        """Test response generation uses task_summary when available."""
+        # State with task_summary from task_summary node
+        state = _create_state(
+            milestones=[
+                {"worker_output": "First milestone output"},
+                {"worker_output": "Second milestone output"},
+            ]
+        )
+        state["task_summary"] = {
+            "milestones": [
+                {"description": "First task", "output": "First milestone output"},
+                {"description": "Second task", "output": "Second milestone output"},
+            ],
+            "artifacts": [{"path": "src/app.py", "kind": "python"}],
+        }
+
+        mock_responder = MagicMock()
+        mock_responder.generate_response = AsyncMock(return_value="Complete response")
+
+        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
+            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+                result = await generate_response_node(state, mock_config, mock_session)
+
+        assert result["final_response"] == "Complete response"
+
+        # Verify worker_output includes all milestones
+        call_kwargs = mock_responder.generate_response.call_args.kwargs
+        worker_output = call_kwargs.get("worker_output", "")
+        assert "First task" in worker_output
+        assert "Second task" in worker_output
+        assert "First milestone output" in worker_output
+        assert "Second milestone output" in worker_output
+
+    async def test_response_detects_artifacts_from_task_summary(
+        self,
+        mock_config,
+        mock_session,
+        mock_container,
+    ):
+        """Test has_artifacts is True when task_summary contains artifacts."""
+        state = _create_state(milestones=[{"worker_output": "output"}])
+        state["task_summary"] = {
+            "milestones": [{"description": "Task", "output": "output"}],
+            "artifacts": [{"path": "main.py", "kind": "python"}],
+        }
+
+        mock_responder = MagicMock()
+        mock_responder.generate_response = AsyncMock(return_value="Response")
+
+        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
+            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+                await generate_response_node(state, mock_config, mock_session)
+
+        call_kwargs = mock_responder.generate_response.call_args.kwargs
+        assert call_kwargs.get("has_artifacts") is True
+
+    async def test_response_no_artifacts_from_task_summary(
+        self,
+        mock_config,
+        mock_session,
+        mock_container,
+    ):
+        """Test has_artifacts is False when task_summary has no artifacts."""
+        state = _create_state(milestones=[{"worker_output": "output"}])
+        state["task_summary"] = {
+            "milestones": [{"description": "Task", "output": "output"}],
+            "artifacts": [],  # No artifacts
+        }
+
+        mock_responder = MagicMock()
+        mock_responder.generate_response = AsyncMock(return_value="Response")
+
+        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
+            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+                await generate_response_node(state, mock_config, mock_session)
+
+        call_kwargs = mock_responder.generate_response.call_args.kwargs
+        assert call_kwargs.get("has_artifacts") is False
+
+    async def test_response_fallback_without_task_summary(
+        self,
+        mock_config,
+        mock_session,
+        mock_container,
+    ):
+        """Test fallback to last milestone when task_summary is not available."""
+        state = _create_state(
+            milestones=[
+                {"worker_output": "First output"},
+                {"worker_output": "Last milestone output with ```code```"},
+            ]
+        )
+        # No task_summary in state
+
+        mock_responder = MagicMock()
+        mock_responder.generate_response = AsyncMock(return_value="Fallback response")
+
+        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
+            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+                await generate_response_node(state, mock_config, mock_session)
+
+        # Should use last milestone's worker_output
+        call_kwargs = mock_responder.generate_response.call_args.kwargs
+        worker_output = call_kwargs.get("worker_output", "")
+        assert worker_output == "Last milestone output with ```code```"
+        # Should detect artifacts from code blocks
+        assert call_kwargs.get("has_artifacts") is True

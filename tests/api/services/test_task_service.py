@@ -2315,7 +2315,7 @@ class TestResumeTaskExecution:
                 user_input="Approved",
             )
 
-            mock_breakpoint_service.clear_paused_at.assert_called_once_with(task_id)
+            mock_breakpoint_service.cleanup_task.assert_called_once_with(task_id)
             mock_runner.resume.assert_called_once()
 
     @pytest.mark.asyncio
@@ -2645,8 +2645,8 @@ class TestResumeTaskExecution:
                 rejected=True,
             )
 
-            # Should clear paused state when rejected without feedback
-            mock_breakpoint_service.clear_paused_at.assert_called_once_with(task_id)
+            # Should cleanup task when rejected without feedback and completes
+            mock_breakpoint_service.cleanup_task.assert_called_once_with(task_id)
 
     @pytest.mark.asyncio
     async def test_uses_fallback_result_from_milestone_on_resume(

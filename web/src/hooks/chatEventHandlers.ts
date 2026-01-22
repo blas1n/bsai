@@ -354,6 +354,7 @@ export function handleMilestoneProgress(
   }
 
   // Handle worker completion with token/cost info and artifacts
+  // Uses task-level snapshot: artifacts array = COMPLETE state (no merge/delete needed)
   if (agentType === 'worker' && (isCompletion || hasDetails) && payload.details) {
     const workerDetails = payload.details as WorkerDetails;
 
@@ -381,12 +382,14 @@ export function handleMilestoneProgress(
           return m;
         });
 
+        // Task-level snapshot: Replace entire artifacts array (no merge logic needed)
+        // Worker output represents COMPLETE artifact state
+        const newArtifacts = workerDetails.artifacts || [];
+
         return {
           ...msg,
           milestones: updatedMilestones,
-          artifacts: workerDetails.artifacts
-            ? [...(msg.artifacts || []), ...workerDetails.artifacts]
-            : msg.artifacts,
+          artifacts: newArtifacts,
           rawContent: workerDetails.output || msg.rawContent,
           agentActivity: [...(msg.agentActivity || []), activity],
         };

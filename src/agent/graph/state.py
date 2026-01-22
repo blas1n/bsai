@@ -89,6 +89,9 @@ class AgentState(TypedDict):
     should_continue: NotRequired[bool]
     workflow_complete: NotRequired[bool]
 
+    # Task summary (from Task Summary agent)
+    task_summary: NotRequired[dict[str, Any]]
+
     # Final response (from Responder agent)
     final_response: NotRequired[str | None]
 

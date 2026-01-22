@@ -9,7 +9,8 @@ import { FloatingUsageIndicator } from './UsageDisplay';
 import { Sidebar } from '@/components/sidebar';
 import { AgentMonitorPanel } from '@/components/monitoring/AgentMonitorPanel';
 import { LiveDetailPanel } from '@/components/monitoring/LiveDetailPanel';
-import { ArtifactPanel, Artifact, CodeArtifact } from '@/components/artifacts/ArtifactPanel';
+import { ArtifactPanel, Artifact, CodeArtifact, TaskVersion } from '@/components/artifacts/ArtifactPanel';
+import { api, TaskResponse } from '@/lib/api';
 import { BreakpointModal } from '@/components/debug/BreakpointModal';
 import { AlertCircle, Bot, LogIn, PanelRightClose, PanelRight, Activity, FileCode, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,9 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('monitor');
   const [breakpointEnabled, setBreakpointEnabled] = useState(false);
+  const [completedTasks, setCompletedTasks] = useState<TaskVersion[]>([]);
+  const [selectedArtifactVersion, setSelectedArtifactVersion] = useState<string | null>(null);
+  const [versionArtifacts, setVersionArtifacts] = useState<Artifact[] | null>(null);
 
   const {
     sessionId,
@@ -75,6 +79,53 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
     }
   }, [sessionId]);
 
+  // Load completed tasks for version selection
+  useEffect(() => {
+    const loadCompletedTasks = async () => {
+      if (!sessionId) {
+        setCompletedTasks([]);
+        return;
+      }
+      try {
+        const response = await api.getTasks(sessionId, 'completed');
+        const tasks: TaskVersion[] = response.items.map((t: TaskResponse, idx: number) => ({
+          id: t.id,
+          sequence_number: idx + 1,
+          original_request: t.original_request,
+          created_at: t.created_at,
+        }));
+        setCompletedTasks(tasks);
+      } catch (err) {
+        console.error('Failed to load completed tasks:', err);
+      }
+    };
+    loadCompletedTasks();
+  }, [sessionId, isStreaming]); // Reload when streaming ends (new task may have completed)
+
+  // Handle version change for artifacts
+  const handleVersionChange = async (taskId: string | null) => {
+    setSelectedArtifactVersion(taskId);
+    if (!taskId || !sessionId) {
+      setVersionArtifacts(null); // Use latest from messages
+      return;
+    }
+    try {
+      const response = await api.getArtifacts(sessionId, taskId);
+      const loadedArtifacts: Artifact[] = response.items.map((a) => ({
+        id: a.id,
+        type: 'code' as const,
+        filename: a.filename,
+        language: a.language || 'text',
+        content: a.content,
+        path: a.path || undefined,
+      }));
+      setVersionArtifacts(loadedArtifacts);
+    } catch (err) {
+      console.error('Failed to load artifacts for version:', err);
+      setVersionArtifacts(null);
+    }
+  };
+
   const handleNewChat = async () => {
     const newSessionId = await createNewChat();
     window.history.pushState({}, '', `/chat/${newSessionId}`);
@@ -97,84 +148,83 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
     return Array.from(milestonesMap.values());
   }, [messages]);
 
-  // Get the latest task ID (for artifact download)
-  const latestTaskId = useMemo(() => {
-    const assistantMessages = messages.filter((m) => m.role === 'assistant' && m.taskId);
-    if (assistantMessages.length > 0) {
-      return assistantMessages[assistantMessages.length - 1].taskId;
-    }
-    return undefined;
-  }, [messages]);
-
-  // Extract artifacts from messages - prefer backend-extracted artifacts
+  // Extract artifacts from the LATEST task only (task-level snapshot system)
+  // Each task produces a complete artifact snapshot, so we only show the latest one
   const artifacts = useMemo(() => {
     const result: Artifact[] = [];
 
-    messages.forEach((msg) => {
-      if (msg.role === 'assistant' && !msg.isStreaming) {
-        // Use backend-extracted artifacts if available
-        if (msg.artifacts && msg.artifacts.length > 0) {
-          msg.artifacts.forEach((artifact, idx) => {
-            const codeArtifact: CodeArtifact = {
-              id: artifact.id || `${msg.id}-code-${idx}`,
-              type: 'code',
-              filename: artifact.filename,
-              language: artifact.language || 'text',
-              content: artifact.content,
-              path: artifact.path || undefined,
+    // Find the latest assistant message with artifacts (represents current task state)
+    // Reverse iterate to find the most recent one
+    const latestMessageWithArtifacts = [...messages]
+      .reverse()
+      .find((msg) => msg.role === 'assistant' && msg.artifacts && msg.artifacts.length > 0);
+
+    if (latestMessageWithArtifacts && latestMessageWithArtifacts.artifacts) {
+      latestMessageWithArtifacts.artifacts.forEach((artifact, idx) => {
+        const codeArtifact: CodeArtifact = {
+          id: artifact.id || `${latestMessageWithArtifacts.id}-code-${idx}`,
+          type: 'code',
+          filename: artifact.filename,
+          language: artifact.language || 'text',
+          content: artifact.content,
+          path: artifact.path || undefined,
+        };
+        result.push(codeArtifact);
+      });
+    } else {
+      // Fallback: Parse code blocks from the latest assistant message
+      const latestAssistant = [...messages]
+        .reverse()
+        .find((msg) => msg.role === 'assistant' && !msg.isStreaming && (msg.rawContent || msg.content));
+
+      if (latestAssistant) {
+        const contentToParse = latestAssistant.rawContent || latestAssistant.content;
+        const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+        let match;
+        let fileIndex = 0;
+
+        while ((match = codeBlockRegex.exec(contentToParse)) !== null) {
+          const language = match[1] || 'text';
+          const code = match[2].trim();
+
+          if (!code) continue;
+
+          // Try to extract filename from comment at the start
+          const filenameMatch = code.match(/^(?:\/\/|#|\/\*)\s*(?:file(?:name)?:?\s*)?([^\n*]+)/i);
+          let filename = filenameMatch ? filenameMatch[1].trim() : `code_${fileIndex + 1}`;
+
+          // Add extension if missing
+          if (!filename.includes('.')) {
+            const extMap: Record<string, string> = {
+              typescript: '.ts',
+              javascript: '.js',
+              python: '.py',
+              rust: '.rs',
+              go: '.go',
+              java: '.java',
+              css: '.css',
+              html: '.html',
+              json: '.json',
+              yaml: '.yml',
+              sql: '.sql',
+              shell: '.sh',
+              bash: '.sh',
             };
-            result.push(codeArtifact);
-          });
-        } else if (msg.rawContent || msg.content) {
-          // Fallback: Parse code blocks from content (for backwards compatibility)
-          const contentToParse = msg.rawContent || msg.content;
-          const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
-          let match;
-          let fileIndex = 0;
-
-          while ((match = codeBlockRegex.exec(contentToParse)) !== null) {
-            const language = match[1] || 'text';
-            const code = match[2].trim();
-
-            if (!code) continue;
-
-            // Try to extract filename from comment at the start
-            const filenameMatch = code.match(/^(?:\/\/|#|\/\*)\s*(?:file(?:name)?:?\s*)?([^\n*]+)/i);
-            let filename = filenameMatch ? filenameMatch[1].trim() : `code_${fileIndex + 1}`;
-
-            // Add extension if missing
-            if (!filename.includes('.')) {
-              const extMap: Record<string, string> = {
-                typescript: '.ts',
-                javascript: '.js',
-                python: '.py',
-                rust: '.rs',
-                go: '.go',
-                java: '.java',
-                css: '.css',
-                html: '.html',
-                json: '.json',
-                yaml: '.yml',
-                sql: '.sql',
-                shell: '.sh',
-                bash: '.sh',
-              };
-              filename += extMap[language] || '.txt';
-            }
-
-            const artifact: CodeArtifact = {
-              id: `${msg.id}-code-${fileIndex}`,
-              type: 'code',
-              filename,
-              language,
-              content: code,
-            };
-            result.push(artifact);
-            fileIndex++;
+            filename += extMap[language] || '.txt';
           }
+
+          const artifact: CodeArtifact = {
+            id: `${latestAssistant.id}-code-${fileIndex}`,
+            type: 'code',
+            filename,
+            language,
+            content: code,
+          };
+          result.push(artifact);
+          fileIndex++;
         }
       }
-    });
+    }
 
     return result;
   }, [messages]);
@@ -390,10 +440,12 @@ export function ChatContainer({ sessionId: initialSessionId }: ChatContainerProp
             )}
             {rightPanelTab === 'artifacts' && (
               <ArtifactPanel
-                artifacts={artifacts}
+                artifacts={versionArtifacts || artifacts}
                 onClose={() => setRightPanelOpen(false)}
                 sessionId={sessionId || undefined}
-                taskId={latestTaskId}
+                tasks={completedTasks}
+                selectedTaskId={selectedArtifactVersion}
+                onVersionChange={handleVersionChange}
               />
             )}
             {rightPanelTab === 'details' && (

@@ -44,6 +44,7 @@ class Node(StrEnum):
     CHECK_CONTEXT = "check_context"
     SUMMARIZE = "summarize"
     ADVANCE = "advance"
+    TASK_SUMMARY = "task_summary"
     GENERATE_RESPONSE = "generate_response"
 
 

@@ -10,8 +10,26 @@ BSAI is a **LangGraph-based Multi-Agent LLM Orchestration System** with the foll
 ## Architecture
 
 - **LiteLLM**: Direct usage for unified multi-provider LLM access
-- **LangGraph StateGraph**: Orchestrates 7 specialized agents
+- **LangGraph StateGraph**: Orchestrates 8 specialized agents
 - **FastAPI**: REST API with async/await throughout
+
+### Workflow Flow
+```
+analyze_task → select_llm → [generate_prompt?] → execute_worker
+    → verify_qa → check_context → [summarize?]
+    → advance → [next_milestone | task_summary]
+    → task_summary → generate_response → END
+```
+
+### Key Agents
+1. **Conductor**: Break request into milestones, select LLM
+2. **Meta Prompter**: Generate optimized prompts (for MODERATE+ tasks)
+3. **Worker**: Execute actual task with MCP tools
+4. **QA Agent**: Validate outputs with structured feedback
+5. **Summarizer**: Compress context when memory pressure
+6. **Artifact Extractor**: Extract code blocks and files
+7. **Task Summary**: Summarize all milestones for Responder
+8. **Responder**: Generate user-friendly response
 
 ## Development Guidelines
 

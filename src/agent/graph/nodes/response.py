@@ -72,15 +72,31 @@ async def generate_response_node(
             session=session,
         )
 
-        # Get worker output from last milestone
-        milestones = state.get("milestones", [])
-        worker_output = ""
-        if milestones:
-            last_milestone = milestones[-1]
-            worker_output = last_milestone.get("worker_output") or ""
+        # Use task_summary if available (from task_summary node)
+        # This contains summaries of ALL milestones, not just the last one
+        task_summary = state.get("task_summary")
 
-        # Check if artifacts were generated
-        has_artifacts = bool(worker_output and "```" in worker_output)
+        if task_summary:
+            # Build comprehensive worker output from task summary
+            worker_output_parts = []
+
+            # Add milestone summaries
+            for milestone in task_summary.get("milestones", []):
+                milestone_text = f"## {milestone['description']}\n{milestone['output']}"
+                worker_output_parts.append(milestone_text)
+
+            worker_output = "\n\n".join(worker_output_parts)
+
+            # Check artifacts from task summary
+            has_artifacts = bool(task_summary.get("artifacts"))
+        else:
+            # Fallback: Get worker output from last milestone (backward compatibility)
+            milestones = state.get("milestones", [])
+            worker_output = ""
+            if milestones:
+                last_milestone = milestones[-1]
+                worker_output = last_milestone.get("worker_output") or ""
+            has_artifacts = bool(worker_output and "```" in worker_output)
 
         # Generate clean response
         final_response = await responder.generate_response(
