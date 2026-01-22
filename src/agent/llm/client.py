@@ -384,18 +384,20 @@ class LiteLLMClient:
                             mcp_server=mcp_server,
                         )
 
-                        result = await tool_executor.execute_tool(mcp_tool_call)
+                        mcp_result = await tool_executor.execute_tool(mcp_tool_call)
 
-                        if result.success:
-                            tool_content = json.dumps(result.output or {})
+                        if mcp_result.success:
+                            tool_content = json.dumps(mcp_result.output or {})
                         else:
-                            tool_content = json.dumps({"error": result.error or "Unknown error"})
+                            tool_content = json.dumps(
+                                {"error": mcp_result.error or "Unknown error"}
+                            )
 
                         logger.info(
                             "llm_mcp_tool_executed",
                             tool_name=tool_name,
-                            success=result.success,
-                            execution_time_ms=result.execution_time_ms,
+                            success=mcp_result.success,
+                            execution_time_ms=mcp_result.execution_time_ms,
                         )
 
                 params["messages"].append(
