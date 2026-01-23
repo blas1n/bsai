@@ -194,12 +194,10 @@ class TestPromptManager:
         from enum import Enum
 
         # Create template with conditional
-        test_prompts = {
-            "conditional": """% if show_extra:
+        test_prompts = {"conditional": """% if show_extra:
 Extra content
 % endif
-Main content"""
-        }
+Main content"""}
         (temp_prompts_dir / "test.yaml").write_text(yaml.dump(test_prompts))
 
         manager = PromptManager(prompts_dir=temp_prompts_dir)

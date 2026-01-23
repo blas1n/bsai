@@ -39,14 +39,12 @@ def upgrade() -> None:
     )
 
     # 2. Populate session_id from task.session_id for existing records
-    op.execute(
-        """
+    op.execute("""
         UPDATE artifacts
         SET session_id = tasks.session_id
         FROM tasks
         WHERE artifacts.task_id = tasks.id
-    """
-    )
+    """)
 
     # 3. Make session_id NOT NULL after populating
     op.alter_column("artifacts", "session_id", nullable=False)

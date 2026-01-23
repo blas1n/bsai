@@ -55,14 +55,12 @@ def upgrade() -> None:
     # Create vector index for cosine similarity (IVFFlat for performance)
     # Note: IVFFlat requires data to build properly, but we create it empty first
     # In production with large data, consider HNSW for better performance
-    op.execute(
-        """
+    op.execute("""
         CREATE INDEX ix_episodic_memories_embedding
         ON episodic_memories
         USING ivfflat (embedding vector_cosine_ops)
         WITH (lists = 100)
-    """
-    )
+    """)
 
 
 def downgrade() -> None:
