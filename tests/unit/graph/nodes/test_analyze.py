@@ -25,7 +25,11 @@ class TestAnalyzeTaskNode:
         with (
             patch("agent.graph.nodes.analyze.ConductorAgent") as MockConductor,
             patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
+            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
+            # Mock memory context retrieval
+            mock_get_memory_context.return_value = ([], "")
+
             mock_conductor = AsyncMock()
             mock_conductor.analyze_and_plan.return_value = [
                 {
@@ -57,7 +61,13 @@ class TestAnalyzeTaskNode:
         base_state: AgentState,
     ) -> None:
         """Test error handling in analyze_task."""
-        with patch("agent.graph.nodes.analyze.ConductorAgent") as MockConductor:
+        with (
+            patch("agent.graph.nodes.analyze.ConductorAgent") as MockConductor,
+            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+        ):
+            # Mock memory context retrieval
+            mock_get_memory_context.return_value = ([], "")
+
             mock_conductor = AsyncMock()
             mock_conductor.analyze_and_plan.side_effect = ValueError("LLM error")
             MockConductor.return_value = mock_conductor
