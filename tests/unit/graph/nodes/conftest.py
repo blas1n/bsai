@@ -72,6 +72,9 @@ def mock_container() -> MagicMock:
     # Ensure prompt_manager.render returns a string (required for Pydantic validation)
     container.prompt_manager.render.return_value = "Mocked rendered prompt content"
 
+    # Ensure embedding_service.embed_with_cache is properly async-mocked
+    container.embedding_service.embed_with_cache = AsyncMock(return_value=[0.1] * 1536)
+
     container.router.select_model.return_value = LLMModel(
         name="gpt-4o-mini",
         provider="openai",
