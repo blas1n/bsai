@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.db.models.enums import MemoryType
@@ -15,6 +16,8 @@ from agent.prompts import PromptManager
 from agent.prompts.keys import MemoryPrompts
 
 from .embedding_service import EmbeddingService
+from .exceptions import MemoryValidationError
+from .schemas import MemoryCreate
 
 logger = structlog.get_logger()
 
@@ -74,33 +77,52 @@ class LongTermMemoryManager:
 
         Returns:
             Created memory instance
+
+        Raises:
+            MemoryValidationError: If input validation fails
         """
+        # Validate inputs
+        try:
+            validated = MemoryCreate(
+                user_id=user_id,
+                session_id=session_id,
+                content=content,
+                memory_type=memory_type.value,
+                task_id=task_id,
+                importance_score=importance_score,
+                tags=tags,
+                metadata=metadata,
+            )
+        except ValidationError as e:
+            raise MemoryValidationError(f"Invalid memory input: {e}") from e
+
         # Generate summary if content is too long
-        summary = content
-        if len(content) > MAX_CONTENT_LENGTH:
-            summary = content[:MAX_CONTENT_LENGTH] + "..."
+        summary = validated.content
+        if len(validated.content) > MAX_CONTENT_LENGTH:
+            summary = validated.content[:MAX_CONTENT_LENGTH] + "..."
 
-        # Generate embedding
-        embedding = await self._embedding_service.embed_with_cache(content)
+        # Generate embedding (do before DB operations - can fail)
+        embedding = await self._embedding_service.embed_with_cache(validated.content)
 
+        # Database operations
         memory = await self._repo.create(
-            user_id=user_id,
-            session_id=session_id,
-            task_id=task_id,
-            content=content,
+            user_id=validated.user_id,
+            session_id=validated.session_id,
+            task_id=validated.task_id,
+            content=validated.content,
             summary=summary,
             embedding=embedding,
-            memory_type=memory_type.value,
-            importance_score=importance_score,
-            tags=tags,
-            metadata_json=metadata,
+            memory_type=validated.memory_type,
+            importance_score=validated.importance_score,
+            tags=validated.tags,
+            metadata_json=validated.metadata,
         )
 
         logger.info(
             "memory_stored",
             memory_id=str(memory.id),
-            memory_type=memory_type.value,
-            user_id=user_id,
+            memory_type=validated.memory_type,
+            user_id=validated.user_id,
         )
 
         return memory
@@ -364,7 +386,11 @@ class LongTermMemoryManager:
         user_id: str,
         similarity_threshold: float = 0.9,
     ) -> int:
-        """Consolidate highly similar memories.
+        """Consolidate highly similar memories with row-level locking.
+
+        Uses FOR UPDATE SKIP LOCKED to handle concurrent consolidation safely.
+        This allows multiple concurrent consolidation requests to process
+        non-overlapping records without blocking.
 
         Args:
             user_id: User to process
@@ -379,16 +405,21 @@ class LongTermMemoryManager:
         )
 
         consolidated = 0
-        deleted_ids: set[UUID] = set()
 
-        for m1, m2, _similarity in pairs:
-            # Skip if either already deleted
-            if m1.id in deleted_ids or m2.id in deleted_ids:
+        for m1, m2, _ in pairs:
+            # Attempt to lock both records - skip if already locked by another process
+            locked = await self._repo.try_lock_for_consolidation(m1.id, m2.id)
+            if locked is None:
+                # One or both records are locked or deleted, skip this pair
                 continue
+
+            m1_locked, m2_locked = locked
 
             # Keep the one with higher importance
             to_keep, to_delete = (
-                (m1, m2) if m1.importance_score >= m2.importance_score else (m2, m1)
+                (m1_locked, m2_locked)
+                if m1_locked.importance_score >= m2_locked.importance_score
+                else (m2_locked, m1_locked)
             )
 
             # Update importance of kept memory
@@ -399,8 +430,10 @@ class LongTermMemoryManager:
 
             # Delete the duplicate
             await self._repo.delete(to_delete.id)
-            deleted_ids.add(to_delete.id)
             consolidated += 1
+
+        # Commit the transaction to release locks
+        await self._session.commit()
 
         logger.info(
             "memory_consolidation_complete",
@@ -416,25 +449,16 @@ class LongTermMemoryManager:
     ) -> dict[str, Any]:
         """Get memory statistics for a user.
 
+        Uses SQL aggregation for efficiency instead of loading all memories
+        into Python memory.
+
         Args:
             user_id: User identifier
 
         Returns:
-            Dictionary with memory statistics
+            Dictionary with memory statistics:
+                - total_memories: Total count of memories
+                - by_type: Dict mapping memory_type to count
+                - average_importance: Average importance score
         """
-        memories = await self._repo.get_by_user_id(user_id, limit=10000)
-
-        by_type: dict[str, int] = {}
-        total_importance = 0.0
-
-        for memory in memories:
-            by_type[memory.memory_type] = by_type.get(memory.memory_type, 0) + 1
-            total_importance += memory.importance_score
-
-        avg_importance = total_importance / len(memories) if memories else 0.0
-
-        return {
-            "total_memories": len(memories),
-            "by_type": by_type,
-            "average_importance": avg_importance,
-        }
+        return await self._repo.get_stats_by_user(user_id)

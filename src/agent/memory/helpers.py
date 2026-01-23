@@ -7,13 +7,20 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import structlog
+from litellm.exceptions import APIConnectionError, RateLimitError, Timeout
+from sqlalchemy.exc import SQLAlchemyError
 
 from agent.db.models.enums import MemoryType
+
+from .exceptions import MemoryDatabaseError
 
 if TYPE_CHECKING:
     from .manager import LongTermMemoryManager
 
 logger = structlog.get_logger()
+
+# Transient errors that allow graceful degradation
+_TRANSIENT_ERRORS = (RateLimitError, Timeout, APIConnectionError)
 
 
 async def get_memory_context(
@@ -65,9 +72,32 @@ async def get_memory_context(
 
         return memories, context
 
-    except Exception as e:
-        logger.warning("memory_retrieval_failed", error=str(e))
+    except _TRANSIENT_ERRORS as e:
+        # Transient errors (rate limit, timeout, connection) - graceful degradation
+        logger.warning(
+            "memory_retrieval_transient_error",
+            error=str(e),
+            error_type=type(e).__name__,
+            user_id=user_id,
+        )
         return [], ""
+    except SQLAlchemyError as e:
+        # Database errors are critical - propagate with custom exception
+        logger.error(
+            "memory_retrieval_database_error",
+            error=str(e),
+            user_id=user_id,
+        )
+        raise MemoryDatabaseError(f"Database error during memory retrieval: {e}", cause=e) from e
+    except Exception as e:
+        # Unknown errors - propagate to avoid masking bugs
+        logger.error(
+            "memory_retrieval_unexpected_error",
+            error=str(e),
+            error_type=type(e).__name__,
+            user_id=user_id,
+        )
+        raise
 
 
 async def store_task_memory(
@@ -112,8 +142,31 @@ async def store_task_memory(
             user_id=user_id,
         )
 
+    except _TRANSIENT_ERRORS as e:
+        # Transient errors - don't fail the whole task for embedding issues
+        logger.warning(
+            "memory_storage_transient_error",
+            error=str(e),
+            error_type=type(e).__name__,
+            task_id=str(task_id),
+        )
+    except SQLAlchemyError as e:
+        # Database errors are critical - propagate
+        logger.error(
+            "memory_storage_database_error",
+            error=str(e),
+            task_id=str(task_id),
+        )
+        raise MemoryDatabaseError(f"Database error during memory storage: {e}", cause=e) from e
     except Exception as e:
-        logger.warning("memory_storage_failed", error=str(e))
+        # Unknown errors - propagate to avoid masking bugs
+        logger.error(
+            "memory_storage_unexpected_error",
+            error=str(e),
+            error_type=type(e).__name__,
+            task_id=str(task_id),
+        )
+        raise
 
 
 async def store_qa_learning(
@@ -151,5 +204,28 @@ async def store_qa_learning(
             task_id=str(task_id),
         )
 
+    except _TRANSIENT_ERRORS as e:
+        # Transient errors - don't fail the whole task for embedding issues
+        logger.warning(
+            "qa_learning_storage_transient_error",
+            error=str(e),
+            error_type=type(e).__name__,
+            task_id=str(task_id),
+        )
+    except SQLAlchemyError as e:
+        # Database errors are critical - propagate
+        logger.error(
+            "qa_learning_storage_database_error",
+            error=str(e),
+            task_id=str(task_id),
+        )
+        raise MemoryDatabaseError(f"Database error during QA learning storage: {e}", cause=e) from e
     except Exception as e:
-        logger.warning("qa_learning_storage_failed", error=str(e))
+        # Unknown errors - propagate to avoid masking bugs
+        logger.error(
+            "qa_learning_storage_unexpected_error",
+            error=str(e),
+            error_type=type(e).__name__,
+            task_id=str(task_id),
+        )
+        raise

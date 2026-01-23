@@ -149,7 +149,7 @@ class EpisodicMemoryRepository(BaseRepository[EpisodicMemory]):
             .where(EpisodicMemory.id == memory_id)
             .values(
                 access_count=EpisodicMemory.access_count + 1,
-                last_accessed_at=datetime.now(UTC).replace(tzinfo=None),
+                last_accessed_at=datetime.now(UTC),
             )
         )
         await self.session.execute(stmt)
@@ -279,3 +279,86 @@ class EpisodicMemoryRepository(BaseRepository[EpisodicMemory]):
 
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def try_lock_for_consolidation(
+        self,
+        id1: UUID,
+        id2: UUID,
+    ) -> tuple[EpisodicMemory, EpisodicMemory] | None:
+        """Attempt to lock two memories for consolidation.
+
+        Uses FOR UPDATE SKIP LOCKED to avoid blocking concurrent operations.
+        This enables safe concurrent consolidation by skipping records
+        that are already locked by other transactions.
+
+        Args:
+            id1: First memory ID
+            id2: Second memory ID
+
+        Returns:
+            Tuple of (memory1, memory2) if both locked successfully,
+            None if either record is already locked or deleted
+        """
+        stmt = (
+            select(EpisodicMemory)
+            .where(EpisodicMemory.id.in_([id1, id2]))
+            .with_for_update(skip_locked=True)
+        )
+        result = await self.session.execute(stmt)
+        memories = list(result.scalars().all())
+
+        if len(memories) != 2:
+            # One or both records are locked or deleted
+            return None
+
+        # Return in consistent order (matching input IDs)
+        m1 = next((m for m in memories if m.id == id1), None)
+        m2 = next((m for m in memories if m.id == id2), None)
+
+        if m1 is None or m2 is None:
+            return None
+
+        return (m1, m2)
+
+    async def get_stats_by_user(self, user_id: str) -> dict[str, int | float | dict[str, int]]:
+        """Get aggregated statistics for a user using SQL.
+
+        More efficient than loading all memories into Python for aggregation.
+
+        Args:
+            user_id: User identifier
+
+        Returns:
+            Dictionary with:
+                - total_memories: Total count of memories
+                - by_type: Dict mapping memory_type to count
+                - average_importance: Average importance score
+        """
+        # Count by type
+        type_stmt = (
+            select(
+                EpisodicMemory.memory_type,
+                func.count().label("count"),
+            )
+            .where(EpisodicMemory.user_id == user_id)
+            .group_by(EpisodicMemory.memory_type)
+        )
+        type_result = await self.session.execute(type_stmt)
+        by_type: dict[str, int] = {}
+        for row in type_result.all():
+            # row is a tuple-like object: (memory_type, count)
+            by_type[str(row[0])] = int(row[1])
+
+        # Total and average
+        agg_stmt = select(
+            func.count().label("total"),
+            func.avg(EpisodicMemory.importance_score).label("avg_importance"),
+        ).where(EpisodicMemory.user_id == user_id)
+        agg_result = await self.session.execute(agg_stmt)
+        agg_row = agg_result.one()
+
+        return {
+            "total_memories": int(agg_row[0] or 0),
+            "by_type": by_type,
+            "average_importance": float(agg_row[1] or 0.0),
+        }

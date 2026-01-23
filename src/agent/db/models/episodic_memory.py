@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ARRAY, FLOAT, INTEGER, TEXT, VARCHAR, ForeignKey, func
+from sqlalchemy import ARRAY, FLOAT, INTEGER, TEXT, VARCHAR, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,9 +64,9 @@ class EpisodicMemory(Base):
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(VARCHAR(100)))
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    last_accessed_at: Mapped[datetime | None] = mapped_column()
+    # Timestamps (timezone-aware)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     session: Mapped[Session] = relationship(back_populates="episodic_memories")

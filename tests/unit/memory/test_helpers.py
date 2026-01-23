@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from litellm.exceptions import RateLimitError
 
 from agent.db.models.enums import MemoryType
 from agent.memory.helpers import get_memory_context, store_qa_learning, store_task_memory
@@ -53,10 +54,13 @@ class TestGetMemoryContext:
         assert context == ""
 
     @pytest.mark.asyncio
-    async def test_get_memory_context_error_returns_empty(self) -> None:
-        """Test that errors return empty results."""
+    async def test_get_memory_context_transient_error_returns_empty(self) -> None:
+        """Test that transient errors (rate limit) return empty results gracefully."""
         mock_manager = MagicMock()
-        mock_manager.search_similar = AsyncMock(side_effect=Exception("Connection error"))
+        # Transient errors like RateLimitError should return empty (graceful degradation)
+        mock_manager.search_similar = AsyncMock(
+            side_effect=RateLimitError("Rate limit exceeded", "test", "test")
+        )
 
         memories, context = await get_memory_context(
             manager=mock_manager,
@@ -66,6 +70,20 @@ class TestGetMemoryContext:
 
         assert memories == []
         assert context == ""
+
+    @pytest.mark.asyncio
+    async def test_get_memory_context_unexpected_error_raises(self) -> None:
+        """Test that unexpected errors are propagated."""
+        mock_manager = MagicMock()
+        # Non-transient errors should be re-raised
+        mock_manager.search_similar = AsyncMock(side_effect=ValueError("Unexpected error"))
+
+        with pytest.raises(ValueError, match="Unexpected error"):
+            await get_memory_context(
+                manager=mock_manager,
+                user_id="test-user",
+                original_request="Test task",
+            )
 
 
 class TestStoreTaskMemory:
@@ -95,10 +113,13 @@ class TestStoreTaskMemory:
         mock_manager.store_task_result.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_store_task_memory_error_silent(self) -> None:
-        """Test that storage errors are handled silently."""
+    async def test_store_task_memory_transient_error_silent(self) -> None:
+        """Test that transient storage errors are handled silently."""
         mock_manager = MagicMock()
-        mock_manager.store_task_result = AsyncMock(side_effect=Exception("Storage error"))
+        # Transient errors like RateLimitError should be handled silently
+        mock_manager.store_task_result = AsyncMock(
+            side_effect=RateLimitError("Rate limit exceeded", "test", "test")
+        )
 
         # Should not raise
         await store_task_memory(
@@ -110,6 +131,24 @@ class TestStoreTaskMemory:
             final_response="Feature built",
             milestones=[],
         )
+
+    @pytest.mark.asyncio
+    async def test_store_task_memory_unexpected_error_raises(self) -> None:
+        """Test that unexpected storage errors are propagated."""
+        mock_manager = MagicMock()
+        # Non-transient errors should be re-raised
+        mock_manager.store_task_result = AsyncMock(side_effect=ValueError("Unexpected error"))
+
+        with pytest.raises(ValueError, match="Unexpected error"):
+            await store_task_memory(
+                manager=mock_manager,
+                user_id="test-user",
+                session_id=uuid4(),
+                task_id=uuid4(),
+                original_request="Build feature",
+                final_response="Feature built",
+                milestones=[],
+            )
 
 
 class TestStoreQaLearning:
@@ -134,10 +173,13 @@ class TestStoreQaLearning:
         mock_manager.store_qa_learning.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_store_qa_learning_error_silent(self) -> None:
-        """Test that storage errors are handled silently."""
+    async def test_store_qa_learning_transient_error_silent(self) -> None:
+        """Test that transient storage errors are handled silently."""
         mock_manager = MagicMock()
-        mock_manager.store_qa_learning = AsyncMock(side_effect=Exception("Storage error"))
+        # Transient errors like RateLimitError should be handled silently
+        mock_manager.store_qa_learning = AsyncMock(
+            side_effect=RateLimitError("Rate limit exceeded", "test", "test")
+        )
 
         # Should not raise
         await store_qa_learning(
@@ -149,3 +191,21 @@ class TestStoreQaLearning:
             qa_feedback="Feedback",
             improved_output="Improved",
         )
+
+    @pytest.mark.asyncio
+    async def test_store_qa_learning_unexpected_error_raises(self) -> None:
+        """Test that unexpected storage errors are propagated."""
+        mock_manager = MagicMock()
+        # Non-transient errors should be re-raised
+        mock_manager.store_qa_learning = AsyncMock(side_effect=ValueError("Unexpected error"))
+
+        with pytest.raises(ValueError, match="Unexpected error"):
+            await store_qa_learning(
+                manager=mock_manager,
+                user_id="test-user",
+                session_id=uuid4(),
+                task_id=uuid4(),
+                previous_output="Output",
+                qa_feedback="Feedback",
+                improved_output="Improved",
+            )

@@ -9,6 +9,13 @@ from typing import TYPE_CHECKING
 import litellm
 import numpy as np
 import structlog
+from litellm.exceptions import (
+    APIConnectionError,
+    InternalServerError,
+    RateLimitError,
+    ServiceUnavailableError,
+    Timeout,
+)
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 if TYPE_CHECKING:
@@ -48,7 +55,15 @@ class EmbeddingService:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(Exception),
+        retry=retry_if_exception_type(
+            (
+                RateLimitError,
+                Timeout,
+                APIConnectionError,
+                ServiceUnavailableError,
+                InternalServerError,
+            )
+        ),
         reraise=True,
     )
     async def embed_text(self, text: str) -> list[float]:

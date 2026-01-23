@@ -44,8 +44,12 @@ class TestLongTermMemoryManager:
         repo.update_access = AsyncMock()
         repo.bulk_update_importance = AsyncMock(return_value=0)
         repo.find_similar_for_consolidation = AsyncMock(return_value=[])
+        repo.try_lock_for_consolidation = AsyncMock(return_value=None)
         repo.delete = AsyncMock(return_value=True)
         repo.update = AsyncMock()
+        repo.get_stats_by_user = AsyncMock(
+            return_value={"total_memories": 0, "by_type": {}, "average_importance": 0.0}
+        )
         return repo
 
     @pytest.fixture
@@ -308,6 +312,7 @@ class TestLongTermMemoryManager:
         self,
         manager: LongTermMemoryManager,
         mock_repository: MagicMock,
+        mock_session: AsyncMock,
     ) -> None:
         """Test consolidating similar memories."""
         mem1 = MagicMock()
@@ -319,6 +324,8 @@ class TestLongTermMemoryManager:
         mem2.importance_score = 0.6
 
         mock_repository.find_similar_for_consolidation.return_value = [(mem1, mem2, 0.92)]
+        # Mock try_lock_for_consolidation to return locked memories
+        mock_repository.try_lock_for_consolidation.return_value = (mem1, mem2)
 
         result = await manager.consolidate_memories(
             user_id="test-user",
@@ -328,12 +335,14 @@ class TestLongTermMemoryManager:
         assert result == 1
         mock_repository.delete.assert_called_once_with(mem2.id)
         mock_repository.update.assert_called_once()
+        mock_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_consolidate_keeps_higher_importance(
         self,
         manager: LongTermMemoryManager,
         mock_repository: MagicMock,
+        mock_session: AsyncMock,
     ) -> None:
         """Test consolidation keeps the memory with higher importance."""
         mem1 = MagicMock()
@@ -345,11 +354,14 @@ class TestLongTermMemoryManager:
         mem2.importance_score = 0.9  # Higher importance
 
         mock_repository.find_similar_for_consolidation.return_value = [(mem1, mem2, 0.95)]
+        # Mock try_lock_for_consolidation to return locked memories
+        mock_repository.try_lock_for_consolidation.return_value = (mem1, mem2)
 
         await manager.consolidate_memories(user_id="test-user")
 
         # mem1 should be deleted (lower importance)
         mock_repository.delete.assert_called_once_with(mem1.id)
+        mock_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_consolidate_memories_no_similar(
@@ -371,20 +383,16 @@ class TestLongTermMemoryManager:
         manager: LongTermMemoryManager,
         mock_repository: MagicMock,
     ) -> None:
-        """Test getting memory statistics."""
-        mock_memory1 = MagicMock()
-        mock_memory1.memory_type = MemoryType.TASK_RESULT.value
-        mock_memory1.importance_score = 0.8
-
-        mock_memory2 = MagicMock()
-        mock_memory2.memory_type = MemoryType.LEARNING.value
-        mock_memory2.importance_score = 0.6
-
-        mock_memory3 = MagicMock()
-        mock_memory3.memory_type = MemoryType.TASK_RESULT.value
-        mock_memory3.importance_score = 0.7
-
-        mock_repository.get_by_user_id.return_value = [mock_memory1, mock_memory2, mock_memory3]
+        """Test getting memory statistics using SQL aggregation."""
+        # Mock the repository's get_stats_by_user method (now uses SQL aggregation)
+        mock_repository.get_stats_by_user.return_value = {
+            "total_memories": 3,
+            "by_type": {
+                MemoryType.TASK_RESULT.value: 2,
+                MemoryType.LEARNING.value: 1,
+            },
+            "average_importance": 0.7,
+        }
 
         stats = await manager.get_memory_stats(user_id="test-user")
 
@@ -392,6 +400,7 @@ class TestLongTermMemoryManager:
         assert stats["by_type"][MemoryType.TASK_RESULT.value] == 2
         assert stats["by_type"][MemoryType.LEARNING.value] == 1
         assert stats["average_importance"] == pytest.approx(0.7)
+        mock_repository.get_stats_by_user.assert_called_once_with("test-user")
 
     @pytest.mark.asyncio
     async def test_get_memory_stats_empty(
@@ -400,10 +409,16 @@ class TestLongTermMemoryManager:
         mock_repository: MagicMock,
     ) -> None:
         """Test getting stats when no memories exist."""
-        mock_repository.get_by_user_id.return_value = []
+        # Mock the repository's get_stats_by_user method returning empty stats
+        mock_repository.get_stats_by_user.return_value = {
+            "total_memories": 0,
+            "by_type": {},
+            "average_importance": 0.0,
+        }
 
         stats = await manager.get_memory_stats(user_id="test-user")
 
         assert stats["total_memories"] == 0
         assert stats["by_type"] == {}
         assert stats["average_importance"] == 0.0
+        mock_repository.get_stats_by_user.assert_called_once_with("test-user")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
+from uuid import uuid4
 
 import structlog
 from langchain_core.runnables import RunnableConfig
@@ -110,8 +110,19 @@ async def analyze_task_node(
         # Convert to MilestoneData format with actual DB IDs
         new_milestones: list[MilestoneData] = []
         for i, m in enumerate(milestones_raw):
-            # Get DB ID if available, otherwise use placeholder
-            db_id = db_milestones[i].id if i < len(db_milestones) else UUID(int=i)
+            # Get DB ID if available, otherwise generate a random UUID
+            # (this should rarely happen if conductor properly persists milestones)
+            if i < len(db_milestones):
+                db_id = db_milestones[i].id
+            else:
+                db_id = uuid4()
+                logger.warning(
+                    "milestone_missing_db_id",
+                    task_id=str(state["task_id"]),
+                    milestone_index=i,
+                    fallback_id=str(db_id),
+                    message="Generated fallback UUID - conductor may not have persisted milestone",
+                )
 
             # Ensure complexity is TaskComplexity
             complexity = m["complexity"]
