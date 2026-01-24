@@ -11,6 +11,7 @@ from agent.core.artifact_extractor import ExtractionResult
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
 from agent.graph.nodes.execute import (
     _build_artifacts_context_message,
+    _extract_react_observations,
     _get_artifact_key,
     _prepare_worker_prompt,
     execute_worker_node,
@@ -281,3 +282,100 @@ class TestHelperFunctions:
         # Should not have "Original user request:" prefix since it's already included
         assert "Original user request:" not in prompt
         assert "Build a calculator" in prompt
+
+
+class TestExtractReactObservations:
+    """Tests for _extract_react_observations helper function."""
+
+    def test_extract_valid_react_output(self) -> None:
+        """Test extraction from valid WorkerReActOutput JSON."""
+        worker_output = """{
+            "explanation": "Task completed",
+            "files": [],
+            "deleted_files": [],
+            "observations": ["Found existing config", "API is rate limited"],
+            "discovered_issues": ["Memory leak detected"],
+            "suggested_plan_changes": []
+        }"""
+
+        result = _extract_react_observations(worker_output)
+
+        assert len(result) == 3
+        assert "Found existing config" in result
+        assert "API is rate limited" in result
+        assert "Memory leak detected" in result
+
+    def test_extract_empty_observations(self) -> None:
+        """Test extraction with empty observations and issues."""
+        worker_output = """{
+            "explanation": "Simple task",
+            "files": [],
+            "deleted_files": [],
+            "observations": [],
+            "discovered_issues": [],
+            "suggested_plan_changes": []
+        }"""
+
+        result = _extract_react_observations(worker_output)
+
+        assert result == []
+
+    def test_extract_only_observations(self) -> None:
+        """Test extraction with only observations, no issues."""
+        worker_output = """{
+            "explanation": "Analysis done",
+            "files": [],
+            "deleted_files": [],
+            "observations": ["Pattern found"],
+            "discovered_issues": [],
+            "suggested_plan_changes": []
+        }"""
+
+        result = _extract_react_observations(worker_output)
+
+        assert result == ["Pattern found"]
+
+    def test_extract_only_discovered_issues(self) -> None:
+        """Test extraction with only discovered issues."""
+        worker_output = """{
+            "explanation": "Found problems",
+            "files": [],
+            "deleted_files": [],
+            "observations": [],
+            "discovered_issues": ["Bug in module A"],
+            "suggested_plan_changes": []
+        }"""
+
+        result = _extract_react_observations(worker_output)
+
+        assert result == ["Bug in module A"]
+
+    def test_extract_invalid_json(self) -> None:
+        """Test extraction with invalid JSON returns empty list."""
+        worker_output = "This is not JSON, just plain text output"
+
+        result = _extract_react_observations(worker_output)
+
+        assert result == []
+
+    def test_extract_regular_worker_output(self) -> None:
+        """Test extraction with regular (non-ReAct) worker output."""
+        # Regular worker output doesn't have observations/discovered_issues
+        worker_output = """{
+            "explanation": "Done",
+            "files": [{"path": "test.py", "content": "print(1)", "kind": "py"}],
+            "deleted_files": []
+        }"""
+
+        result = _extract_react_observations(worker_output)
+
+        # Should return empty since default values are empty lists
+        assert result == []
+
+    def test_extract_malformed_json(self) -> None:
+        """Test extraction with malformed JSON."""
+        worker_output = '{"explanation": "incomplete'
+
+        result = _extract_react_observations(worker_output)
+
+        assert result == []

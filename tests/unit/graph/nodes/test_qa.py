@@ -9,6 +9,24 @@ from langchain_core.runnables import RunnableConfig
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
 from agent.graph.nodes.qa import verify_qa_node
 from agent.graph.state import AgentState, MilestoneData
+from agent.llm.schemas import QAOutput
+
+
+def _make_qa_output(
+    decision: str = "PASS",
+    feedback: str = "Good",
+    plan_viability: str = "VIABLE",
+) -> QAOutput:
+    """Helper to create QAOutput for tests."""
+    return QAOutput(
+        decision=decision,
+        feedback=feedback,
+        issues=[],
+        suggestions=[],
+        plan_viability=plan_viability,
+        plan_viability_reason=None,
+        confidence=0.8,
+    )
 
 
 class TestVerifyQaNode:
@@ -55,7 +73,11 @@ class TestVerifyQaNode:
             ),
         ):
             mock_qa = AsyncMock()
-            mock_qa.validate_output.return_value = (QADecision.PASS, "Looks good")
+            mock_qa.validate_output.return_value = (
+                QADecision.PASS,
+                "Looks good",
+                _make_qa_output("PASS", "Looks good"),
+            )
             MockQA.return_value = mock_qa
 
             result = await verify_qa_node(state, mock_config, mock_session)
@@ -104,7 +126,11 @@ class TestVerifyQaNode:
             ),
         ):
             mock_qa = AsyncMock()
-            mock_qa.validate_output.return_value = (QADecision.FAIL, "Does not meet criteria")
+            mock_qa.validate_output.return_value = (
+                QADecision.FAIL,
+                "Does not meet criteria",
+                _make_qa_output("RETRY", "Does not meet criteria"),
+            )
             MockQA.return_value = mock_qa
 
             result = await verify_qa_node(state, mock_config, mock_session)
@@ -153,7 +179,11 @@ class TestVerifyQaNode:
             ),
         ):
             mock_qa = AsyncMock()
-            mock_qa.validate_output.return_value = (QADecision.RETRY, "Need improvements")
+            mock_qa.validate_output.return_value = (
+                QADecision.RETRY,
+                "Need improvements",
+                _make_qa_output("RETRY", "Need improvements"),
+            )
             MockQA.return_value = mock_qa
 
             result = await verify_qa_node(state, mock_config, mock_session)
@@ -320,7 +350,11 @@ class TestVerifyQaNode:
             ),
         ):
             mock_qa = AsyncMock()
-            mock_qa.validate_output.return_value = (QADecision.PASS, "Good!")
+            mock_qa.validate_output.return_value = (
+                QADecision.PASS,
+                "Good!",
+                _make_qa_output("PASS", "Good!"),
+            )
             MockQA.return_value = mock_qa
 
             await verify_qa_node(state, mock_config, mock_session)
@@ -380,7 +414,11 @@ class TestVerifyQaNode:
             ),
         ):
             mock_qa = AsyncMock()
-            mock_qa.validate_output.return_value = (QADecision.RETRY, "")
+            mock_qa.validate_output.return_value = (
+                QADecision.RETRY,
+                "",
+                _make_qa_output("RETRY", ""),
+            )
             MockQA.return_value = mock_qa
 
             await verify_qa_node(state, mock_config, mock_session)

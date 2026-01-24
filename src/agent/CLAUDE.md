@@ -351,6 +351,59 @@ event_bus.subscribe_all(ws_handler.handle)
 event_bus.subscribe_all(logging_handler.handle)
 ```
 
+## Prompt Management
+
+### YAML Template Pattern
+All LLM prompts are managed as YAML templates in `src/agent/prompts/`:
+
+```
+src/agent/prompts/
+├── _macros.yaml       # Common Mako macros (e.g., worker_capabilities)
+├── conductor.yaml     # Conductor agent prompts
+├── worker.yaml        # Worker agent prompts
+├── qa_agent.yaml      # QA agent prompts
+├── meta_prompter.yaml # MetaPrompter prompts
+├── summarizer.yaml    # Summarizer prompts
+├── responder.yaml     # Responder prompts
+├── memory.yaml        # Memory content templates
+└── keys.py            # Enum keys for type-safe access
+```
+
+### Adding New Prompts
+
+1. **Add to YAML file** (e.g., `conductor.yaml`):
+```yaml
+my_new_prompt: |
+  Template with Mako syntax.
+  Variable: ${variable_name}
+
+  ${some_macro()}  # Use macros from _macros.yaml
+```
+
+2. **Add enum key** in `keys.py`:
+```python
+class ConductorPrompts(str, Enum):
+    ANALYSIS_PROMPT = "analysis_prompt"
+    MY_NEW_PROMPT = "my_new_prompt"  # Must match YAML key
+```
+
+3. **Use in code**:
+```python
+from agent.prompts import PromptManager, ConductorPrompts
+
+prompt = self.prompt_manager.render(
+    "conductor",  # YAML filename without extension
+    ConductorPrompts.MY_NEW_PROMPT,
+    variable_name="value",
+)
+```
+
+### Guidelines
+- **Never hardcode prompts** in Python files
+- Use Mako template syntax (`${var}`, `<%def>`, etc.)
+- Define reusable macros in `_macros.yaml`
+- Keep prompts in YAML for easy iteration without code changes
+
 ## Common Patterns
 
 ### 1. Dependency Injection

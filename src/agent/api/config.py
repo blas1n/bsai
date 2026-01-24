@@ -181,6 +181,30 @@ class AgentSettings(BaseSettings):
         description="Maximum tool calling iterations in LLM completion",
     )
 
+    # ReAct dynamic replanning settings
+    max_replan_iterations: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum replan iterations per task (prevents infinite loops)",
+    )
+    replan_confidence_threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Minimum plan confidence threshold below which replanning may trigger",
+    )
+    enable_react_observations: bool = Field(
+        default=True,
+        description="Enable ReAct observation extraction from Worker output",
+    )
+    conductor_replan_temperature: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=2.0,
+        description="Temperature for Conductor replanning decisions",
+    )
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="AGENT_", extra="ignore")
 
 

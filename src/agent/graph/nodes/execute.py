@@ -10,6 +10,7 @@ import structlog
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.api.config import get_agent_settings
 from agent.core import WorkerAgent
 from agent.core.artifact_extractor import ExtractionResult, extract_artifacts
 from agent.db.models.artifact import Artifact
@@ -18,6 +19,7 @@ from agent.db.repository.artifact_repo import ArtifactRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.events import AgentActivityEvent, AgentStatus, EventType
 from agent.llm import ChatMessage
+from agent.llm.schemas import WorkerReActOutput
 
 from ..state import AgentState, MilestoneData, update_milestone
 from . import check_task_cancelled, get_container, get_event_bus, get_ws_manager_optional
@@ -247,6 +249,28 @@ def _prepare_worker_prompt(
     if original_request and original_request not in base_prompt:
         return f"Original user request:\n{original_request}\n\nCurrent task:\n{base_prompt}"
     return base_prompt
+
+
+def _extract_react_observations(worker_output: str) -> list[str]:
+    """Extract ReAct observations from worker output.
+
+    Attempts to parse output as WorkerReActOutput to extract observations
+    and discovered issues. Falls back to empty list if parsing fails.
+
+    Args:
+        worker_output: Raw worker output string
+
+    Returns:
+        List of observations (combined observations and discovered_issues)
+    """
+    try:
+        react_output = WorkerReActOutput.model_validate_json(worker_output)
+        observations = list(react_output.observations)
+        observations.extend(react_output.discovered_issues)
+        return observations
+    except Exception:
+        # Not a ReAct output format, return empty list
+        return []
 
 
 async def execute_worker_node(
@@ -492,6 +516,19 @@ async def execute_worker_node(
             )
         )
 
+        # Extract ReAct observations for potential replanning (if enabled)
+        settings = get_agent_settings()
+        current_observations = state.get("current_observations", [])
+        if settings.enable_react_observations:
+            observations = _extract_react_observations(response.content)
+            if observations:
+                current_observations = [*current_observations, *observations]
+                logger.info(
+                    "react_observations_extracted",
+                    milestone_id=str(milestone["id"]),
+                    observation_count=len(observations),
+                )
+
         return {
             "milestones": updated_milestones,
             "current_output": response.content,
@@ -500,6 +537,7 @@ async def execute_worker_node(
             "total_input_tokens": total_input,
             "total_output_tokens": total_output,
             "total_cost_usd": str(total_cost),
+            "current_observations": current_observations,
         }
 
     except Exception as e:

@@ -7,6 +7,7 @@ class ConductorPrompts(str, Enum):
     """Prompt keys for Conductor agent."""
 
     ANALYSIS_PROMPT = "analysis_prompt"
+    REPLAN_PROMPT = "replan_prompt"
 
 
 class MetaPrompterPrompts(str, Enum):

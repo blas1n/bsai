@@ -89,7 +89,7 @@ async def verify_qa_node(
             ws_manager=ws_manager,
         )
 
-        decision, feedback = await qa.validate_output(
+        decision, feedback, qa_output = await qa.validate_output(
             milestone_id=milestone["id"],
             milestone_description=milestone["description"],
             acceptance_criteria=milestone["acceptance_criteria"],
@@ -113,11 +113,30 @@ async def verify_qa_node(
             status=new_status,
         )
 
+        # Check for plan viability issues (ReAct replanning trigger)
+        needs_replan = False
+        replan_reason = None
+        plan_confidence = qa_output.confidence
+
+        if qa_output.plan_viability in ("NEEDS_REVISION", "BLOCKED"):
+            needs_replan = True
+            replan_reason = (
+                qa_output.plan_viability_reason or f"Plan viability: {qa_output.plan_viability}"
+            )
+            logger.info(
+                "qa_triggered_replan",
+                milestone_id=str(milestone["id"]),
+                plan_viability=qa_output.plan_viability,
+                reason=replan_reason,
+                confidence=plan_confidence,
+            )
+
         logger.info(
             "qa_verified",
             milestone_index=idx,
             decision=decision.value,
             retry_count=retry_count,
+            plan_viability=qa_output.plan_viability,
         )
 
         # Store QA learning when retry succeeds (pass after at least one retry)
@@ -157,12 +176,7 @@ async def verify_qa_node(
         }
 
         # Emit QA completed event with decision
-        qa_status = new_status
-        # Determine agent status based on QA decision
-        agent_status = (
-            AgentStatus.COMPLETED if decision == QADecision.PASS else AgentStatus.COMPLETED
-        )
-        qa_details["milestone_status"] = qa_status.value
+        qa_details["milestone_status"] = new_status.value
         await event_bus.emit(
             AgentActivityEvent(
                 type=EventType.AGENT_COMPLETED,
@@ -171,17 +185,25 @@ async def verify_qa_node(
                 milestone_id=milestone["id"],
                 sequence_number=idx + 1,
                 agent="qa",
-                status=agent_status,
+                status=AgentStatus.COMPLETED,
                 message=qa_message,
                 details=qa_details,
             )
         )
 
-        return {
+        result: dict[str, Any] = {
             "milestones": updated_milestones,
             "current_qa_decision": decision.value,
             "current_qa_feedback": feedback,
+            "plan_confidence": plan_confidence,
         }
+
+        # Add replan trigger fields if plan viability is compromised
+        if needs_replan:
+            result["needs_replan"] = True
+            result["replan_reason"] = replan_reason
+
+        return result
 
     except Exception as e:
         logger.error("verify_qa_failed", error=str(e))

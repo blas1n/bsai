@@ -33,6 +33,7 @@ __all__ = [
     "ContextCompressedEvent",
     "BreakpointHitEvent",
     "BreakpointResumedEvent",
+    "PlanModificationEvent",
     "MilestoneStatus",
 ]
 
@@ -72,6 +73,9 @@ class EventType(StrEnum):
     BREAKPOINT_HIT = "breakpoint.hit"
     BREAKPOINT_RESUMED = "breakpoint.resumed"
     BREAKPOINT_REJECTED = "breakpoint.rejected"
+
+    # Plan modification (ReAct dynamic replanning)
+    PLAN_MODIFIED = "plan.modified"
 
 
 class AgentStatus(StrEnum):
@@ -256,3 +260,24 @@ class BreakpointResumedEvent(Event):
     type: EventType = EventType.BREAKPOINT_RESUMED
     node_name: str
     user_input: str | None = None
+
+
+# =============================================================================
+# Plan Modification Events (ReAct Dynamic Replanning)
+# =============================================================================
+
+
+class PlanModificationEvent(Event):
+    """Emitted when the plan is dynamically modified during execution.
+
+    Triggered by the replan_node when QA detects that the current plan
+    needs revision based on observations from Worker execution.
+    """
+
+    type: EventType = EventType.PLAN_MODIFIED
+    milestone_id: UUID
+    replan_iteration: int
+    modifications_count: int
+    reason: str
+    confidence: float
+    details: dict[str, Any] | None = None

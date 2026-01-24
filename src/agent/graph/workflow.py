@@ -49,6 +49,7 @@ from .nodes.context import check_context_node, summarize_node
 from .nodes.execute import execute_worker_node
 from .nodes.llm import generate_prompt_node, select_llm_node
 from .nodes.qa import verify_qa_node
+from .nodes.replan import replan_node
 from .nodes.response import generate_response_node
 from .nodes.task_summary import task_summary_node
 from .state import AgentState, MilestoneData
@@ -100,7 +101,8 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
 
     Flow:
         Entry -> analyze_task -> select_llm -> [generate_prompt?]
-             -> execute_worker -> verify_qa -> [retry/fail/next]
+             -> execute_worker -> verify_qa -> [retry/fail/next/replan]
+             -> [replan -> select_llm]  (ReAct dynamic replanning)
              -> check_context -> [summarize?]
              -> advance -> [next_milestone/task_summary/retry]
              -> task_summary -> generate_response -> END
@@ -108,6 +110,9 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     The task_summary node generates a summary of all milestones for:
     - Responder to create a complete user response
     - Next task's Conductor to understand previous work
+
+    The replan node enables dynamic plan modification based on
+    observations from Worker execution and plan viability assessments.
 
     Args:
         session: Database session for node operations
@@ -131,6 +136,7 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         Node.ADVANCE: advance_node,
         Node.TASK_SUMMARY: task_summary_node,
         Node.GENERATE_RESPONSE: generate_response_node,
+        Node.REPLAN: replan_node,
     }
 
     # Add all nodes with session bound
@@ -165,6 +171,7 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     # Conditional edges from verify_qa based on QA decision
     # NOTE: RETRY also goes to ADVANCE first to increment retry_count
     # then ADVANCE routes back to EXECUTE_WORKER via RETRY_MILESTONE
+    # REPLAN triggers dynamic plan modification when QA detects plan viability issues
     graph.add_conditional_edges(
         Node.VERIFY_QA,
         route_qa_decision,
@@ -172,8 +179,11 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
             QARoute.NEXT: Node.CHECK_CONTEXT,
             QARoute.RETRY: Node.ADVANCE,
             QARoute.FAIL: Node.ADVANCE,
+            QARoute.REPLAN: Node.REPLAN,
         },
     )
+
+    graph.add_edge(Node.REPLAN, Node.SELECT_LLM)
 
     # Conditional edges for context compression
     graph.add_conditional_edges(

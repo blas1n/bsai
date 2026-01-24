@@ -28,6 +28,10 @@ class MilestoneData(TypedDict):
     qa_feedback: str | None
     retry_count: int
 
+    # ReAct replanning metadata (optional)
+    is_modified: NotRequired[bool]  # True if added/modified during replan
+    added_at_replan: NotRequired[int | None]  # Replan iteration when added (None = original)
+
 
 class AgentState(TypedDict):
     """Immutable state for LangGraph workflow.
@@ -107,6 +111,14 @@ class AgentState(TypedDict):
     relevant_memories: NotRequired[list[dict[str, Any]]]  # Retrieved memories
     memory_context: NotRequired[str | None]  # Formatted memory context for LLM
 
+    # ReAct dynamic planning fields
+    plan_modifications: NotRequired[list[dict[str, Any]]]  # History of plan changes
+    replan_count: NotRequired[int]  # Number of replan iterations (max 3)
+    plan_confidence: NotRequired[float]  # 0.0-1.0 confidence in current plan
+    current_observations: NotRequired[list[str]]  # Observations from Worker
+    needs_replan: NotRequired[bool]  # Flag set by QA when replan needed
+    replan_reason: NotRequired[str | None]  # Why replan was triggered
+
 
 def update_milestone(milestone: MilestoneData, **updates: Any) -> MilestoneData:
     """Create an updated copy of a milestone with the given changes.
@@ -119,7 +131,7 @@ def update_milestone(milestone: MilestoneData, **updates: Any) -> MilestoneData:
         New MilestoneData with updates applied
     """
     merged: dict[str, Any] = {**milestone, **updates}
-    return MilestoneData(
+    result: MilestoneData = MilestoneData(
         id=merged["id"],
         description=merged["description"],
         complexity=merged["complexity"],
@@ -131,3 +143,9 @@ def update_milestone(milestone: MilestoneData, **updates: Any) -> MilestoneData:
         qa_feedback=merged["qa_feedback"],
         retry_count=merged["retry_count"],
     )
+    # Add optional ReAct fields if present
+    if "is_modified" in merged:
+        result["is_modified"] = merged["is_modified"]
+    if "added_at_replan" in merged:
+        result["added_at_replan"] = merged["added_at_replan"]
+    return result

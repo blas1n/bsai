@@ -24,3 +24,48 @@ analysis_prompt: |
   - Milestones can include: code generation, documentation, explanations, answers
   - IMPORTANT: Include ALL specific details from the user request in milestone descriptions (URLs, file paths, IDs, names, etc.)
   - The milestone description should be self-contained - the worker will only see the description, not the original request
+
+replan_prompt: |
+  You are replanning a task based on new information discovered during execution.
+
+  ## Original Request
+  ${original_request}
+
+  ## Completed Milestones
+  ${completed_text}
+
+  ## Current Milestone (index ${current_milestone_index})
+  ${current_text}
+
+  ## Remaining Milestones
+  ${remaining_text}
+
+  ## Observations from Execution
+  ${observations_text}
+
+  ## QA Feedback
+  ${qa_feedback}
+
+  ## Replan Reason
+  ${replan_reason}
+
+  ## Previous Replans
+  ${replans_text}
+
+  ## Instructions
+  Based on this information, determine what modifications are needed to the remaining plan.
+  You can ADD, MODIFY, REMOVE, or REORDER milestones.
+
+  Guidelines:
+  1. Only modify remaining milestones (index >= ${current_milestone_index})
+  2. Keep modifications minimal - only change what's necessary
+  3. Ensure the revised plan still achieves the original goal
+  4. Consider dependencies between milestones
+  5. Maximum 3 new milestones can be added per replan
+  6. Provide clear reasoning for each modification
+
+  Respond with a structured JSON containing:
+  - analysis: Your analysis of the situation
+  - modifications: List of modifications (action, target_index, new_milestone, reason)
+  - confidence: Your confidence in the revised plan (0.0-1.0)
+  - reasoning: Overall reasoning for the changes

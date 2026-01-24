@@ -17,6 +17,7 @@ class QARoute(StrEnum):
     RETRY = "retry"
     FAIL = "fail"
     NEXT = "next"
+    REPLAN = "replan"  # Trigger dynamic replanning
 
 
 class PromptRoute(StrEnum):
@@ -43,6 +44,11 @@ class AdvanceRoute(StrEnum):
 
 # Maximum retry attempts for QA validation
 MAX_RETRIES = 3
+
+# Maximum replan iterations to prevent infinite loops
+# Note: This is a fallback default. The actual limit is configured via
+# AgentSettings.max_replan_iterations and enforced in replan_node.
+MAX_REPLAN_ITERATIONS = 3
 
 
 def should_use_meta_prompter(state: AgentState) -> PromptRoute:
@@ -77,22 +83,33 @@ def should_use_meta_prompter(state: AgentState) -> PromptRoute:
 def route_qa_decision(state: AgentState) -> QARoute:
     """Route based on QA decision.
 
-    Handles three scenarios:
+    Handles four scenarios:
     1. PASS - Move to next milestone
     2. RETRY - Go back to Worker (if under retry limit)
-    3. FAIL - Max retries exceeded, error, or workflow complete
+    3. REPLAN - Trigger dynamic replanning (if under replan limit)
+    4. FAIL - Max retries/replans exceeded, error, or workflow complete
 
     Note: FAIL is only set by qa_agent.py when max retries are exceeded.
     The QA prompt only offers PASS/RETRY to prevent premature failure.
+    REPLAN is triggered when QA detects plan viability issues.
 
     Args:
         state: Current workflow state
 
     Returns:
-        QARoute.NEXT to proceed, QARoute.RETRY to retry Worker, QARoute.FAIL to end
+        QARoute.NEXT to proceed, QARoute.RETRY to retry Worker,
+        QARoute.REPLAN to trigger replanning, QARoute.FAIL to end
     """
     # Check for errors or early termination first
     if state.get("error") or state.get("workflow_complete"):
+        return QARoute.FAIL
+
+    # Check for replan trigger (set by QA when plan viability is compromised)
+    if state.get("needs_replan", False):
+        replan_count = state.get("replan_count", 0)
+        if replan_count < MAX_REPLAN_ITERATIONS:
+            return QARoute.REPLAN
+        # Max replans exceeded - treat as failure
         return QARoute.FAIL
 
     decision = state.get("current_qa_decision")
@@ -101,6 +118,12 @@ def route_qa_decision(state: AgentState) -> QARoute:
     if decision == "pass":
         return QARoute.NEXT
     elif decision == "fail":
+        return QARoute.FAIL
+    elif decision == "replan":
+        # Explicit replan decision from QA
+        replan_count = state.get("replan_count", 0)
+        if replan_count < MAX_REPLAN_ITERATIONS:
+            return QARoute.REPLAN
         return QARoute.FAIL
     elif decision == "retry" and retry_count < MAX_RETRIES:
         return QARoute.RETRY

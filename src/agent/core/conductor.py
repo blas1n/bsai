@@ -7,6 +7,9 @@ The Conductor is responsible for:
 4. Monitoring context usage
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
@@ -17,8 +20,11 @@ from agent.db.models.enums import TaskComplexity
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.llm import ChatMessage, LiteLLMClient, LLMRequest, LLMRouter
-from agent.llm.schemas import ConductorOutput
+from agent.llm.schemas import ConductorOutput, ConductorReplanOutput
 from agent.prompts import ConductorPrompts, PromptManager
+
+if TYPE_CHECKING:
+    from agent.graph.state import MilestoneData
 
 logger = structlog.get_logger()
 
@@ -266,3 +272,173 @@ class ConductorAgent:
         )
 
         return model.name
+
+    async def replan_based_on_execution(
+        self,
+        task_id: UUID,
+        original_request: str,
+        current_milestones: list[MilestoneData],
+        current_milestone_index: int,
+        worker_observations: list[str],
+        qa_feedback: str,
+        replan_reason: str,
+        previous_replans: list[dict[str, object]] | None = None,
+    ) -> ConductorReplanOutput:
+        """Replan milestones based on execution observations.
+
+        Called when QA detects that the current plan needs revision based on
+        observations discovered during Worker execution.
+
+        Args:
+            task_id: Task ID
+            original_request: Original user request
+            current_milestones: Current milestone list
+            current_milestone_index: Index of milestone that triggered replan
+            worker_observations: Observations from Worker execution
+            qa_feedback: QA feedback that triggered replan
+            replan_reason: Reason for replanning
+            previous_replans: History of previous replans (for context)
+
+        Returns:
+            ConductorReplanOutput with modifications to apply
+
+        Raises:
+            ValueError: If LLM response is invalid
+        """
+        logger.info(
+            "conductor_replan_start",
+            task_id=str(task_id),
+            current_milestone_index=current_milestone_index,
+            replan_reason=replan_reason,
+        )
+
+        # Use MODERATE complexity for replanning (more reasoning needed than initial planning)
+        model = self.router.select_model(TaskComplexity.MODERATE)
+
+        # Build replan prompt
+        prompt = self._build_replan_prompt(
+            original_request=original_request,
+            current_milestones=current_milestones,
+            current_milestone_index=current_milestone_index,
+            worker_observations=worker_observations,
+            qa_feedback=qa_feedback,
+            replan_reason=replan_reason,
+            previous_replans=previous_replans,
+        )
+        messages = [ChatMessage(role="user", content=prompt)]
+
+        # Call LLM with structured output (use dedicated replan temperature)
+        settings = get_agent_settings()
+        request = LLMRequest(
+            model=model.name,
+            messages=messages,
+            temperature=settings.conductor_replan_temperature,
+            api_base=model.api_base,
+            api_key=model.api_key,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "conductor_replan_output",
+                    "strict": True,
+                    "schema": ConductorReplanOutput.model_json_schema(),
+                },
+            },
+        )
+
+        response = await self.llm_client.chat_completion(request, mcp_servers=[])
+
+        # Parse structured response
+        try:
+            replan_output = ConductorReplanOutput.model_validate_json(response.content)
+        except ValueError as e:
+            logger.error(
+                "conductor_replan_parse_failed",
+                task_id=str(task_id),
+                error=str(e),
+                response=response.content[:500],
+            )
+            raise ValueError(f"Failed to parse Conductor replan response: {e}") from e
+
+        logger.info(
+            "conductor_replan_complete",
+            task_id=str(task_id),
+            modifications_count=len(replan_output.modifications),
+            confidence=replan_output.confidence,
+            total_tokens=response.usage.total_tokens,
+        )
+
+        return replan_output
+
+    def _build_replan_prompt(
+        self,
+        original_request: str,
+        current_milestones: list[MilestoneData],
+        current_milestone_index: int,
+        worker_observations: list[str],
+        qa_feedback: str,
+        replan_reason: str,
+        previous_replans: list[dict[str, object]] | None = None,
+    ) -> str:
+        """Build prompt for replanning.
+
+        Args:
+            original_request: User's original request
+            current_milestones: Current milestone list
+            current_milestone_index: Index of current milestone
+            worker_observations: Observations from Worker
+            qa_feedback: QA feedback
+            replan_reason: Why replan was triggered
+            previous_replans: Previous replan history
+
+        Returns:
+            Formatted prompt for LLM
+        """
+        # Format completed milestones
+        completed = []
+        for i, m in enumerate(current_milestones[:current_milestone_index]):
+            completed.append(f"{i + 1}. [{m['complexity'].name}] {m['description']} ✓")
+        completed_text = "\n".join(completed) if completed else "None"
+
+        # Format current milestone
+        current = current_milestones[current_milestone_index]
+        current_text = f"[{current['complexity'].name}] {current['description']}"
+
+        # Format remaining milestones
+        remaining = []
+        for i, m in enumerate(current_milestones[current_milestone_index + 1 :]):
+            idx = current_milestone_index + 1 + i + 1
+            remaining.append(f"{idx}. [{m['complexity'].name}] {m['description']}")
+        remaining_text = "\n".join(remaining) if remaining else "None"
+
+        # Format observations
+        observations_text = (
+            "\n".join(f"- {obs}" for obs in worker_observations) if worker_observations else "None"
+        )
+
+        # Format previous replans
+        replans_text = "None"
+        if previous_replans:
+            replans_list = []
+            for replan in previous_replans:
+                modifications = replan.get("modifications", [])
+                modifications_count = len(modifications) if isinstance(modifications, list) else 0
+                replans_list.append(
+                    f"- Iteration {replan.get('iteration', '?')}: "
+                    f"{replan.get('reason', 'No reason')} "
+                    f"({modifications_count} modifications)"
+                )
+            replans_text = "\n".join(replans_list)
+
+        return self.prompt_manager.render(
+            "conductor",
+            ConductorPrompts.REPLAN_PROMPT,
+            original_request=original_request,
+            completed_text=completed_text,
+            current_milestone_index=current_milestone_index,
+            current_text=current_text,
+            remaining_text=remaining_text,
+            observations_text=observations_text,
+            qa_feedback=qa_feedback,
+            replan_reason=replan_reason,
+            replans_text=replans_text,
+        )

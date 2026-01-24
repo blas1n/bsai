@@ -83,7 +83,7 @@ class QAAgent:
         user_id: str,
         session_id: UUID,
         mcp_enabled: bool = True,
-    ) -> tuple[QADecision, str]:
+    ) -> tuple[QADecision, str, QAOutput]:
         """Validate Worker output against acceptance criteria.
 
         Args:
@@ -96,9 +96,10 @@ class QAAgent:
             mcp_enabled: Enable MCP tool calling (default: True)
 
         Returns:
-            Tuple of (decision, feedback):
+            Tuple of (decision, feedback, qa_output):
                 - decision: PASS or RETRY
                 - feedback: Structured feedback for Worker
+                - qa_output: Full QAOutput including plan viability assessment
 
         Raises:
             ValueError: If LLM response is invalid
@@ -175,7 +176,7 @@ class QAAgent:
 
         # Parse structured response
         try:
-            decision, feedback = self._parse_validation_response(response.content)
+            decision, feedback, qa_output = self._parse_validation_response(response.content)
         except (ValueError, KeyError) as e:
             logger.error(
                 "qa_parse_failed",
@@ -192,10 +193,12 @@ class QAAgent:
             "qa_validation_complete",
             milestone_id=str(milestone_id),
             decision=decision.value,
+            plan_viability=qa_output.plan_viability,
+            confidence=qa_output.confidence,
             tokens=response.usage.total_tokens,
         )
 
-        return decision, feedback
+        return decision, feedback, qa_output
 
     def _build_validation_prompt(
         self,
@@ -224,14 +227,17 @@ class QAAgent:
     def _parse_validation_response(
         self,
         response_content: str,
-    ) -> tuple[QADecision, str]:
+    ) -> tuple[QADecision, str, QAOutput]:
         """Parse QA validation response.
 
         Args:
             response_content: Raw LLM response (structured JSON)
 
         Returns:
-            Tuple of (decision, formatted_feedback)
+            Tuple of (decision, formatted_feedback, raw_output):
+                - decision: QADecision enum
+                - formatted_feedback: Human-readable feedback string
+                - raw_output: Full QAOutput for plan viability info
 
         Raises:
             ValueError: If response validation fails
@@ -260,7 +266,7 @@ class QAAgent:
 
         formatted_feedback = "\n".join(feedback_parts)
 
-        return decision, formatted_feedback
+        return decision, formatted_feedback, output
 
     async def _update_milestone_status(
         self,

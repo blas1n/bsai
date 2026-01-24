@@ -118,7 +118,7 @@ class TestQAAgent:
         mock_llm_client.chat_completion.return_value = mock_response
 
         # Execute
-        decision, feedback = await qa_agent.validate_output(
+        decision, feedback, qa_output = await qa_agent.validate_output(
             milestone_id=milestone_id,
             milestone_description=milestone_description,
             acceptance_criteria=acceptance_criteria,
@@ -130,6 +130,7 @@ class TestQAAgent:
         # Verify
         assert decision == QADecision.PASS
         assert "meets criteria" in feedback.lower()
+        assert qa_output.decision == "PASS"
 
         # Check milestone status was updated to "passed" (MilestoneStatus enum value)
         from agent.db.models.enums import MilestoneStatus
@@ -162,7 +163,7 @@ class TestQAAgent:
         mock_llm_client.chat_completion.return_value = mock_response
 
         # Execute
-        decision, feedback = await qa_agent.validate_output(
+        decision, feedback, qa_output = await qa_agent.validate_output(
             milestone_id=milestone_id,
             milestone_description=milestone_description,
             acceptance_criteria=acceptance_criteria,
@@ -174,6 +175,7 @@ class TestQAAgent:
         # Verify
         assert decision == QADecision.RETRY
         assert "password validation" in feedback.lower()
+        assert qa_output.decision == "RETRY"
 
         # Check milestone status was NOT updated to "pass"
         mock_repo = cast(MagicMock, qa_agent.milestone_repo)
@@ -207,7 +209,7 @@ class TestQAAgent:
         mock_llm_client.chat_completion.return_value = mock_response
 
         # Execute
-        decision, feedback = await qa_agent.validate_output(
+        decision, feedback, qa_output = await qa_agent.validate_output(
             milestone_id=milestone_id,
             milestone_description=milestone_description,
             acceptance_criteria=acceptance_criteria,
@@ -223,6 +225,7 @@ class TestQAAgent:
         assert "missing validation" in feedback.lower()
         assert "suggestions" in feedback.lower()
         assert "add input validation" in feedback.lower()
+        assert qa_output.decision == "RETRY"
 
     @pytest.mark.asyncio
     async def test_validate_output_non_pass_becomes_retry(
@@ -247,7 +250,7 @@ class TestQAAgent:
         mock_llm_client.chat_completion.return_value = mock_response
 
         # Execute
-        decision, feedback = await qa_agent.validate_output(
+        decision, feedback, qa_output = await qa_agent.validate_output(
             milestone_id=milestone_id,
             milestone_description=milestone_description,
             acceptance_criteria=acceptance_criteria,
@@ -259,6 +262,7 @@ class TestQAAgent:
         # Verify RETRY decision
         assert decision == QADecision.RETRY
         assert "wrong implementation" in feedback.lower()
+        assert qa_output.decision == "RETRY"
 
         # Check milestone status was updated to "in_progress" (MilestoneStatus for RETRY)
         from agent.db.models.enums import MilestoneStatus
