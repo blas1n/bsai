@@ -119,6 +119,10 @@ class AgentState(TypedDict):
     needs_replan: NotRequired[bool]  # Flag set by QA when replan needed
     replan_reason: NotRequired[str | None]  # Why replan was triggered
 
+    # Failure recovery fields
+    strategy_retry_attempted: NotRequired[bool]  # Whether strategy retry has been attempted
+    failure_context: NotRequired[dict[str, Any]]  # Context for failure report generation
+
 
 def update_milestone(milestone: MilestoneData, **updates: Any) -> MilestoneData:
     """Create an updated copy of a milestone with the given changes.

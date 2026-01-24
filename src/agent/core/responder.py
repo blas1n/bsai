@@ -8,6 +8,7 @@ The Responder is responsible for:
 """
 
 from functools import lru_cache
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -178,3 +179,130 @@ class ResponderAgent:
         )
 
         return final_response
+
+    async def generate_failure_report(
+        self,
+        task_id: UUID,
+        original_request: str,
+        failure_context: dict[str, Any],
+    ) -> str:
+        """Generate a detailed failure report for the user.
+
+        Called when a task has failed after all retry attempts and strategy
+        changes. Provides the user with context about what was tried and
+        suggestions for next steps.
+
+        Args:
+            task_id: Task ID for logging
+            original_request: User's original request
+            failure_context: Dict containing:
+                - attempted_milestones: List of milestones that were attempted
+                - final_error: The final error message
+                - partial_results: Any partial results that were achieved
+
+        Returns:
+            Detailed failure report for the user
+        """
+        # Detect user's language
+        user_language = detect_language(original_request)
+        language_name = get_language_name(user_language)
+
+        logger.info(
+            "responder_failure_report_start",
+            task_id=str(task_id),
+            detected_language=user_language,
+        )
+
+        # Build attempted summary from milestones
+        attempted_milestones = failure_context.get("attempted_milestones", [])
+        attempted_parts = []
+        for i, m in enumerate(attempted_milestones):
+            status = m.get("status", "unknown")
+            if hasattr(status, "value"):
+                status = status.value
+            attempted_parts.append(
+                f"{i + 1}. {m.get('description', 'Unknown task')} - Status: {status}"
+            )
+        attempted_summary = (
+            "\n".join(attempted_parts) if attempted_parts else "No milestones attempted"
+        )
+
+        # Build failure reasons
+        failure_reasons_list = []
+        final_error = failure_context.get("final_error")
+        if final_error:
+            failure_reasons_list.append(f"Final error: {final_error}")
+
+        # Extract QA feedback from failed milestones
+        for m in attempted_milestones:
+            qa_feedback = m.get("qa_feedback")
+            if qa_feedback:
+                failure_reasons_list.append(f"QA feedback: {qa_feedback}")
+
+        failure_reasons = (
+            "\n".join(failure_reasons_list) if failure_reasons_list else "Unknown failure reason"
+        )
+
+        # Build partial results
+        partial_results_list = []
+        for m in attempted_milestones:
+            if m.get("status") and str(m.get("status")).lower() in ("passed", "pass"):
+                output = m.get("worker_output", "")
+                if output:
+                    desc = m.get("description", "Completed step")
+                    partial_results_list.append(f"**{desc}**:\n{output[:500]}...")
+        partial_results = (
+            "\n\n".join(partial_results_list)
+            if partial_results_list
+            else "No partial results available"
+        )
+        has_partial_results = bool(partial_results_list)
+
+        # Use a MODERATE model for failure report (needs reasoning)
+        model = self.router.select_model(TaskComplexity.MODERATE)
+
+        # Build prompt
+        system_prompt = self.prompt_manager.render(
+            "responder",
+            ResponderPrompts.SYSTEM_PROMPT,
+            language=language_name,
+            has_artifacts=False,
+        )
+
+        user_prompt = self.prompt_manager.render(
+            "responder",
+            ResponderPrompts.FAILURE_REPORT_PROMPT,
+            original_request=original_request,
+            attempted_summary=attempted_summary,
+            failure_reasons=failure_reasons,
+            partial_results=partial_results,
+            language=language_name,
+            has_partial_results=has_partial_results,
+        )
+
+        messages = [
+            ChatMessage(role="system", content=system_prompt),
+            ChatMessage(role="user", content=user_prompt),
+        ]
+
+        settings = get_agent_settings()
+        request = LLMRequest(
+            model=model.name,
+            messages=messages,
+            temperature=settings.worker_temperature,
+            max_tokens=3000,
+            api_base=model.api_base,
+            api_key=model.api_key,
+        )
+
+        response = await self.llm_client.chat_completion(request, mcp_servers=[])
+        failure_report = response.content.strip()
+
+        logger.info(
+            "responder_failure_report_complete",
+            task_id=str(task_id),
+            report_length=len(failure_report),
+            tokens=response.usage.total_tokens,
+        )
+
+        return failure_report

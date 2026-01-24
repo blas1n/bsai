@@ -38,7 +38,52 @@ async def generate_response_node(
     container = get_container(config)
     event_bus = get_event_bus(config)
 
-    # If there was an error or cancellation, return the error message as final response
+    # Check if we need to generate a failure report
+    failure_context = state.get("failure_context")
+    if failure_context:
+        logger.info(
+            "response_generating_failure_report",
+            task_id=str(state["task_id"]),
+        )
+        try:
+            responder = ResponderAgent(
+                llm_client=container.llm_client,
+                router=container.router,
+                prompt_manager=container.prompt_manager,
+                session=session,
+            )
+
+            failure_report = await responder.generate_failure_report(
+                task_id=state["task_id"],
+                original_request=state["original_request"],
+                failure_context=failure_context,
+            )
+
+            # Emit failure report event
+            await event_bus.emit(
+                AgentActivityEvent(
+                    type=EventType.AGENT_COMPLETED,
+                    session_id=state["session_id"],
+                    task_id=state["task_id"],
+                    milestone_id=state["task_id"],
+                    sequence_number=0,
+                    agent="responder",
+                    status=AgentStatus.COMPLETED,
+                    message="Failure report generated",
+                    details={"is_failure_report": True},
+                )
+            )
+
+            return {
+                "final_response": failure_report,
+            }
+        except Exception as e:
+            logger.error("failure_report_generation_failed", error=str(e))
+            return {
+                "final_response": f"Task could not be completed. Error: {state.get('error', 'Unknown error')}",
+            }
+
+    # If there was an error without failure_context (legacy path)
     if state.get("error"):
         error_msg = state.get("error", "Task failed or was cancelled")
         logger.info(

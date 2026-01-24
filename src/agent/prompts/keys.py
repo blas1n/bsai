@@ -8,6 +8,7 @@ class ConductorPrompts(str, Enum):
 
     ANALYSIS_PROMPT = "analysis_prompt"
     REPLAN_PROMPT = "replan_prompt"
+    RETHINK_STRATEGY_PROMPT = "rethink_strategy_prompt"
 
 
 class MetaPrompterPrompts(str, Enum):
@@ -42,6 +43,7 @@ class ResponderPrompts(str, Enum):
 
     SYSTEM_PROMPT = "system_prompt"
     GENERATE_RESPONSE = "generate_response"
+    FAILURE_REPORT_PROMPT = "failure_report_prompt"
 
 
 class MemoryPrompts(str, Enum):

@@ -47,6 +47,7 @@ class Node(StrEnum):
     TASK_SUMMARY = "task_summary"
     GENERATE_RESPONSE = "generate_response"
     REPLAN = "replan"  # Dynamic plan modification
+    RECOVERY = "recovery"  # Graceful failure recovery
 
 
 def get_breakpoint_service(config: RunnableConfig) -> BreakpointService:

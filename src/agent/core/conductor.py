@@ -442,3 +442,90 @@ class ConductorAgent:
             replan_reason=replan_reason,
             replans_text=replans_text,
         )
+
+    async def rethink_strategy(
+        self,
+        task_id: UUID,
+        original_request: str,
+        failed_approach: str,
+        failure_reasons: list[str],
+    ) -> list[dict[str, str | TaskComplexity]]:
+        """Create a new plan using a completely different strategy.
+
+        Called after the initial approach has failed and we need to try
+        a fundamentally different approach to solve the user's request.
+
+        Args:
+            task_id: Task ID
+            original_request: Original user request
+            failed_approach: Description of the approach that failed
+            failure_reasons: List of reasons why it failed
+
+        Returns:
+            New list of milestone definitions
+
+        Raises:
+            ValueError: If LLM response is invalid
+        """
+        logger.info(
+            "conductor_rethink_strategy_start",
+            task_id=str(task_id),
+            failure_reason_count=len(failure_reasons),
+        )
+
+        # Use MODERATE complexity (need more reasoning for strategy change)
+        model = self.router.select_model(TaskComplexity.MODERATE)
+
+        # Format failure reasons
+        failure_reasons_text = "\n".join(f"- {reason}" for reason in failure_reasons)
+
+        # Build rethink prompt
+        prompt = self.prompt_manager.render(
+            "conductor",
+            ConductorPrompts.RETHINK_STRATEGY_PROMPT,
+            original_request=original_request,
+            failed_approach=failed_approach,
+            failure_reasons=failure_reasons_text,
+        )
+        messages = [ChatMessage(role="user", content=prompt)]
+
+        # Call LLM with structured output
+        settings = get_agent_settings()
+        request = LLMRequest(
+            model=model.name,
+            messages=messages,
+            temperature=settings.conductor_temperature,
+            api_base=model.api_base,
+            api_key=model.api_key,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "conductor_output",
+                    "strict": True,
+                    "schema": ConductorOutput.model_json_schema(),
+                },
+            },
+        )
+
+        response = await self.llm_client.chat_completion(request, mcp_servers=[])
+
+        # Parse structured response
+        try:
+            milestones = self._parse_milestones(response.content)
+        except (ValueError, KeyError) as e:
+            logger.error(
+                "conductor_rethink_parse_failed",
+                task_id=str(task_id),
+                error=str(e),
+                response=response.content[:500],
+            )
+            raise ValueError(f"Failed to parse Conductor rethink response: {e}") from e
+
+        logger.info(
+            "conductor_rethink_strategy_complete",
+            task_id=str(task_id),
+            new_milestone_count=len(milestones),
+            total_tokens=response.usage.total_tokens,
+        )
+
+        return milestones

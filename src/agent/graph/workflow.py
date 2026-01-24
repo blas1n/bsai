@@ -36,8 +36,10 @@ from .edges import (
     CompressionRoute,
     PromptRoute,
     QARoute,
+    RecoveryRoute,
     route_advance,
     route_qa_decision,
+    route_recovery,
     should_compress_context,
     should_use_meta_prompter,
 )
@@ -49,6 +51,7 @@ from .nodes.context import check_context_node, summarize_node
 from .nodes.execute import execute_worker_node
 from .nodes.llm import generate_prompt_node, select_llm_node
 from .nodes.qa import verify_qa_node
+from .nodes.recovery import recovery_node
 from .nodes.replan import replan_node
 from .nodes.response import generate_response_node
 from .nodes.task_summary import task_summary_node
@@ -137,6 +140,7 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         Node.TASK_SUMMARY: task_summary_node,
         Node.GENERATE_RESPONSE: generate_response_node,
         Node.REPLAN: replan_node,
+        Node.RECOVERY: recovery_node,
     }
 
     # Add all nodes with session bound
@@ -172,18 +176,31 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     # NOTE: RETRY also goes to ADVANCE first to increment retry_count
     # then ADVANCE routes back to EXECUTE_WORKER via RETRY_MILESTONE
     # REPLAN triggers dynamic plan modification when QA detects plan viability issues
+    # FAIL now routes to RECOVERY for graceful failure handling
     graph.add_conditional_edges(
         Node.VERIFY_QA,
         route_qa_decision,
         {
             QARoute.NEXT: Node.CHECK_CONTEXT,
             QARoute.RETRY: Node.ADVANCE,
-            QARoute.FAIL: Node.ADVANCE,
+            QARoute.FAIL: Node.RECOVERY,
             QARoute.REPLAN: Node.REPLAN,
         },
     )
 
     graph.add_edge(Node.REPLAN, Node.SELECT_LLM)
+
+    # Conditional edges from recovery node
+    # - STRATEGY_RETRY: Try a completely different approach (back to select_llm)
+    # - FAILURE_REPORT: Generate detailed failure report (to task_summary -> response)
+    graph.add_conditional_edges(
+        Node.RECOVERY,
+        route_recovery,
+        {
+            RecoveryRoute.STRATEGY_RETRY: Node.SELECT_LLM,
+            RecoveryRoute.FAILURE_REPORT: Node.TASK_SUMMARY,
+        },
+    )
 
     # Conditional edges for context compression
     graph.add_conditional_edges(

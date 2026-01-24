@@ -42,6 +42,13 @@ class AdvanceRoute(StrEnum):
     RETRY_MILESTONE = "retry_milestone"
 
 
+class RecoveryRoute(StrEnum):
+    """Recovery routing options."""
+
+    STRATEGY_RETRY = "strategy_retry"  # Try different strategy
+    FAILURE_REPORT = "failure_report"  # Generate failure report
+
+
 # Maximum retry attempts for QA validation
 MAX_RETRIES = 3
 
@@ -183,3 +190,25 @@ def has_error(state: AgentState) -> bool:
         True if error exists in state
     """
     return state.get("error") is not None
+
+
+def route_recovery(state: AgentState) -> RecoveryRoute:
+    """Route after recovery node.
+
+    Determines whether to:
+    1. Retry with a different strategy (if not yet attempted)
+    2. Generate failure report (if strategy retry exhausted)
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        RecoveryRoute.STRATEGY_RETRY or RecoveryRoute.FAILURE_REPORT
+    """
+    # If strategy retry was successful (workflow_complete is False),
+    # route back to select_llm for the new strategy
+    if not state.get("workflow_complete", False):
+        return RecoveryRoute.STRATEGY_RETRY
+
+    # Otherwise, go to failure report
+    return RecoveryRoute.FAILURE_REPORT

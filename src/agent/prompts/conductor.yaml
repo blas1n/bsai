@@ -69,3 +69,32 @@ replan_prompt: |
   - modifications: List of modifications (action, target_index, new_milestone, reason)
   - confidence: Your confidence in the revised plan (0.0-1.0)
   - reasoning: Overall reasoning for the changes
+
+rethink_strategy_prompt: |
+  The previous approach to this task has failed after multiple attempts.
+  You need to devise a COMPLETELY DIFFERENT strategy.
+
+  ## Original Request
+  ${original_request}
+
+  ## Previous Approach That Failed
+  ${failed_approach}
+
+  ## Why It Failed
+  ${failure_reasons}
+
+  ${worker_capabilities()}
+
+  ## Instructions
+  Create a NEW plan using a fundamentally different approach:
+  1. DO NOT repeat the same strategy that failed
+  2. Consider alternative methods, tools, or decomposition
+  3. If the task seems impossible, create a single milestone explaining why and what alternatives exist
+  4. Keep the new plan minimal but achievable
+
+  COMPLEXITY LEVELS:
+  - TRIVIAL: Simple facts, basic calculations (<100 tokens)
+  - SIMPLE: Straightforward tasks with clear steps (<500 tokens)
+  - MODERATE: Tasks requiring analysis or multi-step reasoning (<2000 tokens)
+  - COMPLEX: Tasks requiring deep expertise or complex logic (<8000 tokens)
+  - CONTEXT_HEAVY: Tasks with massive context or research (>8000 tokens)
