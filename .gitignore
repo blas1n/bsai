@@ -1,122 +1,37 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+dist/
+build/
 
-# Virtual environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Virtual Environment
+.venv/
 
-# IDEs
+# IDE
 .vscode/
 !.vscode/settings.json
-!.vscode/launch.json
 .idea/
-*.swp
-*.swo
-*~
-.DS_Store
 
 # Testing
 .pytest_cache/
 .coverage
-coverage.xml
 htmlcov/
-*.cover
-.hypothesis/
-.tox/
+coverage.xml
 
-# Documentation
-site/
-docs/_build/
+# Type/Lint Cache
+.mypy_cache/
+.ruff_cache/
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
+# Environment
+.env
+.env.local
 
 # Logs
 *.log
-logs/
-
-# Environment variables
-.env.local
-.env.*.local
-
-# UV
-uv.lock
-
-# Alembic
-# Keep migrations/ structure but optionally ignore auto-generated files
-# migrations/versions/*.py
-
-# Docker
-*.pid
-*.seed
-*.pid.lock
-
-# Keycloak dev users (security - never commit to production)
-infra/keycloak/bsai-dev-users.json
-
-# Temporary files
-tmp/
-temp/
-*.tmp
 
 # OS
 .DS_Store
-Thumbs.db
 
-# Monitoring data
-prometheus_data/
-grafana_data/
-
-# LangGraph
-langgraph_data/
-
-# LiteLLM cache
-.litellm_cache/
-
-# Type checking
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Ruff
-.ruff_cache/
-
-# Node.js / Next.js
-node_modules/
-.next/
-out/
-.npm/
-*.tsbuildinfo
-next-env.d.ts
-
-# Web build
-web/.next/
-web/node_modules/
-web/out/
+# Internal docs (Korean, not for commit)
+docs/internal/

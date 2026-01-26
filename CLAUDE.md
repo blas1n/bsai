@@ -1,27 +1,27 @@
 # BSAI - Claude Development Guide
 
-## 프로젝트 목적
+## Project Purpose
 
-AI 에이전트 핵심 패턴 학습용 코드 에이전트
+AI agent core pattern learning through building a code agent.
 
-## 완료 조건
+## Completion Criteria
 
-1. 4가지 핵심 패턴(Tool Use, Plan-Execute, Error Recovery, State Mgmt) 이해
-2. 포트폴리오에서 기술적 깊이 보여주기
-3. 동작하는 데모 가능
+1. Understand 4 core patterns (Tool Use, Plan-Execute, Error Recovery, State Mgmt)
+2. Demonstrate technical depth in portfolio
+3. Working demo available
 
-## 기술 스택
+## Tech Stack
 
-- LangGraph: 워크플로우
-- LiteLLM: LLM 클라이언트
+- LangGraph: Workflow
+- LiteLLM: LLM client
 - FastAPI: API
 
-## 개발 명령어
+## Commands
 
 ```bash
-# 린팅
+# Lint
 ruff check .
 
-# 테스트
+# Test
 pytest
 ```

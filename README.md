@@ -1,23 +1,31 @@
 # BSAI - AI Agent Pattern Learning
 
-AI 에이전트 핵심 패턴을 학습하기 위한 프로젝트
+A learning project to understand core AI agent patterns through building a code agent.
 
-## 학습 목표
+## Purpose
 
-1. **Tool Use** - LLM + 도구 연결
-2. **Plan-and-Execute** - 작업 계획 및 실행
-3. **Error Recovery** - 오류 처리 및 재시도
-4. **State Management** - 상태 관리
+- Learn 4 core patterns: Tool Use, Plan-Execute, Error Recovery, State Management
+- Build portfolio demonstrating technical depth
+- Create a working demo
 
-## 기술 스택
+## Tech Stack
 
-- Python 3.11+
-- LangGraph
-- LiteLLM
-- FastAPI
+- **LangGraph**: Workflow orchestration
+- **LiteLLM**: LLM client
+- **FastAPI**: API server
 
-## 설정
+## Getting Started
 
 ```bash
 uv sync
+```
+
+## Development
+
+```bash
+# Lint
+ruff check .
+
+# Test
+pytest
 ```
