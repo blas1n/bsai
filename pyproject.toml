@@ -1,97 +1,34 @@
 [project]
 name = "bsai"
 version = "0.1.0"
-description = "LangGraph-based Multi-Agent LLM Orchestration System"
+description = "AI Agent Pattern Learning Project"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    # LLM & Orchestration (핵심)
+    "litellm>=1.27.0",
+    "langgraph>=0.0.20",
+
     # Web Framework
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
-    "websockets>=12.0",
-    "python-multipart>=0.0.6",
-    "httpx>=0.26.0",
 
     # Data Validation
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
 
-    # Database
-    "sqlalchemy[asyncio]>=2.0.25",
-    "alembic>=1.13.1",
-    "asyncpg>=0.29.0",
-    "pgvector>=0.2.0",
-
-    # Cache
-    "redis>=5.0.1",
-
-    # LLM & Orchestration
-    "litellm>=1.27.0",
-    "langgraph>=0.0.20",
-    "langgraph-checkpoint-postgres>=3.0.0",
-    "langchain-core>=0.1.0",
-    "langchain>=0.3.0",
-
-    # Observability
-    "langfuse>=2.0.0",
-
-    # MCP (Model Context Protocol)
-    "mcp>=1.0.0",
-
-    # Prompt Templates
-    "jinja2>=3.1.2",
-    "mako>=1.3.0",
-    "pyyaml>=6.0.1",
-
-    # Token Counting
-    "tiktoken>=0.5.2",
-
     # Utilities
     "structlog>=24.1.0",
-    "tenacity>=8.2.3",
-
-    # Language Detection
-    "lingua-language-detector>=2.0.0",
-
-    # Code Processing
-    "pygments>=2.17.0",
-
-    # Auth
-    "fastapi-keycloak-middleware>=1.3.0",
+    "pyyaml>=6.0.1",
 ]
 
 [project.optional-dependencies]
 dev = [
-    # Testing
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
-    "pytest-mock>=3.12.0",
-    "httpx>=0.26.0",
-    "faker>=22.0.0",
-
-    # Performance Testing
-    "locust>=2.20.0",
-
-    # Code Quality
-    "black>=24.1.0",
     "ruff>=0.1.14",
     "mypy>=1.8.0",
-    "pre-commit>=3.6.0",
-
-    # Type Stubs
-    "types-redis>=4.6.0",
-    "types-requests>=2.31.0",
-    "types-jwcrypto>=1.0.0",
-    "types-Pygments>=2.17.0",
-    "types-PyYAML>=6.0.0",
-    "sqlalchemy[mypy]>=2.0.25",
-]
-docs = [
-    "mkdocs>=1.5.3",
-    "mkdocs-material>=9.5.3",
-    "mkdocstrings[python]>=0.24.0",
-    "mkdocs-mermaid2-plugin>=1.1.1",
 ]
 
 [build-system]
@@ -103,85 +40,16 @@ packages = ["src/agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
 asyncio_mode = "auto"
-addopts = [
-    "--strict-markers",
-    "--strict-config",
-    "--cov=src",
-    "--cov-report=term-missing:skip-covered",
-    "--cov-report=html",
-    "--cov-report=xml",
-]
-
-[tool.black]
-line-length = 100
-target-version = ['py311']
-include = '\.pyi?$'
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "C",   # flake8-comprehensions
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
-]
-ignore = [
-    "E501",  # line too long (handled by black)
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
-]
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
-"migrations/*.py" = ["F401"]
+select = ["E", "W", "F", "I", "B", "UP"]
+ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
-plugins = ["sqlalchemy.ext.mypy.plugin"]
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_any_generics = true
-disallow_subclassing_any = true
-disallow_untyped_calls = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-follow_imports = "normal"
-
-[[tool.mypy.overrides]]
-module = [
-    "fastapi_keycloak_middleware",
-    "langgraph.graph.graph",
-    "langfuse",
-    "langfuse.*",
-    "mako",
-    "mako.*",
-    "pgvector",
-    "pgvector.*",
-]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "agent.tracing.*"
-disable_error_code = ["attr-defined"]
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
-disallow_untyped_calls = false
-disable_error_code = ["arg-type", "misc", "union-attr"]

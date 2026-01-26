@@ -63,6 +63,10 @@
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   // Run as non-root user
+  // Environment variables for all processes (including non-interactive shells)
+  "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
+  },
   "remoteUser": "vscode",
   // Container user
   "containerUser": "vscode",

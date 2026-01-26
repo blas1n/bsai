@@ -1,89 +1,27 @@
 # BSAI - Claude Development Guide
 
-## Project Overview
-BSAI is a **LangGraph-based Multi-Agent LLM Orchestration System** with the following core features:
+## 프로젝트 목적
 
-1. **Token Cost Optimization**: Automatic LLM selection based on task complexity
-2. **Quality Assurance**: Independent QA Agent validates all outputs (max 3 retries)
-3. **Context Preservation**: Memory system maintains context across session interruptions
-4. **Dynamic Plan Modification (ReAct Pattern)**: Runtime plan adjustment based on execution observations
+AI 에이전트 핵심 패턴 학습용 코드 에이전트
 
-## Architecture
+## 완료 조건
 
-- **LiteLLM**: Direct usage for unified multi-provider LLM access
-- **LangGraph StateGraph**: Orchestrates 8 specialized agents
-- **FastAPI**: REST API with async/await throughout
+1. 4가지 핵심 패턴(Tool Use, Plan-Execute, Error Recovery, State Mgmt) 이해
+2. 포트폴리오에서 기술적 깊이 보여주기
+3. 동작하는 데모 가능
 
-### Workflow Flow
-```
-analyze_task → select_llm → [generate_prompt?] → execute_worker
-    → verify_qa → [replan?] → check_context → [summarize?]
-    → advance → [next_milestone | task_summary]
-    → task_summary → generate_response → END
-```
+## 기술 스택
 
-**ReAct Replanning Flow**: When QA detects plan viability issues (NEEDS_REVISION or BLOCKED), the workflow routes to the `replan` node which uses the Conductor to modify the execution plan dynamically.
+- LangGraph: 워크플로우
+- LiteLLM: LLM 클라이언트
+- FastAPI: API
 
-### Key Agents
-1. **Conductor**: Break request into milestones, select LLM, replan during execution
-2. **Meta Prompter**: Generate optimized prompts (for MODERATE+ tasks)
-3. **Worker**: Execute actual task with MCP tools, extract observations
-4. **QA Agent**: Validate outputs with structured feedback, assess plan viability
-5. **Summarizer**: Compress context when memory pressure
-6. **Artifact Extractor**: Extract code blocks and files
-7. **Task Summary**: Summarize all milestones for Responder
-8. **Responder**: Generate user-friendly response
+## 개발 명령어
 
-## Development Guidelines
-
-- **Backend**: [src/agent/CLAUDE.md](src/agent/CLAUDE.md)
-- **Frontend**: [web/CLAUDE.md](web/CLAUDE.md)
-
-## Quick Reference
-
-### Code Quality
 ```bash
-# Linting
+# 린팅
 ruff check .
 
-# Type checking
-mypy src/
-
-# Auto-fix
-ruff check --fix .
+# 테스트
+pytest
 ```
-
-### Testing
-```bash
-pytest                           # Run all tests
-pytest --cov=src                 # With coverage
-pytest -x                        # Fast fail
-```
-
-### Database Migrations
-```bash
-# Create migration
-python3 -m alembic revision --autogenerate -m "Description"
-
-# Apply migrations
-python3 -m alembic upgrade head
-
-# Rollback
-python3 -m alembic downgrade -1
-```
-
-## References
-
-### Backend
-- FastAPI: https://fastapi.tiangolo.com
-- Pydantic: https://docs.pydantic.dev
-- SQLAlchemy: https://docs.sqlalchemy.org/en/20/
-- LangGraph: https://langchain-ai.github.io/langgraph/
-- LiteLLM: https://docs.litellm.ai/
-
-### Frontend
-- Next.js: https://nextjs.org/docs
-- React: https://react.dev
-- Tailwind CSS: https://tailwindcss.com/docs
-- Radix UI: https://www.radix-ui.com/docs
-- Zustand: https://zustand-demo.pmnd.rs/
