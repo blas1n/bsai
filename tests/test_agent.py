@@ -12,7 +12,9 @@ class TestCodeAgentInit:
 
     @patch("src.agent.core.agent.create_agent_graph")
     @patch("src.agent.core.agent.create_llm")
-    def test_init_creates_llm_with_default_model(self, mock_create_llm, mock_create_graph):
+    def test_init_creates_llm_with_default_model(
+        self, mock_create_llm, mock_create_graph
+    ):
         """Test that __init__ creates LLM with default model."""
         mock_llm = MagicMock()
         mock_create_llm.return_value = mock_llm
@@ -24,7 +26,9 @@ class TestCodeAgentInit:
 
     @patch("src.agent.core.agent.create_agent_graph")
     @patch("src.agent.core.agent.create_llm")
-    def test_init_creates_llm_with_custom_model(self, mock_create_llm, mock_create_graph):
+    def test_init_creates_llm_with_custom_model(
+        self, mock_create_llm, mock_create_graph
+    ):
         """Test that __init__ creates LLM with custom model."""
         mock_llm = MagicMock()
         mock_create_llm.return_value = mock_llm
@@ -80,14 +84,14 @@ class TestCodeAgentRun:
 
     @patch("src.agent.core.agent.create_agent_graph")
     @patch("src.agent.core.agent.create_llm")
-    def test_run_invokes_graph_with_human_message(self, mock_create_llm, mock_create_graph):
+    def test_run_invokes_graph_with_human_message(
+        self, mock_create_llm, mock_create_graph
+    ):
         """Test that run invokes graph with HumanMessage."""
         mock_llm = MagicMock()
         mock_create_llm.return_value = mock_llm
         mock_graph = MagicMock()
-        mock_graph.invoke.return_value = {
-            "messages": [AIMessage(content="Response")]
-        }
+        mock_graph.invoke.return_value = {"messages": [AIMessage(content="Response")]}
         mock_create_graph.return_value = mock_graph
 
         agent = CodeAgent()
@@ -122,7 +126,9 @@ class TestCodeAgentRun:
 
     @patch("src.agent.core.agent.create_agent_graph")
     @patch("src.agent.core.agent.create_llm")
-    def test_run_handles_single_message_response(self, mock_create_llm, mock_create_graph):
+    def test_run_handles_single_message_response(
+        self, mock_create_llm, mock_create_graph
+    ):
         """Test that run handles single message in response."""
         mock_llm = MagicMock()
         mock_create_llm.return_value = mock_llm
