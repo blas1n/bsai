@@ -55,7 +55,9 @@ class TestWriteFile:
 
     def test_write_to_invalid_path(self):
         """Test writing to an invalid path."""
-        result = write_file.invoke({"path": "/nonexistent/directory/file.txt", "content": "Test"})
+        result = write_file.invoke(
+            {"path": "/nonexistent/directory/file.txt", "content": "Test"}
+        )
 
         assert "Error writing file" in result
 

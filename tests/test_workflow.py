@@ -7,7 +7,11 @@ from langchain_core.tools import tool
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agent.graph.state import AgentState
-from src.agent.graph.workflow import SYSTEM_PROMPT, create_agent_graph, create_agent_node
+from src.agent.graph.workflow import (
+    SYSTEM_PROMPT,
+    create_agent_graph,
+    create_agent_node,
+)
 
 
 class TestCreateAgentNode:

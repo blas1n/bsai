@@ -47,7 +47,9 @@ class TestCreateLLM:
 
         create_llm()
 
-        self.mock_chat_openai.assert_called_once_with(model="gpt-4o-mini", temperature=0)
+        self.mock_chat_openai.assert_called_once_with(
+            model="gpt-4o-mini", temperature=0
+        )
 
     def test_create_openai_model_gpt4(self, setup_mocks):
         """Test creating GPT-4 model."""
@@ -83,7 +85,9 @@ class TestCreateLLM:
 
         create_llm("some-other-model")
 
-        self.mock_chat_openai.assert_called_once_with(model="some-other-model", temperature=0)
+        self.mock_chat_openai.assert_called_once_with(
+            model="some-other-model", temperature=0
+        )
 
     def test_claude_prefix_routing(self, setup_mocks):
         """Test that any model starting with 'claude' routes to Anthropic."""

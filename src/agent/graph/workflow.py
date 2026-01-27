@@ -34,7 +34,9 @@ def create_agent_node(llm_with_tools: Runnable[Any, Any]) -> Any:
     return agent_node
 
 
-def create_agent_graph(llm: BaseChatModel, tools: list[BaseTool]) -> CompiledStateGraph[Any]:
+def create_agent_graph(
+    llm: BaseChatModel, tools: list[BaseTool]
+) -> CompiledStateGraph[Any]:
     """Create and compile the agent graph.
 
     Args:
