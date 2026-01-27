@@ -5,9 +5,11 @@ description = "AI Agent Pattern Learning Project"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    # LLM & Orchestration (핵심)
-    "litellm>=1.27.0",
+    # LLM & Orchestration
     "langgraph>=0.0.20",
+    "langchain-core>=0.1.0",
+    "langchain-openai>=0.0.5",
+    "langchain-anthropic>=0.1.0",
 
     # Web Framework
     "fastapi>=0.109.0",
