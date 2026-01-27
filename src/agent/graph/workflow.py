@@ -1,5 +1,7 @@
 """LangGraph workflow definition."""
 
+from typing import Any
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 from langchain_core.runnables import Runnable
@@ -14,7 +16,7 @@ SYSTEM_PROMPT = """You are a helpful code assistant.
 You can read files, write files, and list directories."""
 
 
-def create_agent_node(llm_with_tools: Runnable):
+def create_agent_node(llm_with_tools: Runnable[Any, Any]) -> Any:
     """Create the agent node function.
 
     Args:
@@ -24,7 +26,7 @@ def create_agent_node(llm_with_tools: Runnable):
         Agent node function
     """
 
-    def agent_node(state: AgentState) -> dict:
+    def agent_node(state: AgentState) -> dict[str, Any]:
         messages = [SystemMessage(content=SYSTEM_PROMPT)] + state["messages"]
         response = llm_with_tools.invoke(messages)
         return {"messages": [response]}
@@ -32,7 +34,7 @@ def create_agent_node(llm_with_tools: Runnable):
     return agent_node
 
 
-def create_agent_graph(llm: BaseChatModel, tools: list[BaseTool]) -> CompiledStateGraph:
+def create_agent_graph(llm: BaseChatModel, tools: list[BaseTool]) -> CompiledStateGraph[Any]:
     """Create and compile the agent graph.
 
     Args:

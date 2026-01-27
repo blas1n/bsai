@@ -30,7 +30,7 @@ class CodeAgent:
             Agent's response
         """
         result = self.graph.invoke({"messages": [HumanMessage(content=user_input)]})
-        return result["messages"][-1].content
+        return str(result["messages"][-1].content)
 
 
 if __name__ == "__main__":

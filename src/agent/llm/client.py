@@ -16,5 +16,5 @@ def create_llm(model: str = "gpt-4o-mini") -> BaseChatModel:
         Configured ChatModel instance
     """
     if model.startswith("claude"):
-        return ChatAnthropic(model=model, temperature=0)
+        return ChatAnthropic(model=model, temperature=0)  # type: ignore[call-arg]
     return ChatOpenAI(model=model, temperature=0)
