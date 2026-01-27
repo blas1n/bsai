@@ -26,15 +26,18 @@ class TestCreateLLM:
         self.mock_openai_module.ChatOpenAI = self.mock_chat_openai
 
         # Patch the modules
-        with patch.dict(sys.modules, {
-            'langchain_anthropic': self.mock_anthropic_module,
-            'langchain_openai': self.mock_openai_module,
-        }):
+        with patch.dict(
+            sys.modules,
+            {
+                "langchain_anthropic": self.mock_anthropic_module,
+                "langchain_openai": self.mock_openai_module,
+            },
+        ):
             # Clear any cached imports
-            if 'src.agent.llm.client' in sys.modules:
-                del sys.modules['src.agent.llm.client']
-            if 'src.agent.llm' in sys.modules:
-                del sys.modules['src.agent.llm']
+            if "src.agent.llm.client" in sys.modules:
+                del sys.modules["src.agent.llm.client"]
+            if "src.agent.llm" in sys.modules:
+                del sys.modules["src.agent.llm"]
 
             yield
 
@@ -58,20 +61,20 @@ class TestCreateLLM:
         """Test creating Claude model."""
         from src.agent.llm.client import create_llm
 
-        create_llm("claude-3-opus-20240229")
+        create_llm("claude-opus-4-20250514")
 
         self.mock_chat_anthropic.assert_called_once_with(
-            model_name="claude-3-opus-20240229", temperature=0
+            model="claude-opus-4-20250514", temperature=0
         )
 
     def test_create_anthropic_model_claude_sonnet(self, setup_mocks):
         """Test creating Claude Sonnet model."""
         from src.agent.llm.client import create_llm
 
-        create_llm("claude-3-sonnet-20240229")
+        create_llm("claude-sonnet-4-20250514")
 
         self.mock_chat_anthropic.assert_called_once_with(
-            model_name="claude-3-sonnet-20240229", temperature=0
+            model="claude-sonnet-4-20250514", temperature=0
         )
 
     def test_non_claude_model_uses_openai(self, setup_mocks):
