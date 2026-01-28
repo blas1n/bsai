@@ -35,3 +35,6 @@ coverage.xml
 
 # Internal docs (Korean, not for commit)
 docs/internal/
+
+# AI Results
+results
