@@ -428,8 +428,16 @@ class TestListMcpToolsFromServer:
 class TestOAuthCallback:
     """Tests for oauth_callback endpoint logic."""
 
+    @pytest.fixture
+    def valid_mcp_settings(self):
+        """Create valid MCP settings with a real Fernet key."""
+        from cryptography.fernet import Fernet
+
+        key = Fernet.generate_key().decode()
+        return McpSettings(encryption_key=key)
+
     @pytest.mark.asyncio
-    async def test_oauth_callback_invalid_state(self):
+    async def test_oauth_callback_invalid_state(self, valid_mcp_settings):
         """Test callback with invalid state."""
         request = McpOAuthCallbackRequest(
             code="auth-code",
@@ -437,7 +445,10 @@ class TestOAuthCallback:
             server_id=uuid4(),
         )
 
-        with patch("agent.api.routers.mcp.get_redis") as mock_get_redis:
+        with (
+            patch("agent.api.routers.mcp.get_redis") as mock_get_redis,
+            patch("agent.api.routers.mcp.get_mcp_settings", return_value=valid_mcp_settings),
+        ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
             mock_redis.client.get = AsyncMock(return_value=None)
@@ -452,7 +463,7 @@ class TestOAuthCallback:
             assert "Invalid or expired OAuth state" in result.error
 
     @pytest.mark.asyncio
-    async def test_oauth_callback_user_mismatch(self):
+    async def test_oauth_callback_user_mismatch(self, valid_mcp_settings):
         """Test callback with user mismatch."""
         request = McpOAuthCallbackRequest(
             code="auth-code",
@@ -468,7 +479,10 @@ class TestOAuthCallback:
             }
         )
 
-        with patch("agent.api.routers.mcp.get_redis") as mock_get_redis:
+        with (
+            patch("agent.api.routers.mcp.get_redis") as mock_get_redis,
+            patch("agent.api.routers.mcp.get_mcp_settings", return_value=valid_mcp_settings),
+        ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
             mock_redis.client.get = AsyncMock(return_value=oauth_data)
@@ -484,7 +498,7 @@ class TestOAuthCallback:
             assert "does not match current user" in result.error
 
     @pytest.mark.asyncio
-    async def test_oauth_callback_corrupted_state(self):
+    async def test_oauth_callback_corrupted_state(self, valid_mcp_settings):
         """Test callback with corrupted state data."""
         request = McpOAuthCallbackRequest(
             code="auth-code",
@@ -492,7 +506,10 @@ class TestOAuthCallback:
             server_id=uuid4(),
         )
 
-        with patch("agent.api.routers.mcp.get_redis") as mock_get_redis:
+        with (
+            patch("agent.api.routers.mcp.get_redis") as mock_get_redis,
+            patch("agent.api.routers.mcp.get_mcp_settings", return_value=valid_mcp_settings),
+        ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
             mock_redis.client.get = AsyncMock(return_value="not-valid-json{")
@@ -507,7 +524,7 @@ class TestOAuthCallback:
             assert "Corrupted OAuth state" in result.error
 
     @pytest.mark.asyncio
-    async def test_oauth_callback_missing_token_endpoint(self):
+    async def test_oauth_callback_missing_token_endpoint(self, valid_mcp_settings):
         """Test callback when token endpoint is missing."""
         request = McpOAuthCallbackRequest(
             code="auth-code",
@@ -523,7 +540,10 @@ class TestOAuthCallback:
             }
         )
 
-        with patch("agent.api.routers.mcp.get_redis") as mock_get_redis:
+        with (
+            patch("agent.api.routers.mcp.get_redis") as mock_get_redis,
+            patch("agent.api.routers.mcp.get_mcp_settings", return_value=valid_mcp_settings),
+        ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
             mock_redis.client.get = AsyncMock(return_value=oauth_data)
@@ -539,7 +559,7 @@ class TestOAuthCallback:
             assert "missing token_endpoint" in result.error
 
     @pytest.mark.asyncio
-    async def test_oauth_callback_missing_client_id(self):
+    async def test_oauth_callback_missing_client_id(self, valid_mcp_settings):
         """Test callback when client_id is missing."""
         request = McpOAuthCallbackRequest(
             code="auth-code",
@@ -556,7 +576,10 @@ class TestOAuthCallback:
             }
         )
 
-        with patch("agent.api.routers.mcp.get_redis") as mock_get_redis:
+        with (
+            patch("agent.api.routers.mcp.get_redis") as mock_get_redis,
+            patch("agent.api.routers.mcp.get_mcp_settings", return_value=valid_mcp_settings),
+        ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
             mock_redis.client.get = AsyncMock(return_value=oauth_data)

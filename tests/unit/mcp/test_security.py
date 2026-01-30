@@ -260,21 +260,33 @@ class TestCredentialEncryption:
 
     def test_encrypt_empty_credentials_fails(self):
         """Test that empty credentials fail validation."""
-        encryptor = CredentialEncryption()
+        from cryptography.fernet import Fernet
+
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+        encryptor = CredentialEncryption(settings)
 
         with pytest.raises(ValueError, match="Credentials cannot be empty"):
             encryptor.encrypt({})
 
     def test_decrypt_empty_string_fails(self):
         """Test that empty encrypted string fails validation."""
-        encryptor = CredentialEncryption()
+        from cryptography.fernet import Fernet
+
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+        encryptor = CredentialEncryption(settings)
 
         with pytest.raises(ValueError, match="Encrypted credentials cannot be empty"):
             encryptor.decrypt("")
 
     def test_decrypt_invalid_format_fails(self):
         """Test that invalid encrypted format fails."""
-        encryptor = CredentialEncryption()
+        from cryptography.fernet import Fernet
+
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+        encryptor = CredentialEncryption(settings)
 
         with pytest.raises(ValueError, match="Failed to decrypt credentials"):
             encryptor.decrypt("not-a-valid-encrypted-string")
@@ -294,7 +306,11 @@ class TestCredentialEncryption:
 
     def test_encryption_produces_different_outputs(self):
         """Test that encrypting same data twice produces different ciphertexts."""
-        encryptor = CredentialEncryption()
+        from cryptography.fernet import Fernet
+
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+        encryptor = CredentialEncryption(settings)
 
         credentials = {"api_key": "secret123"}
 
@@ -429,10 +445,15 @@ class TestBuildMcpAuthHeaders:
 
     def test_decryption_failure_returns_none(self):
         """Test returns None when decryption fails."""
+        from cryptography.fernet import Fernet
+
         from agent.mcp.security import build_mcp_auth_headers
 
+        key = Fernet.generate_key().decode()
+        settings = McpSettings(encryption_key=key)
+
         server = self._create_mock_server(auth_type="bearer", auth_credentials="invalid-encrypted")
-        result = build_mcp_auth_headers(server)
+        result = build_mcp_auth_headers(server, settings=settings)
         assert result is None
 
     def test_empty_token_returns_none(self):
