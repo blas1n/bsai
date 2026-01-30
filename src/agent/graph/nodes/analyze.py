@@ -98,8 +98,8 @@ async def analyze_task_node(
                 task_id=str(state["task_id"]),
                 count=len(existing_task_milestones),
             )
-            for m in existing_task_milestones:
-                await milestone_repo.delete(m.id)
+            for old_milestone in existing_task_milestones:
+                await milestone_repo.delete(old_milestone.id)
             await session.commit()
 
         conductor = ConductorAgent(
