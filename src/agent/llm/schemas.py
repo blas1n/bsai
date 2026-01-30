@@ -65,16 +65,18 @@ class QAOutput(BaseModel):
     issues: list[str] = Field(..., description="Specific issues found (empty if PASS)")
     suggestions: list[str] = Field(..., description="Improvement suggestions (empty if PASS)")
 
+    # Note: All fields must be required (no defaults) for OpenAI strict mode
+    # which requires all properties to be in the 'required' array
     plan_viability: Literal["VIABLE", "NEEDS_REVISION", "BLOCKED"] = Field(
-        default="VIABLE",
+        ...,
         description="Assessment of whether current plan can achieve goal",
     )
     plan_viability_reason: str | None = Field(
-        default=None,
-        description="Reason if plan needs revision or is blocked",
+        ...,
+        description="Reason if plan needs revision or is blocked (null if VIABLE)",
     )
     confidence: float = Field(
-        default=0.8,
+        ...,
         ge=0.0,
         le=1.0,
         description="Confidence in the assessment (0.0-1.0)",

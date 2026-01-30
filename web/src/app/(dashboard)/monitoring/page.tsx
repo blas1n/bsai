@@ -22,8 +22,8 @@ const generateUsageData = (sessions: SessionResponse[]) => {
       (s) => new Date(s.created_at).toDateString() === dateStr
     );
 
-    const inputTokens = daySessions.reduce((sum, s) => sum + s.total_input_tokens, 0);
-    const outputTokens = daySessions.reduce((sum, s) => sum + s.total_output_tokens, 0);
+    const inputTokens = daySessions.reduce((sum: number, s) => sum + s.total_input_tokens, 0);
+    const outputTokens = daySessions.reduce((sum: number, s) => sum + s.total_output_tokens, 0);
 
     data.push({
       date: date.toLocaleDateString('en-US', { weekday: 'short' }),
@@ -46,42 +46,38 @@ export default function MonitoringPage() {
     totalOutputTokens: 0,
   });
 
-  // Set API token when auth changes
-  useEffect(() => {
-    if (accessToken) {
-      api.setToken(accessToken);
-    }
-  }, [accessToken]);
-
   useEffect(() => {
     const fetchStats = async () => {
       if (!isAuthenticated || !accessToken) return;
 
+      // Set token before making API calls
+      api.setToken(accessToken);
+
       try {
         const sessions = await api.getSessions(100, 0);
         const activeSessions = sessions.items.filter(
-          (s) => s.status === 'active'
+          (s: SessionResponse) => s.status === 'active'
         ).length;
         const totalCost = sessions.items.reduce(
-          (sum, s) => sum + parseFloat(s.total_cost_usd || '0'),
+          (sum: number, s: SessionResponse) => sum + parseFloat(s.total_cost_usd || '0'),
           0
         );
         const totalInputTokens = sessions.items.reduce(
-          (sum, s) => sum + (s.total_input_tokens || 0),
+          (sum: number, s: SessionResponse) => sum + (s.total_input_tokens || 0),
           0
         );
         const totalOutputTokens = sessions.items.reduce(
-          (sum, s) => sum + (s.total_output_tokens || 0),
+          (sum: number, s: SessionResponse) => sum + (s.total_output_tokens || 0),
           0
         );
 
         // Calculate today's cost
         const today = new Date().toDateString();
         const todaySessions = sessions.items.filter(
-          (s) => new Date(s.created_at).toDateString() === today
+          (s: SessionResponse) => new Date(s.created_at).toDateString() === today
         );
         const dailyCost = todaySessions.reduce(
-          (sum, s) => sum + parseFloat(s.total_cost_usd || '0'),
+          (sum: number, s: SessionResponse) => sum + parseFloat(s.total_cost_usd || '0'),
           0
         );
 

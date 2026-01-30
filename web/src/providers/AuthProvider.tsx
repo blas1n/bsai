@@ -36,8 +36,9 @@ function SessionErrorHandler({ children }: { children: ReactNode }) {
 export function AuthProvider({ children }: AuthProviderProps) {
   return (
     <SessionProvider
-      // Refetch session every 4 minutes to keep token fresh
-      refetchInterval={4 * 60}
+      // Refetch session every 2 minutes to keep token fresh
+      // (Keycloak access token default is 5 minutes, so 2 minutes gives buffer)
+      refetchInterval={2 * 60}
       // Refetch when window regains focus
       refetchOnWindowFocus={true}
     >

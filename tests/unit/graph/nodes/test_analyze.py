@@ -64,10 +64,16 @@ class TestAnalyzeTaskNode:
         """Test error handling in analyze_task."""
         with (
             patch("agent.graph.nodes.analyze.ConductorAgent") as MockConductor,
+            patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # Mock memory context retrieval
             mock_get_memory_context.return_value = ([], "")
+
+            # Mock milestone repo for cleanup check (no existing milestones)
+            mock_repo = AsyncMock()
+            mock_repo.get_by_task_id.return_value = []
+            MockMilestoneRepo.return_value = mock_repo
 
             mock_conductor = AsyncMock()
             mock_conductor.analyze_and_plan.side_effect = ValueError("LLM error")

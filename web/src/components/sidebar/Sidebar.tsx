@@ -29,16 +29,10 @@ export function Sidebar({ currentSessionId, onNewChat, stats }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { sessions, isLoading, fetchSessions } = useSessionStore();
 
-  // Set API token when auth changes
-  useEffect(() => {
-    if (accessToken) {
-      api.setToken(accessToken);
-    }
-  }, [accessToken]);
-
-  // Fetch sessions when authenticated
+  // Set API token and fetch sessions when authenticated
   useEffect(() => {
     if (isAuthenticated && accessToken) {
+      api.setToken(accessToken);
       fetchSessions();
     }
   }, [isAuthenticated, accessToken, fetchSessions]);

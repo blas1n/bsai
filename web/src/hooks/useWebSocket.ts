@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
 import { WSMessage, WSMessageType } from '@/types/websocket';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18000';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18001';
 
 interface UseWebSocketOptions {
   sessionId?: string;

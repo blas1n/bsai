@@ -11,6 +11,7 @@ from agent.db.models.enums import MilestoneStatus, TaskComplexity
 from agent.graph.edges import MAX_REPLAN_ITERATIONS
 from agent.graph.nodes.replan import (
     _apply_modifications,
+    _persist_milestone_changes,
     replan_node,
 )
 from agent.graph.state import AgentState, MilestoneData
@@ -157,6 +158,7 @@ class TestReplanNode:
 
         assert result["error"] == "Conductor error"
         assert result["error_node"] == "replan"
+        assert result["workflow_complete"] is True
 
 
 class TestApplyModifications:
@@ -415,3 +417,75 @@ class TestApplyModifications:
 
         assert len(result) == 1
         assert result[0]["description"] == "Only"
+
+
+class TestPersistMilestoneChanges:
+    """Tests for _persist_milestone_changes function."""
+
+    @pytest.mark.asyncio
+    async def test_milestone_create_failure_propagates(self) -> None:
+        """Test that milestone creation failure is re-raised.
+
+        This ensures the workflow doesn't continue with invalid milestone IDs
+        when database persistence fails.
+        """
+        milestones = [
+            MilestoneData(
+                id=uuid4(),
+                description="New milestone from replan",
+                complexity=TaskComplexity.SIMPLE,
+                acceptance_criteria="Test criteria",
+                status=MilestoneStatus.PENDING,
+                selected_model=None,
+                generated_prompt=None,
+                worker_output=None,
+                qa_feedback=None,
+                retry_count=0,
+                is_modified=True,
+                added_at_replan=1,
+            )
+        ]
+        modifications: list[MilestoneModification] = []
+
+        mock_repo = AsyncMock()
+        mock_repo.get_by_id.return_value = None  # Milestone doesn't exist yet
+        mock_repo.create.side_effect = Exception("Foreign key violation")
+
+        with pytest.raises(Exception, match="Foreign key violation"):
+            await _persist_milestone_changes(
+                repo=mock_repo,
+                task_id=uuid4(),
+                milestones=milestones,
+                modifications=modifications,
+            )
+
+    @pytest.mark.asyncio
+    async def test_milestone_delete_failure_propagates(self) -> None:
+        """Test that milestone deletion failure is re-raised.
+
+        This ensures the workflow doesn't continue with inconsistent state
+        when database deletion fails.
+        """
+        milestones: list[MilestoneData] = []
+        modifications = [
+            MilestoneModification(
+                action="REMOVE",
+                target_index=0,
+                reason="Remove milestone",
+            )
+        ]
+
+        mock_milestone = MagicMock()
+        mock_milestone.id = uuid4()
+
+        mock_repo = AsyncMock()
+        mock_repo.get_by_task_id.return_value = [mock_milestone]
+        mock_repo.delete.side_effect = Exception("Database error")
+
+        with pytest.raises(Exception, match="Database error"):
+            await _persist_milestone_changes(
+                repo=mock_repo,
+                task_id=uuid4(),
+                milestones=milestones,
+                modifications=modifications,
+            )

@@ -112,8 +112,9 @@ export const authOptions: AuthOptions = {
         };
       }
 
-      // Return previous token if not expired
-      if (token.expiresAt && Date.now() < token.expiresAt * 1000) {
+      // Return previous token if not expired (with 60s buffer for proactive refresh)
+      const bufferSeconds = 60;
+      if (token.expiresAt && Date.now() < (token.expiresAt - bufferSeconds) * 1000) {
         return token;
       }
 

@@ -568,21 +568,18 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     }
   }, [breakpoint, sessionId, onError]);
 
-  // Set API token when auth changes
+  // Set API token and load initial session when auth changes
+  const hasLoadedRef = useRef<string | null>(null);
   useEffect(() => {
     if (accessToken) {
       api.setToken(accessToken);
+      // Load initial session if provided (after token is set)
+      if (initialSessionId && hasLoadedRef.current !== initialSessionId) {
+        hasLoadedRef.current = initialSessionId;
+        loadSession(initialSessionId);
+      }
     }
-  }, [accessToken]);
-
-  // Load initial session if provided (after token is set)
-  const hasLoadedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (initialSessionId && accessToken && hasLoadedRef.current !== initialSessionId) {
-      hasLoadedRef.current = initialSessionId;
-      loadSession(initialSessionId);
-    }
-  }, [initialSessionId, accessToken, loadSession]);
+  }, [accessToken, initialSessionId, loadSession]);
 
   // Get the current trace URL from the streaming message (empty string means no trace)
   const traceUrl = messages.find(

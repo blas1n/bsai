@@ -91,6 +91,11 @@ def _create_node_with_session(
     """
 
     async def wrapper(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
+        # Check if session is in an invalid state from a previous error
+        # and rollback to allow new operations
+        if not session.is_active:
+            await session.rollback()
+
         result: dict[str, Any] = await node_func(state, config, session)
         return result
 

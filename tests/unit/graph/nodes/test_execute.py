@@ -58,6 +58,7 @@ class TestExecuteWorkerNode:
             mock_milestone_repo = MagicMock()
             mock_milestone_repo.update_llm_usage = AsyncMock()
             mock_milestone_repo.update = AsyncMock()
+            mock_milestone_repo.get_by_id = AsyncMock(return_value=MagicMock())  # Milestone exists
             MockMilestoneRepo.return_value = mock_milestone_repo
 
             mock_artifact_repo = MagicMock()
@@ -132,6 +133,7 @@ class TestExecuteWorkerNode:
             mock_milestone_repo = MagicMock()
             mock_milestone_repo.update_llm_usage = AsyncMock()
             mock_milestone_repo.update = AsyncMock()
+            mock_milestone_repo.get_by_id = AsyncMock(return_value=MagicMock())  # Milestone exists
             MockMilestoneRepo.return_value = mock_milestone_repo
 
             mock_artifact_repo = MagicMock()

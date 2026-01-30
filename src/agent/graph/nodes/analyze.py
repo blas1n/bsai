@@ -88,6 +88,20 @@ async def analyze_task_node(
         existing_milestones: list[MilestoneData] = list(state.get("milestones", []))
         sequence_offset = state.get("milestone_sequence_offset", 0)
 
+        # Clean up any existing milestones for this task (from failed retries)
+        # This prevents unique constraint violations on (task_id, sequence_number)
+        milestone_repo = MilestoneRepository(session)
+        existing_task_milestones = await milestone_repo.get_by_task_id(state["task_id"])
+        if existing_task_milestones:
+            logger.info(
+                "cleaning_up_existing_milestones",
+                task_id=str(state["task_id"]),
+                count=len(existing_task_milestones),
+            )
+            for m in existing_task_milestones:
+                await milestone_repo.delete(m.id)
+            await session.commit()
+
         conductor = ConductorAgent(
             llm_client=container.llm_client,
             router=container.router,
@@ -103,9 +117,26 @@ async def analyze_task_node(
             sequence_offset=sequence_offset,
         )
 
+        # Commit milestones to ensure they're persisted before subsequent nodes
+        # reference them (e.g., generate_prompt_node creates generated_prompts
+        # with milestone_id foreign key)
+        await session.commit()
+
+        logger.debug(
+            "milestones_committed",
+            task_id=str(state["task_id"]),
+            milestone_count=len(milestones_raw),
+        )
+
         # Fetch persisted milestones from database to get actual IDs
-        milestone_repo = MilestoneRepository(session)
         db_milestones = await milestone_repo.get_by_task_id(state["task_id"])
+
+        logger.debug(
+            "milestones_fetched_from_db",
+            task_id=str(state["task_id"]),
+            fetched_count=len(db_milestones),
+            milestone_ids=[str(m.id) for m in db_milestones],
+        )
 
         # Convert to MilestoneData format with actual DB IDs
         new_milestones: list[MilestoneData] = []

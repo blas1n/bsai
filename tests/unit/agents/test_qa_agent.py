@@ -111,7 +111,7 @@ class TestQAAgent:
 
         # Mock LLM response with PASS
         mock_response = LLMResponse(
-            content='{"decision": "PASS", "feedback": "Implementation meets criteria", "issues": [], "suggestions": []}',
+            content='{"decision": "PASS", "feedback": "Implementation meets criteria", "issues": [], "suggestions": [], "plan_viability": "VIABLE", "plan_viability_reason": null, "confidence": 0.9}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -156,7 +156,7 @@ class TestQAAgent:
 
         # Mock LLM response with RETRY
         mock_response = LLMResponse(
-            content='{"decision": "RETRY", "feedback": "Missing password validation", "issues": ["Password validation missing"], "suggestions": ["Add password validation"]}',
+            content='{"decision": "RETRY", "feedback": "Missing password validation", "issues": ["Password validation missing"], "suggestions": ["Add password validation"], "plan_viability": "VIABLE", "plan_viability_reason": null, "confidence": 0.85}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -202,7 +202,7 @@ class TestQAAgent:
 
         # Mock LLM response with RETRY including issues and suggestions
         mock_response = LLMResponse(
-            content='{"decision": "RETRY", "feedback": "Still has issues", "issues": ["Missing validation", "No error handling"], "suggestions": ["Add input validation"]}',
+            content='{"decision": "RETRY", "feedback": "Still has issues", "issues": ["Missing validation", "No error handling"], "suggestions": ["Add input validation"], "plan_viability": "VIABLE", "plan_viability_reason": null, "confidence": 0.8}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -243,7 +243,7 @@ class TestQAAgent:
 
         # Mock LLM response with RETRY (now structured output enforces PASS/RETRY)
         mock_response = LLMResponse(
-            content='{"decision": "RETRY", "feedback": "Wrong implementation approach", "issues": [], "suggestions": []}',
+            content='{"decision": "RETRY", "feedback": "Wrong implementation approach", "issues": [], "suggestions": [], "plan_viability": "VIABLE", "plan_viability_reason": null, "confidence": 0.75}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -316,7 +316,7 @@ class TestQAAgent:
 
         # Mock LLM response
         mock_response = LLMResponse(
-            content='{"decision": "PASS", "feedback": "Good", "issues": [], "suggestions": []}',
+            content='{"decision": "PASS", "feedback": "Good", "issues": [], "suggestions": [], "plan_viability": "VIABLE", "plan_viability_reason": null, "confidence": 0.9}',
             usage=UsageInfo(input_tokens=400, output_tokens=100, total_tokens=500),
             model="test-model",
         )
@@ -353,7 +353,7 @@ class TestQAAgent:
 
         # Mock LLM response
         mock_response = LLMResponse(
-            content='{"decision": "PASS", "feedback": "Good", "issues": [], "suggestions": []}',
+            content='{"decision": "PASS", "feedback": "Good", "issues": [], "suggestions": [], "plan_viability": "VIABLE", "plan_viability_reason": null, "confidence": 0.9}',
             usage=UsageInfo(input_tokens=500, output_tokens=150, total_tokens=650),
             model="test-model",
         )

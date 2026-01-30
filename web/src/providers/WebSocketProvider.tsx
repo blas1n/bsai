@@ -1,18 +1,18 @@
 'use client';
 
+import { WSMessage, WSMessageType } from '@/types/websocket';
+import { useSession } from 'next-auth/react';
 import {
   createContext,
+  ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useRef,
   useState,
-  useCallback,
-  ReactNode,
 } from 'react';
-import { useSession } from 'next-auth/react';
-import { WSMessage, WSMessageType } from '@/types/websocket';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18000';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18001';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
@@ -59,7 +59,7 @@ export function WebSocketProvider({
   maxReconnectAttempts = 5,
   reconnectInterval = 3000,
 }: WebSocketProviderProps) {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const accessToken = session?.accessToken;
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -133,6 +133,19 @@ export function WebSocketProvider({
         return;
       }
 
+      // Token rejected (expired or invalid) - trigger session refresh
+      if (event.code === 4003 || event.code === 403) {
+        console.log('[WebSocketProvider] Token rejected, triggering session refresh...');
+        updateSession().then(() => {
+          // Session updated, reconnect will happen via accessToken change detection
+          console.log('[WebSocketProvider] Session refresh triggered');
+        }).catch((err) => {
+          console.error('[WebSocketProvider] Session refresh failed:', err);
+        });
+        setConnectionState('disconnected');
+        return;
+      }
+
       // Attempt reconnection with exponential backoff
       if (reconnectAttemptsRef.current < maxReconnectAttempts) {
         setConnectionState('reconnecting');
@@ -175,7 +188,7 @@ export function WebSocketProvider({
     };
 
     wsRef.current = ws;
-  }, [accessToken, clearReconnectTimer, maxReconnectAttempts, reconnectInterval]);
+  }, [accessToken, clearReconnectTimer, maxReconnectAttempts, reconnectInterval, updateSession]);
 
   // Send a message
   const send = useCallback((message: WSMessage) => {

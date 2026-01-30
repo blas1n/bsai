@@ -19,3 +19,12 @@ validation_prompt: |
   EVALUATION RULES:
   - PASS: Output meets criteria
   - RETRY: Output has fixable issues (bugs, missing content, unclear explanations)
+
+  REQUIRED RESPONSE FIELDS:
+  - decision: "PASS" or "RETRY"
+  - feedback: Detailed explanation of decision
+  - issues: List of specific issues found (empty array [] if PASS)
+  - suggestions: List of improvement suggestions (empty array [] if PASS)
+  - plan_viability: "VIABLE", "NEEDS_REVISION", or "BLOCKED" - assess if current plan can achieve goal
+  - plan_viability_reason: Reason if plan needs revision or is blocked (null if VIABLE)
+  - confidence: Float between 0.0-1.0 indicating confidence in assessment

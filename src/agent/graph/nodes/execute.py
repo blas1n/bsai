@@ -150,6 +150,7 @@ async def _save_milestone_artifacts(
     milestone_id: UUID,
     extraction_result: ExtractionResult,
     previous_snapshot: list[Artifact],
+    milestone_repo: MilestoneRepository | None = None,
 ) -> list[dict[str, Any]]:
     """Save artifacts from milestone extraction result.
 
@@ -162,10 +163,24 @@ async def _save_milestone_artifacts(
         milestone_id: Current milestone UUID
         extraction_result: Extracted artifacts and deletion paths
         previous_snapshot: Previous task's artifacts for baseline copy
+        milestone_repo: Optional milestone repository for validation
 
     Returns:
         List of artifact dicts for broadcast
     """
+    # Validate milestone exists before using its ID for FK constraint
+    validated_milestone_id: UUID | None = milestone_id
+    if milestone_repo is not None:
+        milestone = await milestone_repo.get_by_id(milestone_id)
+        if milestone is None:
+            logger.warning(
+                "milestone_not_found_for_artifacts",
+                milestone_id=str(milestone_id),
+                task_id=str(task_id),
+                message="Milestone not found in DB, saving artifacts without milestone_id",
+            )
+            validated_milestone_id = None
+
     # On first milestone, copy previous task's artifacts as baseline
     current_task_artifact_count = len(await artifact_repo.get_by_task_id(task_id))
     if current_task_artifact_count == 0 and previous_snapshot:
@@ -202,13 +217,13 @@ async def _save_milestone_artifacts(
         await artifact_repo.save_task_snapshot(
             session_id=session_id,
             task_id=task_id,
-            milestone_id=milestone_id,
+            milestone_id=validated_milestone_id,
             artifacts=artifacts_data,
         )
 
         logger.info(
             "artifacts_saved_for_milestone",
-            milestone_id=str(milestone_id),
+            milestone_id=str(validated_milestone_id),
             task_id=str(task_id),
             count=len(extraction_result.artifacts),
         )
@@ -483,6 +498,7 @@ async def execute_worker_node(
             milestone_id=milestone["id"],
             extraction_result=extraction_result,
             previous_snapshot=previous_snapshot,
+            milestone_repo=milestone_repo,
         )
 
         # Build and emit worker completed event

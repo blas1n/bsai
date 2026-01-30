@@ -49,7 +49,7 @@ class Artifact(Base):
     session_id: Mapped[UUID] = mapped_column(ForeignKey("sessions.id"), index=True)
     task_id: Mapped[UUID] = mapped_column(ForeignKey("tasks.id"), index=True, nullable=False)
     milestone_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("milestones.id"), index=True, nullable=True
+        ForeignKey("milestones.id", ondelete="SET NULL"), index=True, nullable=True
     )
     artifact_type: Mapped[str] = mapped_column(VARCHAR(20), default="code")
     filename: Mapped[str] = mapped_column(VARCHAR(255))

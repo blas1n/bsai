@@ -122,6 +122,11 @@ async def replan_node(
             modifications=replan_output.modifications,
         )
 
+        # Commit milestone changes to ensure they're persisted before subsequent nodes
+        # reference them (e.g., generate_prompt_node creates generated_prompts
+        # with milestone_id foreign key)
+        await session.commit()
+
         # Build modification record for history
         modification_record = {
             "iteration": replan_count + 1,
@@ -184,6 +189,7 @@ async def replan_node(
         return {
             "error": str(e),
             "error_node": "replan",
+            "workflow_complete": True,
         }
 
 
@@ -301,12 +307,18 @@ async def _persist_milestone_changes(
 ) -> None:
     """Persist milestone changes to database.
 
+    This function handles ADD, REMOVE, and MODIFY operations on milestones.
+    To avoid unique constraint violations on (task_id, sequence_number),
+    we first process removals, then create new milestones, and finally
+    update sequence numbers for all milestones.
+
     Args:
         repo: Milestone repository
         task_id: Task ID
-        milestones: Updated milestone list
+        milestones: Updated milestone list (with correct order)
         modifications: List of modifications made
     """
+    # Step 1: Process REMOVE modifications first
     for mod in modifications:
         if mod.action == "REMOVE" and mod.target_index is not None:
             # Find the milestone ID to delete
@@ -317,13 +329,17 @@ async def _persist_milestone_changes(
                     milestone_to_delete = original_milestones[mod.target_index]
                     await repo.delete(milestone_to_delete.id)
             except Exception as e:
-                logger.warning(
+                logger.error(
                     "milestone_delete_failed",
                     error=str(e),
                     target_index=mod.target_index,
                 )
+                # Re-raise to prevent workflow from continuing with inconsistent state
+                raise
 
-    # Create new milestones that were added
+    # Step 2: Create new milestones with temporary high sequence numbers
+    # to avoid unique constraint violations during the update phase
+    temp_sequence_base = 10000  # Use high numbers that won't conflict
     for i, milestone in enumerate(milestones):
         if milestone.get("added_at_replan") and milestone.get("is_modified"):
             # Check if this milestone already exists in DB
@@ -331,16 +347,51 @@ async def _persist_milestone_changes(
                 existing = await repo.get_by_id(milestone["id"])
                 if not existing:
                     await repo.create(
+                        id=milestone["id"],
                         task_id=task_id,
-                        sequence_number=i + 1,
+                        sequence_number=temp_sequence_base + i,  # Temporary high number
                         title=f"Milestone {i + 1}",
                         description=milestone["description"],
                         complexity=milestone["complexity"].value,
                         acceptance_criteria=milestone["acceptance_criteria"],
                     )
+                    logger.debug(
+                        "milestone_created",
+                        milestone_id=str(milestone["id"]),
+                        temp_sequence=temp_sequence_base + i,
+                    )
             except Exception as e:
-                logger.warning(
+                logger.error(
                     "milestone_create_failed",
                     error=str(e),
                     milestone_id=str(milestone["id"]),
                 )
+                # Re-raise to prevent workflow from continuing with invalid milestone IDs
+                raise
+
+    # Step 3: Update all milestone sequence numbers to match new order
+    # First, set all to temporary high values to avoid conflicts
+    for i, milestone in enumerate(milestones):
+        try:
+            await repo.update(milestone["id"], sequence_number=temp_sequence_base + i)
+        except Exception as e:
+            logger.warning(
+                "milestone_sequence_temp_update_failed",
+                error=str(e),
+                milestone_id=str(milestone["id"]),
+            )
+            # Continue - milestone might have been just created with temp sequence
+
+    # Then set to final values
+    for i, milestone in enumerate(milestones):
+        try:
+            await repo.update(milestone["id"], sequence_number=i + 1)
+        except Exception as e:
+            logger.error(
+                "milestone_sequence_update_failed",
+                error=str(e),
+                milestone_id=str(milestone["id"]),
+                target_sequence=i + 1,
+            )
+            # Re-raise to prevent workflow from continuing with inconsistent state
+            raise

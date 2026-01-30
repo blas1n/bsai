@@ -2,7 +2,18 @@ import { TaskComplexity, MilestoneStatus } from './session';
 import { AgentDetails, ArtifactData } from './websocket';
 
 // Agent types in the workflow
-export type AgentType = 'conductor' | 'meta_prompter' | 'worker' | 'qa' | 'summarizer' | 'responder';
+export type AgentType =
+  | 'conductor'
+  | 'meta_prompter'
+  | 'worker'
+  | 'qa'
+  | 'summarizer'
+  | 'responder'
+  | 'advance'
+  | 'recovery'
+  | 'replan'
+  | 'artifact_extractor'
+  | 'task_summary';
 
 // Re-export for convenience
 export type { ArtifactData } from './websocket';
@@ -136,6 +147,11 @@ export const AGENT_DISPLAY: Record<AgentType, { label: string; color: string; ic
   qa: { label: 'QA Agent', color: 'orange', icon: '✓' },
   summarizer: { label: 'Summarizer', color: 'gray', icon: '📝' },
   responder: { label: 'Responder', color: 'teal', icon: '💬' },
+  advance: { label: 'Advance', color: 'indigo', icon: '➡️' },
+  recovery: { label: 'Recovery', color: 'red', icon: '🔄' },
+  replan: { label: 'Replan', color: 'amber', icon: '📋' },
+  artifact_extractor: { label: 'Artifact Extractor', color: 'cyan', icon: '📦' },
+  task_summary: { label: 'Task Summary', color: 'lime', icon: '📊' },
 };
 
 // Complexity display info
