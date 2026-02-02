@@ -15,6 +15,8 @@ import {
   BreakpointHitPayload,
   LLMChunkPayload,
   LLMCompletePayload,
+  McpApprovalRequestPayload,
+  McpToolCallRequestPayload,
   MilestoneProgressPayload,
   TaskCompletedPayload,
   TaskFailedPayload,
@@ -40,6 +42,8 @@ import {
   handleTaskFailed,
   handleContextCompressed,
   handleBreakpointHit,
+  handleMcpToolCallRequest,
+  handleMcpApprovalRequest,
 } from './chatEventHandlers';
 
 interface UseChatOptions {
@@ -171,6 +175,10 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         [WSMessageType.CONTEXT_COMPRESSED]: (_p, c) => handleContextCompressed(c),
         [WSMessageType.BREAKPOINT_HIT]: (p, c) =>
           handleBreakpointHit(p as BreakpointHitPayload, c),
+        [WSMessageType.MCP_TOOL_CALL_REQUEST]: (p, c) =>
+          handleMcpToolCallRequest(p as McpToolCallRequestPayload, c),
+        [WSMessageType.MCP_APPROVAL_REQUEST]: (p, c) =>
+          handleMcpApprovalRequest(p as McpApprovalRequestPayload, c),
       };
 
       const handler = handlers[message.type];
@@ -519,16 +527,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     }
   }, [breakpoint, sessionId, onError]);
 
-  // Reject at breakpoint - with feedback: re-run worker, without feedback: cancel task
-  const rejectAtBreakpoint = useCallback(async (feedback?: string) => {
+  // Reject at breakpoint - with reason: re-run worker, without reason: cancel task
+  const rejectAtBreakpoint = useCallback(async (reason?: string) => {
     if (!breakpoint || !sessionId) return;
 
     setIsBreakpointLoading(true);
     try {
-      await api.rejectBreakpoint(sessionId, breakpoint.task_id, feedback);
+      await api.rejectBreakpoint(sessionId, breakpoint.task_id, reason);
       setBreakpoint(null);
 
-      if (feedback) {
+      if (reason) {
         // With feedback: worker will re-run, keep streaming state
         // Update activity to show re-running
         setCurrentActivity({

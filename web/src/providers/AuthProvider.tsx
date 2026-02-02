@@ -2,7 +2,6 @@
 
 import { SessionProvider, useSession, signOut } from 'next-auth/react';
 import { ReactNode, useEffect } from 'react';
-import { WebSocketProvider } from './WebSocketProvider';
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -26,12 +25,14 @@ function SessionErrorHandler({ children }: { children: ReactNode }) {
 }
 
 /**
- * AuthProvider - Authentication and WebSocket connection management
+ * AuthProvider - Authentication context provider
  *
  * Wraps the application with:
  * 1. SessionProvider - next-auth session management with token refresh
  * 2. SessionErrorHandler - automatic sign out on token refresh failure
- * 3. WebSocketProvider - centralized WebSocket connection management
+ *
+ * Note: WebSocket connections are managed per-session via useWebSocket hook
+ * in useChat, not via a global provider.
  */
 export function AuthProvider({ children }: AuthProviderProps) {
   return (
@@ -42,9 +43,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Refetch when window regains focus
       refetchOnWindowFocus={true}
     >
-      <SessionErrorHandler>
-        <WebSocketProvider>{children}</WebSocketProvider>
-      </SessionErrorHandler>
+      <SessionErrorHandler>{children}</SessionErrorHandler>
     </SessionProvider>
   );
 }

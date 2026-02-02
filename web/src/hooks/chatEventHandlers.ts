@@ -21,6 +21,8 @@ import {
   ConductorDetails,
   LLMChunkPayload,
   LLMCompletePayload,
+  McpApprovalRequestPayload,
+  McpToolCallRequestPayload,
   MilestoneProgressPayload,
   TaskCompletedPayload,
   TaskFailedPayload,
@@ -679,4 +681,53 @@ export function handleBreakpointHit(
     message: `Paused at ${payload.node_name} - awaiting review`,
     startedAt: payload.timestamp,
   });
+}
+
+/**
+ * Handle MCP_TOOL_CALL_REQUEST event
+ *
+ * Backend is requesting the frontend to execute a tool (e.g., stdio server).
+ * The frontend should execute the tool and send back a MCP_TOOL_CALL_RESPONSE.
+ */
+export function handleMcpToolCallRequest(
+  payload: McpToolCallRequestPayload,
+  ctx: ChatEventContext
+): void {
+  const { setCurrentActivity } = ctx;
+
+  // Log the request for debugging - actual tool execution would be implemented
+  // by the MCP stdio handler in the frontend
+  console.log('[MCP] Tool call request received:', payload);
+
+  setCurrentActivity({
+    agent: 'worker',
+    status: 'running',
+    message: `Executing MCP tool: ${payload.tool_name}`,
+    startedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Handle MCP_APPROVAL_REQUEST event
+ *
+ * Backend is requesting user approval before executing a sensitive MCP tool.
+ * This would typically show a modal or notification to the user.
+ */
+export function handleMcpApprovalRequest(
+  payload: McpApprovalRequestPayload,
+  ctx: ChatEventContext
+): void {
+  const { setCurrentActivity } = ctx;
+
+  console.log('[MCP] Approval request received:', payload);
+
+  setCurrentActivity({
+    agent: 'worker',
+    status: 'running',
+    message: `Awaiting approval for: ${payload.tool_name} on ${payload.server_name}`,
+    startedAt: new Date().toISOString(),
+  });
+
+  // TODO: Integrate with a modal or UI component to show the approval request
+  // The UI should call sendMcpApprovalResponse when the user approves/rejects
 }

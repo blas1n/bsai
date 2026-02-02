@@ -3,7 +3,7 @@
 import { WSMessage, WSMessageType } from '@/types/websocket';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18001';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18000';
 
 interface UseWebSocketOptions {
   sessionId?: string;

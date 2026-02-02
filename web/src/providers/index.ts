@@ -1,2 +1,4 @@
 export { AuthProvider } from './AuthProvider';
-export { WebSocketProvider, useWebSocketContext } from './WebSocketProvider';
+
+// Note: WebSocketProvider has been removed as it was unused.
+// WebSocket connections are managed per-session via useWebSocket hook in useChat.

@@ -9,10 +9,9 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import ResponderAgent
-from agent.events import AgentActivityEvent, AgentStatus, EventType
 
 from ..state import AgentState
-from . import get_container, get_event_bus
+from . import NodeContext
 
 logger = structlog.get_logger()
 
@@ -35,8 +34,7 @@ async def generate_response_node(
     Returns:
         Partial state with final_response
     """
-    container = get_container(config)
-    event_bus = get_event_bus(config)
+    ctx = NodeContext.from_config(config, session)
 
     # Check if we need to generate a failure report
     failure_context = state.get("failure_context")
@@ -47,9 +45,9 @@ async def generate_response_node(
         )
         try:
             responder = ResponderAgent(
-                llm_client=container.llm_client,
-                router=container.router,
-                prompt_manager=container.prompt_manager,
+                llm_client=ctx.container.llm_client,
+                router=ctx.container.router,
+                prompt_manager=ctx.container.prompt_manager,
                 session=session,
             )
 
@@ -60,18 +58,14 @@ async def generate_response_node(
             )
 
             # Emit failure report event
-            await event_bus.emit(
-                AgentActivityEvent(
-                    type=EventType.AGENT_COMPLETED,
-                    session_id=state["session_id"],
-                    task_id=state["task_id"],
-                    milestone_id=state["task_id"],
-                    sequence_number=0,
-                    agent="responder",
-                    status=AgentStatus.COMPLETED,
-                    message="Failure report generated",
-                    details={"is_failure_report": True},
-                )
+            await ctx.emit_completed(
+                agent="responder",
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                milestone_id=state["task_id"],
+                sequence_number=0,
+                message="Failure report generated",
+                details={"is_failure_report": True},
             )
 
             return {
@@ -97,23 +91,19 @@ async def generate_response_node(
 
     try:
         # Emit responder started event
-        await event_bus.emit(
-            AgentActivityEvent(
-                type=EventType.AGENT_STARTED,
-                session_id=state["session_id"],
-                task_id=state["task_id"],
-                milestone_id=state["task_id"],  # Use task_id as placeholder
-                sequence_number=0,
-                agent="responder",
-                status=AgentStatus.STARTED,
-                message="Generating final response",
-            )
+        await ctx.emit_started(
+            agent="responder",
+            session_id=state["session_id"],
+            task_id=state["task_id"],
+            milestone_id=state["task_id"],  # Use task_id as placeholder
+            sequence_number=0,
+            message="Generating final response",
         )
 
         responder = ResponderAgent(
-            llm_client=container.llm_client,
-            router=container.router,
-            prompt_manager=container.prompt_manager,
+            llm_client=ctx.container.llm_client,
+            router=ctx.container.router,
+            prompt_manager=ctx.container.prompt_manager,
             session=session,
         )
 
@@ -164,18 +154,14 @@ async def generate_response_node(
         }
 
         # Emit responder completed event
-        await event_bus.emit(
-            AgentActivityEvent(
-                type=EventType.AGENT_COMPLETED,
-                session_id=state["session_id"],
-                task_id=state["task_id"],
-                milestone_id=state["task_id"],
-                sequence_number=0,
-                agent="responder",
-                status=AgentStatus.COMPLETED,
-                message="Response ready",
-                details=response_details,
-            )
+        await ctx.emit_completed(
+            agent="responder",
+            session_id=state["session_id"],
+            task_id=state["task_id"],
+            milestone_id=state["task_id"],
+            sequence_number=0,
+            message="Response ready",
+            details=response_details,
         )
 
         return {

@@ -42,6 +42,12 @@ export enum WSMessageType {
   BREAKPOINT_RESUME = 'breakpoint_resume',
   BREAKPOINT_REJECTED = 'breakpoint_rejected',
 
+  // MCP Tool Execution (for frontend-side tools like stdio)
+  MCP_TOOL_CALL_REQUEST = 'mcp_tool_call_request',
+  MCP_TOOL_CALL_RESPONSE = 'mcp_tool_call_response',
+  MCP_APPROVAL_REQUEST = 'mcp_approval_request',
+  MCP_APPROVAL_RESPONSE = 'mcp_approval_response',
+
   // Errors
   ERROR = 'error',
 }
@@ -237,4 +243,35 @@ export interface BreakpointConfigPayload {
   task_id?: string; // Optional: specific task, or current active task if omitted
   breakpoint_enabled: boolean;
   breakpoint_nodes?: string[];
+}
+
+// MCP Tool Execution payloads (for frontend-side tools like stdio)
+export interface McpToolCallRequestPayload {
+  request_id: string;
+  tool_name: string;
+  server_id: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface McpToolCallResponsePayload {
+  request_id: string;
+  result?: unknown;
+  error?: string;
+}
+
+export interface McpApprovalRequestPayload {
+  request_id: string;
+  server_id: string;
+  server_name: string;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  /** Why the tool requires approval */
+  reason?: string;
+}
+
+export interface McpApprovalResponsePayload {
+  request_id: string;
+  approved: boolean;
+  /** User feedback if rejected */
+  feedback?: string;
 }

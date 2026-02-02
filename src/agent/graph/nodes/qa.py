@@ -9,18 +9,11 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import QAAgent, QADecision
-from agent.db.models.enums import MilestoneStatus, TaskStatus
-from agent.events import AgentActivityEvent, AgentStatus, EventType
+from agent.db.models.enums import MilestoneStatus
 from agent.memory import store_qa_learning
 
 from ..state import AgentState, update_milestone
-from . import (
-    check_task_cancelled,
-    get_container,
-    get_event_bus,
-    get_memory_manager,
-    get_ws_manager_optional,
-)
+from . import NodeContext
 
 logger = structlog.get_logger()
 
@@ -43,19 +36,12 @@ async def verify_qa_node(
     Returns:
         Partial state with QA decision and feedback
     """
-    container = get_container(config)
-    event_bus = get_event_bus(config)
-    ws_manager = get_ws_manager_optional(config)  # Optional: for MCP stdio tools only
+    ctx = NodeContext.from_config(config, session)
 
     # Check if task was cancelled before starting
-    if await check_task_cancelled(session, state["task_id"]):
+    if await ctx.check_cancelled(state["task_id"]):
         logger.info("verify_qa_cancelled", task_id=str(state["task_id"]))
-        return {
-            "error": "Task cancelled by user",
-            "error_node": "verify_qa",
-            "task_status": TaskStatus.FAILED,
-            "workflow_complete": True,
-        }
+        return ctx.cancelled_response("verify_qa")
 
     try:
         milestones = state.get("milestones")
@@ -68,25 +54,21 @@ async def verify_qa_node(
         retry_count = state.get("retry_count", 0)
 
         # Emit QA started event
-        await event_bus.emit(
-            AgentActivityEvent(
-                type=EventType.AGENT_STARTED,
-                session_id=state["session_id"],
-                task_id=state["task_id"],
-                milestone_id=milestone["id"],
-                sequence_number=idx + 1,
-                agent="qa",
-                status=AgentStatus.STARTED,
-                message="Validating output quality",
-            )
+        await ctx.emit_started(
+            agent="qa",
+            session_id=state["session_id"],
+            task_id=state["task_id"],
+            milestone_id=milestone["id"],
+            sequence_number=idx + 1,
+            message="Validating output quality",
         )
 
         qa = QAAgent(
-            llm_client=container.llm_client,
-            router=container.router,
-            prompt_manager=container.prompt_manager,
+            llm_client=ctx.container.llm_client,
+            router=ctx.container.router,
+            prompt_manager=ctx.container.prompt_manager,
             session=session,
-            ws_manager=ws_manager,
+            ws_manager=ctx.ws_manager,
         )
 
         decision, feedback, qa_output = await qa.validate_output(
@@ -143,9 +125,8 @@ async def verify_qa_node(
         if decision == QADecision.PASS and retry_count > 0:
             previous_feedback = state.get("current_qa_feedback", "")
             if previous_feedback:
-                memory_manager = get_memory_manager(config, session)
                 await store_qa_learning(
-                    manager=memory_manager,
+                    manager=ctx.memory_manager,
                     user_id=state["user_id"],
                     session_id=state["session_id"],
                     task_id=state["task_id"],
@@ -173,22 +154,18 @@ async def verify_qa_node(
             "acceptance_criteria": milestone["acceptance_criteria"],
             "attempt_number": retry_count + 1,
             "max_retries": 3,
+            "milestone_status": new_status.value,
         }
 
         # Emit QA completed event with decision
-        qa_details["milestone_status"] = new_status.value
-        await event_bus.emit(
-            AgentActivityEvent(
-                type=EventType.AGENT_COMPLETED,
-                session_id=state["session_id"],
-                task_id=state["task_id"],
-                milestone_id=milestone["id"],
-                sequence_number=idx + 1,
-                agent="qa",
-                status=AgentStatus.COMPLETED,
-                message=qa_message,
-                details=qa_details,
-            )
+        await ctx.emit_completed(
+            agent="qa",
+            session_id=state["session_id"],
+            task_id=state["task_id"],
+            milestone_id=milestone["id"],
+            sequence_number=idx + 1,
+            message=qa_message,
+            details=qa_details,
         )
 
         result: dict[str, Any] = {
@@ -207,7 +184,4 @@ async def verify_qa_node(
 
     except Exception as e:
         logger.error("verify_qa_failed", error=str(e))
-        return {
-            "error": str(e),
-            "error_node": "verify_qa",
-        }
+        return ctx.error_response("verify_qa", e)

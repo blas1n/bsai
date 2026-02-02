@@ -46,12 +46,22 @@ def mock_event_bus():
 
 
 @pytest.fixture
-def mock_config(mock_event_bus):
-    """Create mock runnable config."""
+def mock_container():
+    """Create mock container with dependencies."""
+    container = MagicMock()
+    container.llm_client = MagicMock()
+    container.router = MagicMock()
+    container.prompt_manager = MagicMock()
+    return container
 
+
+@pytest.fixture
+def mock_config(mock_event_bus, mock_container):
+    """Create mock runnable config with all required dependencies."""
     return RunnableConfig(
         configurable={
             "event_bus": mock_event_bus,
+            "container": mock_container,
         }
     )
 
@@ -60,16 +70,6 @@ def mock_config(mock_event_bus):
 def mock_session():
     """Create mock database session."""
     return AsyncMock()
-
-
-@pytest.fixture
-def mock_container():
-    """Create mock container with dependencies."""
-    container = MagicMock()
-    container.llm_client = MagicMock()
-    container.router = MagicMock()
-    container.prompt_manager = MagicMock()
-    return container
 
 
 class TestGenerateResponseNode:
@@ -83,10 +83,7 @@ class TestGenerateResponseNode:
         """Test response generation when error exists in state."""
         state = _create_state(error="Task was cancelled")
 
-        with patch("agent.graph.nodes.response.get_container") as mock_get_container:
-            mock_get_container.return_value = MagicMock()
-
-            result = await generate_response_node(state, mock_config, mock_session)
+        result = await generate_response_node(state, mock_config, mock_session)
 
         assert "final_response" in result
         assert "Task could not be completed" in result["final_response"]
@@ -106,9 +103,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Your code is ready!")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                result = await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            result = await generate_response_node(state, mock_config, mock_session)
 
         assert result["final_response"] == "Your code is ready!"
 
@@ -126,9 +122,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Generated response")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            await generate_response_node(state, mock_config, mock_session)
 
         # Verify has_artifacts was True
         call_kwargs = mock_responder.generate_response.call_args.kwargs
@@ -146,9 +141,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Response without milestones")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                result = await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            result = await generate_response_node(state, mock_config, mock_session)
 
         assert result["final_response"] == "Response without milestones"
 
@@ -164,9 +158,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(side_effect=Exception("LLM error"))
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                result = await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            result = await generate_response_node(state, mock_config, mock_session)
 
         assert result["final_response"] == "Fallback output"
         assert result["error"] == "LLM error"
@@ -184,9 +177,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(side_effect=Exception("LLM error"))
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                result = await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            result = await generate_response_node(state, mock_config, mock_session)
 
         assert result["final_response"] == "Task completed."
 
@@ -202,9 +194,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Response generated")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                result = await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            result = await generate_response_node(state, mock_config, mock_session)
 
         assert result["final_response"] == "Response generated"
 
@@ -221,9 +212,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Response")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            await generate_response_node(state, mock_config, mock_session)
 
         # Verify event bus emit was called twice (started + completed)
         assert mock_event_bus.emit.call_count == 2
@@ -258,9 +248,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Complete response")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                result = await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            result = await generate_response_node(state, mock_config, mock_session)
 
         assert result["final_response"] == "Complete response"
 
@@ -288,9 +277,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Response")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            await generate_response_node(state, mock_config, mock_session)
 
         call_kwargs = mock_responder.generate_response.call_args.kwargs
         assert call_kwargs.get("has_artifacts") is True
@@ -311,9 +299,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Response")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            await generate_response_node(state, mock_config, mock_session)
 
         call_kwargs = mock_responder.generate_response.call_args.kwargs
         assert call_kwargs.get("has_artifacts") is False
@@ -336,9 +323,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Fallback response")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            await generate_response_node(state, mock_config, mock_session)
 
         # Should use last milestone's worker_output
         call_kwargs = mock_responder.generate_response.call_args.kwargs
@@ -369,9 +355,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_failure_report = AsyncMock(return_value="Failure report generated")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                result = await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            result = await generate_response_node(state, mock_config, mock_session)
 
         assert result["final_response"] == "Failure report generated"
         mock_responder.generate_failure_report.assert_called_once()
@@ -393,9 +378,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_failure_report = AsyncMock(return_value="Failure report")
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            await generate_response_node(state, mock_config, mock_session)
 
         # Verify event was emitted
         assert mock_event_bus.emit.call_count == 1
@@ -419,9 +403,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_failure_report = AsyncMock(side_effect=Exception("LLM failure"))
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                result = await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            result = await generate_response_node(state, mock_config, mock_session)
 
         assert "Task could not be completed" in result["final_response"]
         assert "Original error" in result["final_response"]
@@ -442,9 +425,8 @@ class TestGenerateResponseNode:
         mock_responder = MagicMock()
         mock_responder.generate_failure_report = AsyncMock(side_effect=Exception("LLM failure"))
 
-        with patch("agent.graph.nodes.response.get_container", return_value=mock_container):
-            with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-                result = await generate_response_node(state, mock_config, mock_session)
+        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
+            result = await generate_response_node(state, mock_config, mock_session)
 
         # When error is None, it falls back to 'Unknown error'
         assert "Task could not be completed" in result["final_response"]

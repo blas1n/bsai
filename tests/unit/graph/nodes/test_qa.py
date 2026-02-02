@@ -67,7 +67,7 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.check_task_cancelled",
+                "agent.graph.nodes.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -120,7 +120,7 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.check_task_cancelled",
+                "agent.graph.nodes.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -173,7 +173,7 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.check_task_cancelled",
+                "agent.graph.nodes.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -225,7 +225,7 @@ class TestVerifyQaNode:
         )
 
         with patch(
-            "agent.graph.nodes.qa.check_task_cancelled",
+            "agent.graph.nodes.check_task_cancelled",
             new_callable=AsyncMock,
             return_value=True,
         ):
@@ -252,7 +252,7 @@ class TestVerifyQaNode:
         }
 
         with patch(
-            "agent.graph.nodes.qa.check_task_cancelled",
+            "agent.graph.nodes.check_task_cancelled",
             new_callable=AsyncMock,
             return_value=False,
         ):
@@ -294,7 +294,7 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.check_task_cancelled",
+                "agent.graph.nodes.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -344,7 +344,7 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.check_task_cancelled",
+                "agent.graph.nodes.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -408,7 +408,7 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.check_task_cancelled",
+                "agent.graph.nodes.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -472,7 +472,7 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.check_task_cancelled",
+                "agent.graph.nodes.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -535,7 +535,7 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.check_task_cancelled",
+                "agent.graph.nodes.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -590,16 +590,12 @@ class TestVerifyQaNode:
         with (
             patch("agent.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.check_task_cancelled",
+                "agent.graph.nodes.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
-            patch("agent.graph.nodes.qa.get_memory_manager") as mock_get_memory,
             patch("agent.graph.nodes.qa.store_qa_learning", new_callable=AsyncMock) as mock_store,
         ):
-            mock_memory_manager = MagicMock()
-            mock_get_memory.return_value = mock_memory_manager
-
             mock_qa = AsyncMock()
             mock_qa.validate_output.return_value = (
                 QADecision.PASS,
