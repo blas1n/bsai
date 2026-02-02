@@ -264,3 +264,243 @@ class TestResponderAgent:
         from agent.db.models.enums import TaskComplexity
 
         assert call_args[0][0] == TaskComplexity.SIMPLE
+
+    async def test_generate_failure_report_success(
+        self,
+        responder: ResponderAgent,
+        mock_llm_client,
+        mock_router,
+        mock_prompt_manager,
+    ):
+        """Test generating failure report successfully."""
+        task_id = uuid4()
+
+        mock_response = MagicMock()
+        mock_response.content = "Failure report content"
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 200
+        mock_llm_client.chat_completion = AsyncMock(return_value=mock_response)
+
+        failure_context = {
+            "attempted_milestones": [
+                {"description": "Step 1", "status": "passed"},
+                {"description": "Step 2", "status": "failed", "qa_feedback": "Error occurred"},
+            ],
+            "final_error": "Task failed after max retries",
+        }
+
+        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+            mock_settings.return_value.worker_temperature = 0.7
+
+            result = await responder.generate_failure_report(
+                task_id=task_id,
+                original_request="Build a web app",
+                failure_context=failure_context,
+            )
+
+        assert result == "Failure report content"
+        mock_llm_client.chat_completion.assert_called_once()
+
+    async def test_generate_failure_report_korean_request(
+        self,
+        responder: ResponderAgent,
+        mock_llm_client,
+        mock_prompt_manager,
+    ):
+        """Test generating failure report for Korean request."""
+        task_id = uuid4()
+
+        mock_response = MagicMock()
+        mock_response.content = "실패 보고서"
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 150
+        mock_llm_client.chat_completion = AsyncMock(return_value=mock_response)
+
+        failure_context = {
+            "attempted_milestones": [],
+            "final_error": "Unknown error",
+        }
+
+        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+            mock_settings.return_value.worker_temperature = 0.7
+
+            result = await responder.generate_failure_report(
+                task_id=task_id,
+                original_request="한국어 요청입니다",
+                failure_context=failure_context,
+            )
+
+        assert result == "실패 보고서"
+        render_calls = mock_prompt_manager.render.call_args_list
+        assert any("Korean" in str(call) for call in render_calls)
+
+    async def test_generate_failure_report_with_partial_results(
+        self,
+        responder: ResponderAgent,
+        mock_llm_client,
+    ):
+        """Test failure report includes partial results from passed milestones."""
+        task_id = uuid4()
+
+        mock_response = MagicMock()
+        mock_response.content = "Report with partial results"
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 180
+        mock_llm_client.chat_completion = AsyncMock(return_value=mock_response)
+
+        failure_context = {
+            "attempted_milestones": [
+                {
+                    "description": "Create file",
+                    "status": "passed",
+                    "worker_output": "File created successfully with content xyz",
+                },
+                {
+                    "description": "Deploy app",
+                    "status": "failed",
+                    "qa_feedback": "Deployment failed",
+                },
+            ],
+            "final_error": "Deployment error",
+        }
+
+        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+            mock_settings.return_value.worker_temperature = 0.7
+
+            result = await responder.generate_failure_report(
+                task_id=task_id,
+                original_request="Deploy my app",
+                failure_context=failure_context,
+            )
+
+        assert result == "Report with partial results"
+
+    async def test_generate_failure_report_empty_milestones(
+        self,
+        responder: ResponderAgent,
+        mock_llm_client,
+    ):
+        """Test failure report with no milestones attempted."""
+        task_id = uuid4()
+
+        mock_response = MagicMock()
+        mock_response.content = "No progress report"
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 100
+        mock_llm_client.chat_completion = AsyncMock(return_value=mock_response)
+
+        failure_context = {
+            "attempted_milestones": [],
+            "final_error": None,
+        }
+
+        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+            mock_settings.return_value.worker_temperature = 0.7
+
+            result = await responder.generate_failure_report(
+                task_id=task_id,
+                original_request="Do something",
+                failure_context=failure_context,
+            )
+
+        assert result == "No progress report"
+
+    async def test_generate_failure_report_uses_moderate_model(
+        self,
+        responder: ResponderAgent,
+        mock_router,
+        mock_llm_client,
+    ):
+        """Test that MODERATE complexity model is used for failure reports."""
+        task_id = uuid4()
+
+        mock_response = MagicMock()
+        mock_response.content = "Report"
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 100
+        mock_llm_client.chat_completion = AsyncMock(return_value=mock_response)
+
+        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+            mock_settings.return_value.worker_temperature = 0.7
+
+            await responder.generate_failure_report(
+                task_id=task_id,
+                original_request="Test",
+                failure_context={"attempted_milestones": [], "final_error": "Error"},
+            )
+
+        from agent.db.models.enums import TaskComplexity
+
+        call_args = mock_router.select_model.call_args
+        assert call_args[0][0] == TaskComplexity.MODERATE
+
+    async def test_generate_failure_report_with_status_enum(
+        self,
+        responder: ResponderAgent,
+        mock_llm_client,
+    ):
+        """Test failure report handles status as enum object."""
+        task_id = uuid4()
+
+        class MockStatus:
+            value = "passed"
+
+        mock_response = MagicMock()
+        mock_response.content = "Report"
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 100
+        mock_llm_client.chat_completion = AsyncMock(return_value=mock_response)
+
+        failure_context = {
+            "attempted_milestones": [
+                {"description": "Step 1", "status": MockStatus()},
+            ],
+            "final_error": "Error",
+        }
+
+        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+            mock_settings.return_value.worker_temperature = 0.7
+
+            result = await responder.generate_failure_report(
+                task_id=task_id,
+                original_request="Test",
+                failure_context=failure_context,
+            )
+
+        assert result == "Report"
+
+    async def test_generate_failure_report_with_pass_status(
+        self,
+        responder: ResponderAgent,
+        mock_llm_client,
+    ):
+        """Test failure report handles 'pass' status string."""
+        task_id = uuid4()
+
+        mock_response = MagicMock()
+        mock_response.content = "Report with pass status"
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 100
+        mock_llm_client.chat_completion = AsyncMock(return_value=mock_response)
+
+        failure_context = {
+            "attempted_milestones": [
+                {
+                    "description": "Step 1",
+                    "status": "pass",
+                    "worker_output": "Step completed",
+                },
+            ],
+            "final_error": "Error",
+        }
+
+        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+            mock_settings.return_value.worker_temperature = 0.7
+
+            result = await responder.generate_failure_report(
+                task_id=task_id,
+                original_request="Test",
+                failure_context=failure_context,
+            )
+
+        assert result == "Report with pass status"

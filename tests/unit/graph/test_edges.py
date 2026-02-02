@@ -262,3 +262,141 @@ class TestHasError:
 
         result = has_error(state)
         assert result is False
+
+
+class TestShouldUseMetaPrompterEdgeCases:
+    """Additional tests for should_use_meta_prompter edge cases."""
+
+    def test_skip_when_milestones_none(self) -> None:
+        """Test skip when milestones is None."""
+        state: AgentState = {
+            "milestones": None,
+            "current_milestone_index": 0,
+        }
+
+        result = should_use_meta_prompter(state)
+        assert result == PromptRoute.SKIP
+
+    def test_skip_when_index_none(self) -> None:
+        """Test skip when current_milestone_index is None."""
+        state: AgentState = {
+            "milestones": [create_milestone(TaskComplexity.COMPLEX)],
+            "current_milestone_index": None,
+        }
+
+        result = should_use_meta_prompter(state)
+        assert result == PromptRoute.SKIP
+
+    def test_skip_when_index_out_of_range(self) -> None:
+        """Test skip when index exceeds milestone count."""
+        state: AgentState = {
+            "milestones": [create_milestone(TaskComplexity.COMPLEX)],
+            "current_milestone_index": 5,
+        }
+
+        result = should_use_meta_prompter(state)
+        assert result == PromptRoute.SKIP
+
+
+class TestRouteQaDecisionAdvanced:
+    """Additional tests for route_qa_decision edge function."""
+
+    def test_error_state_returns_fail(self) -> None:
+        """Test that error in state returns FAIL."""
+        state: AgentState = {
+            "error": "Something went wrong",
+            "current_qa_decision": "pass",
+        }
+
+        result = route_qa_decision(state)
+        assert result == QARoute.FAIL
+
+    def test_workflow_complete_returns_fail(self) -> None:
+        """Test that workflow_complete returns FAIL."""
+        state: AgentState = {
+            "workflow_complete": True,
+            "current_qa_decision": "pass",
+        }
+
+        result = route_qa_decision(state)
+        assert result == QARoute.FAIL
+
+    def test_needs_replan_within_limit(self) -> None:
+        """Test needs_replan triggers REPLAN within limit."""
+
+        state: AgentState = {
+            "needs_replan": True,
+            "replan_count": 0,
+        }
+
+        result = route_qa_decision(state)
+        assert result == QARoute.REPLAN
+
+    def test_needs_replan_at_limit(self) -> None:
+        """Test needs_replan at limit triggers FAIL."""
+        from agent.graph.edges import MAX_REPLAN_ITERATIONS
+
+        state: AgentState = {
+            "needs_replan": True,
+            "replan_count": MAX_REPLAN_ITERATIONS,
+        }
+
+        result = route_qa_decision(state)
+        assert result == QARoute.FAIL
+
+    def test_explicit_replan_decision(self) -> None:
+        """Test explicit 'replan' decision from QA."""
+        state: AgentState = {
+            "current_qa_decision": "replan",
+            "replan_count": 0,
+        }
+
+        result = route_qa_decision(state)
+        assert result == QARoute.REPLAN
+
+    def test_replan_decision_at_limit(self) -> None:
+        """Test replan decision at limit returns FAIL."""
+        from agent.graph.edges import MAX_REPLAN_ITERATIONS
+
+        state: AgentState = {
+            "current_qa_decision": "replan",
+            "replan_count": MAX_REPLAN_ITERATIONS,
+        }
+
+        result = route_qa_decision(state)
+        assert result == QARoute.FAIL
+
+
+class TestRouteRecoveryDecision:
+    """Tests for route_recovery edge function."""
+
+    def test_strategy_retry_route(self) -> None:
+        """Test routing for strategy retry."""
+        from agent.graph.edges import RecoveryRoute, route_recovery
+
+        state: AgentState = {
+            "workflow_complete": False,
+        }
+
+        result = route_recovery(state)
+        assert result == RecoveryRoute.STRATEGY_RETRY
+
+    def test_failure_report_route(self) -> None:
+        """Test routing for failure report."""
+        from agent.graph.edges import RecoveryRoute, route_recovery
+
+        state: AgentState = {
+            "workflow_complete": True,
+        }
+
+        result = route_recovery(state)
+        assert result == RecoveryRoute.FAILURE_REPORT
+
+    def test_default_strategy_retry(self) -> None:
+        """Test default routing is strategy retry."""
+        from agent.graph.edges import RecoveryRoute, route_recovery
+
+        state: AgentState = {}
+
+        result = route_recovery(state)
+        assert result == RecoveryRoute.STRATEGY_RETRY

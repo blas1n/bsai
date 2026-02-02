@@ -519,3 +519,120 @@ class TestConductorReplan:
                 qa_feedback="",
                 replan_reason="Issue",
             )
+
+
+class TestConductorAdditional:
+    """Additional tests for ConductorAgent functionality."""
+
+    @pytest.mark.asyncio
+    async def test_analyze_with_memory_context(
+        self,
+        conductor: ConductorAgent,
+        mock_llm_client: MagicMock,
+        mock_prompt_manager: MagicMock,
+    ) -> None:
+        """Test analysis includes memory context when provided."""
+        task_id = uuid4()
+        original_request = "Build something"
+        memory_context = "Previously worked on similar project"
+
+        mock_response = LLMResponse(
+            content='{"milestones": [{"description": "D1", "complexity": "SIMPLE", "acceptance_criteria": "AC1"}]}',
+            usage=UsageInfo(input_tokens=100, output_tokens=50, total_tokens=150),
+            model="test-model",
+        )
+        mock_llm_client.chat_completion.return_value = mock_response
+
+        await conductor.analyze_and_plan(task_id, original_request, memory_context=memory_context)
+
+        # Verify prompt includes memory context
+        render_call = mock_prompt_manager.render.call_args
+        request_arg = render_call.kwargs.get("original_request")
+        assert memory_context in request_arg
+        assert original_request in request_arg
+
+    @pytest.mark.asyncio
+    async def test_select_model_for_milestone(
+        self,
+        conductor: ConductorAgent,
+        mock_router: MagicMock,
+    ) -> None:
+        """Test model selection for milestone."""
+        result = await conductor.select_model_for_milestone(TaskComplexity.COMPLEX)
+
+        mock_router.select_model.assert_called_with(
+            complexity=TaskComplexity.COMPLEX,
+            preferred_model=None,
+        )
+        assert result == "gpt-4o-mini"
+
+    @pytest.mark.asyncio
+    async def test_select_model_for_milestone_with_preferred(
+        self,
+        conductor: ConductorAgent,
+        mock_router: MagicMock,
+    ) -> None:
+        """Test model selection with preferred model override."""
+        await conductor.select_model_for_milestone(
+            TaskComplexity.SIMPLE, preferred_model="custom-model"
+        )
+
+        mock_router.select_model.assert_called_with(
+            complexity=TaskComplexity.SIMPLE,
+            preferred_model="custom-model",
+        )
+
+    @pytest.mark.asyncio
+    async def test_rethink_strategy_success(
+        self,
+        conductor: ConductorAgent,
+        mock_llm_client: MagicMock,
+    ) -> None:
+        """Test successful strategy rethink."""
+        task_id = uuid4()
+        original_request = "Build a web scraper"
+        failed_approach = "Direct scraping approach"
+        failure_reasons = ["Rate limited", "Blocked by firewall"]
+
+        mock_response = LLMResponse(
+            content='{"milestones": [{"description": "Use API instead", "complexity": "MODERATE", "acceptance_criteria": "API working"}]}',
+            usage=UsageInfo(input_tokens=200, output_tokens=100, total_tokens=300),
+            model="test-model",
+        )
+        mock_llm_client.chat_completion.return_value = mock_response
+
+        result = await conductor.rethink_strategy(
+            task_id=task_id,
+            original_request=original_request,
+            failed_approach=failed_approach,
+            failure_reasons=failure_reasons,
+        )
+
+        assert len(result) == 1
+        assert result[0]["description"] == "Use API instead"
+        assert result[0]["complexity"] == TaskComplexity.MODERATE
+        mock_llm_client.chat_completion.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_rethink_strategy_invalid_json(
+        self,
+        conductor: ConductorAgent,
+        mock_llm_client: MagicMock,
+    ) -> None:
+        """Test error handling for invalid JSON in rethink."""
+        task_id = uuid4()
+
+        mock_response = LLMResponse(
+            content="Invalid JSON response",
+            usage=UsageInfo(input_tokens=100, output_tokens=50, total_tokens=150),
+            model="test-model",
+        )
+        mock_llm_client.chat_completion.return_value = mock_response
+
+        with pytest.raises(ValueError, match="Failed to parse Conductor rethink response"):
+            await conductor.rethink_strategy(
+                task_id=task_id,
+                original_request="Original",
+                failed_approach="Failed approach",
+                failure_reasons=["Reason 1"],
+            )
