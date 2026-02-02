@@ -138,7 +138,17 @@ def create_app() -> FastAPI:
         )
 
     # CORS middleware - added AFTER Keycloak so it runs FIRST (handles OPTIONS preflight)
-    if settings.cors_origins:
+    if settings.debug:
+        # Development: allow all localhost origins regardless of port
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=r"https?://localhost(:\d+)?",
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    elif settings.cors_origins:
+        # Production: explicit origins only
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors_origins,

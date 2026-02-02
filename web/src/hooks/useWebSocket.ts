@@ -3,7 +3,8 @@
 import { WSMessage, WSMessageType } from '@/types/websocket';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18000';
+// WebSocket URL - injected from docker-compose environment
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL;
 
 interface UseWebSocketOptions {
   sessionId?: string;
@@ -85,6 +86,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
   const connect = useCallback(() => {
     const currentToken = tokenRef.current;
     const currentSessionId = sessionIdRef.current;
+
+    // Don't connect without WebSocket URL configured
+    if (!WS_URL) {
+      console.error('[useWebSocket] NEXT_PUBLIC_WS_URL not configured');
+      return;
+    }
 
     // Don't connect without a token (authentication required)
     if (!currentToken) {
