@@ -120,3 +120,6 @@ next-env.d.ts
 web/.next/
 web/node_modules/
 web/out/
+
+# Internal documentation (not for public)
+docs/internal/
