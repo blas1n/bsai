@@ -408,3 +408,46 @@ class ExtendedQAOutput(BaseModel):
     typecheck_result: TypecheckResult | None = None
     test_result: TestResult | None = None
     build_result: BuildResult | None = None
+
+
+# =============================================================================
+# Architect Replanning Schemas
+# =============================================================================
+
+
+class PlanTaskModification(BaseModel):
+    """Schema for a single task modification during Architect replanning."""
+
+    model_config = {"extra": "forbid"}
+
+    action: Literal["add", "update", "remove"] = Field(..., description="Type of modification")
+    task_id: str = Field(..., description="Task ID to modify (existing) or new task ID (for add)")
+    task: PlanTask | None = Field(
+        default=None,
+        description="Full task object for add/update, null for remove",
+    )
+    reason: str = Field(..., description="Reason for this modification")
+
+
+class ArchitectReplanOutput(BaseModel):
+    """Structured output for Architect replanning based on execution observations."""
+
+    model_config = {"extra": "forbid"}
+
+    analysis: str = Field(
+        ..., description="Detailed analysis of what happened and why replanning is needed"
+    )
+    action: Literal["continue", "modify", "abort"] = Field(
+        ..., description="Action to take: continue (no changes), modify (update plan), abort (stop)"
+    )
+    modifications: list[PlanTaskModification] | None = Field(
+        default=None,
+        description="List of task modifications to apply (empty for continue/abort)",
+    )
+    reasoning: str = Field(..., description="Overall reasoning for the decision")
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in the revised plan (0.0-1.0)",
+    )
