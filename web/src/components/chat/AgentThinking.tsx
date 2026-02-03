@@ -11,7 +11,7 @@ interface AgentThinkingProps {
   isStreaming: boolean;
 }
 
-const AGENT_ICONS: Record<AgentType, React.ReactNode> = {
+const AGENT_ICONS: Partial<Record<AgentType, React.ReactNode>> = {
   conductor: <Brain className="h-4 w-4" />,
   meta_prompter: <Sparkles className="h-4 w-4" />,
   worker: <Cog className="h-4 w-4" />,
@@ -20,7 +20,7 @@ const AGENT_ICONS: Record<AgentType, React.ReactNode> = {
   responder: <MessageCircle className="h-4 w-4" />,
 };
 
-const AGENT_COLORS: Record<AgentType, string> = {
+const AGENT_COLORS: Partial<Record<AgentType, string>> = {
   conductor: 'text-blue-500',
   meta_prompter: 'text-purple-500',
   worker: 'text-green-500',
