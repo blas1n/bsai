@@ -3,6 +3,9 @@
 Type-safe Pydantic models for LLM interactions.
 """
 
+from __future__ import annotations
+
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -204,3 +207,204 @@ class ConductorReplanOutput(BaseModel):
         description="Confidence in the revised plan (0.0-1.0)",
     )
     reasoning: str = Field(..., description="Reasoning for the plan changes")
+
+
+# =============================================================================
+# Project Plan Schemas
+# =============================================================================
+
+
+class StructureType(str, Enum):
+    """Project plan structure type."""
+
+    FLAT = "flat"
+    GROUPED = "grouped"
+    HIERARCHICAL = "hierarchical"
+
+
+class PlanStatus(str, Enum):
+    """Project plan status."""
+
+    DRAFT = "draft"
+    APPROVED = "approved"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+
+
+class PauseLevel(str, Enum):
+    """Breakpoint pause level."""
+
+    NONE = "none"
+    TASK = "task"
+    FEATURE = "feature"
+    EPIC = "epic"
+
+
+class QAValidationType(str, Enum):
+    """QA validation type."""
+
+    STATIC = "static"
+    LINT = "lint"
+    TYPECHECK = "typecheck"
+    TEST = "test"
+    BUILD = "build"
+
+
+# =============================================================================
+# Hierarchy Models
+# =============================================================================
+
+
+class PlanTask(BaseModel):
+    """Execution unit task."""
+
+    model_config = {"extra": "forbid"}
+
+    id: str = Field(..., description="Task ID (e.g., T1.1.1)")
+    description: str
+    complexity: Literal["TRIVIAL", "SIMPLE", "MODERATE", "COMPLEX", "CONTEXT_HEAVY"]
+    acceptance_criteria: str
+    dependencies: list[str] = Field(default_factory=list)
+    parent_feature_id: str | None = None
+    parent_epic_id: str | None = None
+
+
+class Feature(BaseModel):
+    """Feature (mid-level grouping)."""
+
+    model_config = {"extra": "forbid"}
+
+    id: str = Field(..., description="Feature ID (e.g., F1.1)")
+    title: str
+    description: str
+    tasks: list[PlanTask] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+
+
+class Epic(BaseModel):
+    """Epic (top-level grouping)."""
+
+    model_config = {"extra": "forbid"}
+
+    id: str = Field(..., description="Epic ID (e.g., E1)")
+    title: str
+    description: str
+    features: list[Feature] = Field(default_factory=list)
+
+
+class ProjectPlanOutput(BaseModel):
+    """Structured output for Architect agent."""
+
+    model_config = {"extra": "forbid"}
+
+    title: str
+    overview: str
+    tech_stack: list[str] = Field(default_factory=list)
+    structure_type: Literal["flat", "grouped", "hierarchical"]
+    epics: list[Epic] | None = None
+    features: list[Feature] | None = None
+    tasks: list[PlanTask] = Field(default_factory=list)
+
+
+# =============================================================================
+# Configuration Models
+# =============================================================================
+
+
+class BreakpointConfig(BaseModel):
+    """Breakpoint configuration."""
+
+    model_config = {"extra": "forbid"}
+
+    pause_on_plan_review: bool = True
+    pause_level: Literal["none", "task", "feature", "epic"] = "none"
+    pause_on_task_ids: list[str] = Field(default_factory=list)
+    pause_on_failure: bool = True
+
+
+class QAConfig(BaseModel):
+    """QA configuration."""
+
+    model_config = {"extra": "forbid"}
+
+    validations: list[Literal["static", "lint", "typecheck", "test", "build"]] = Field(
+        default=["static"]
+    )
+    test_command: str | None = None
+    lint_command: str | None = None
+    typecheck_command: str | None = None
+    build_command: str | None = None
+    allow_lint_warnings: bool = True
+    require_all_tests_pass: bool = True
+
+
+# =============================================================================
+# QA Result Models
+# =============================================================================
+
+
+class TestResult(BaseModel):
+    """Test execution result."""
+
+    model_config = {"extra": "forbid"}
+
+    success: bool
+    passed: int
+    failed: int
+    skipped: int
+    total: int
+    coverage: float | None = None
+    failed_tests: list[str] = Field(default_factory=list)
+    output: str
+
+
+class LintResult(BaseModel):
+    """Lint result."""
+
+    model_config = {"extra": "forbid"}
+
+    success: bool
+    errors: int
+    warnings: int
+    issues: list[str] = Field(default_factory=list)
+    output: str
+
+
+class TypecheckResult(BaseModel):
+    """Type check result."""
+
+    model_config = {"extra": "forbid"}
+
+    success: bool
+    errors: int
+    issues: list[str] = Field(default_factory=list)
+    output: str
+
+
+class BuildResult(BaseModel):
+    """Build result."""
+
+    model_config = {"extra": "forbid"}
+
+    success: bool
+    output: str
+    error_message: str | None = None
+
+
+class ExtendedQAOutput(BaseModel):
+    """Extended QA output with dynamic validation."""
+
+    model_config = {"extra": "forbid"}
+
+    decision: Literal["PASS", "RETRY"]
+    feedback: str
+    issues: list[str]
+    suggestions: list[str]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+    # Dynamic validation results (optional)
+    lint_result: LintResult | None = None
+    typecheck_result: TypecheckResult | None = None
+    test_result: TestResult | None = None
+    build_result: BuildResult | None = None
