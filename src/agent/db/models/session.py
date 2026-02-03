@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from .episodic_memory import EpisodicMemory
     from .llm_usage_log import LLMUsageLog
     from .memory_snapshot import MemorySnapshot
+    from .project_plan import ProjectPlan
     from .task import Task
 
 
@@ -62,6 +63,9 @@ class Session(Base):
         back_populates="session", lazy="selectin", cascade="all, delete-orphan"
     )
     artifacts: Mapped[list[Artifact]] = relationship(
+        back_populates="session", lazy="selectin", cascade="all, delete-orphan"
+    )
+    project_plans: Mapped[list[ProjectPlan]] = relationship(
         back_populates="session", lazy="selectin", cascade="all, delete-orphan"
     )
 

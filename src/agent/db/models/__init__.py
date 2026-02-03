@@ -20,6 +20,7 @@ from .mcp_server_config import McpServerConfig
 from .mcp_tool_execution_log import McpToolExecutionLog
 from .memory_snapshot import MemorySnapshot
 from .milestone import Milestone
+from .project_plan import ProjectPlan
 from .prompt_usage_history import PromptUsageHistory
 from .session import Session
 from .system_prompt import SystemPrompt
@@ -35,6 +36,7 @@ __all__ = [
     "Session",
     "Task",
     "Milestone",
+    "ProjectPlan",
     "MemorySnapshot",
     "EpisodicMemory",
     "LLMUsageLog",

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from .artifact import Artifact
     from .episodic_memory import EpisodicMemory
     from .milestone import Milestone
+    from .project_plan import ProjectPlan
     from .session import Session
 
 
@@ -59,6 +60,7 @@ class Task(Base):
     episodic_memories: Mapped[list[EpisodicMemory]] = relationship(
         back_populates="task", lazy="selectin"
     )
+    project_plan: Mapped[ProjectPlan | None] = relationship(back_populates="task", uselist=False)
 
     def __repr__(self) -> str:
         return f"<Task(id={self.id}, status={self.status})>"
