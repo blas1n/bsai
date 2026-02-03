@@ -54,3 +54,11 @@ class MemoryPrompts(str, Enum):
     ERROR_CONTENT = "error_content"
     CONTEXT_HEADER = "context_header"
     CONTEXT_MEMORY_ITEM = "context_memory_item"
+
+
+class ArchitectPrompts(str, Enum):
+    """Prompt keys for Architect agent."""
+
+    PLANNING_PROMPT = "planning_prompt"
+    REVISE_PROMPT = "revise_prompt"
+    REPLAN_PROMPT = "replan_prompt"

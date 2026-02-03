@@ -1,6 +1,7 @@
 """Prompt management for agent templates."""
 
 from .keys import (
+    ArchitectPrompts,
     ConductorPrompts,
     MetaPrompterPrompts,
     QAAgentPrompts,
@@ -12,6 +13,7 @@ from .manager import PromptManager
 
 __all__ = [
     "PromptManager",
+    "ArchitectPrompts",
     "ConductorPrompts",
     "MetaPrompterPrompts",
     "WorkerPrompts",
