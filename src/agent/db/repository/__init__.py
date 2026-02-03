@@ -7,6 +7,7 @@ from .generated_prompt_repo import GeneratedPromptRepository
 from .llm_usage_log_repo import LLMUsageLogRepository
 from .memory_snapshot_repo import MemorySnapshotRepository
 from .milestone_repo import MilestoneRepository
+from .project_plan_repo import ProjectPlanRepository
 from .session_repo import SessionRepository
 from .system_prompt_repo import SystemPromptRepository
 from .task_repo import TaskRepository
@@ -24,4 +25,5 @@ __all__ = [
     "CustomLLMModelRepository",
     "SystemPromptRepository",
     "GeneratedPromptRepository",
+    "ProjectPlanRepository",
 ]
