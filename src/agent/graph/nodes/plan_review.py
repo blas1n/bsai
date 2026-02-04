@@ -14,14 +14,13 @@ from langgraph.types import interrupt
 
 from agent.db.models.enums import TaskStatus
 from agent.events import BreakpointHitEvent, EventType
+from agent.graph.state import AgentState
 from agent.llm.schemas import PlanStatus
 
 from . import NodeContext, check_task_cancelled
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-
-    from agent.graph.state import AgentState
 
 logger = structlog.get_logger()
 

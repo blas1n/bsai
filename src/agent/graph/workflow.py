@@ -50,6 +50,7 @@ from .nodes.breakpoint import qa_breakpoint_node
 from .nodes.context import check_context_node, summarize_node
 from .nodes.execute import execute_worker_node
 from .nodes.llm import generate_prompt_node, select_llm_node
+from .nodes.plan_review import plan_review_breakpoint, plan_review_router
 from .nodes.qa import verify_qa_node
 from .nodes.recovery import recovery_node
 from .nodes.replan import replan_node
@@ -108,12 +109,18 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     """Build the agent orchestration workflow graph.
 
     Flow:
-        Entry -> analyze_task -> select_llm -> [generate_prompt?]
+        Entry -> architect (analyze_task) -> plan_review -> [router]
+             -> select_llm -> [generate_prompt?]
              -> execute_worker -> verify_qa -> [retry/fail/next/replan]
              -> [replan -> select_llm]  (ReAct dynamic replanning)
              -> check_context -> [summarize?]
              -> advance -> [next_milestone/task_summary/retry]
              -> task_summary -> generate_response -> END
+
+    Plan Review Router:
+        - execute_worker: Plan approved, continue to execution
+        - architect: Revision requested, regenerate plan
+        - END: Plan rejected or workflow should end
 
     The task_summary node generates a summary of all milestones for:
     - Responder to create a complete user response
@@ -132,8 +139,10 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     graph: StateGraph[AgentState] = StateGraph(AgentState)
 
     # Node function mapping
+    # Note: ANALYZE_TASK now acts as the "architect" node
     node_functions = {
-        Node.ANALYZE_TASK: analyze_task_node,
+        Node.ANALYZE_TASK: analyze_task_node,  # Architect: creates project plan
+        Node.PLAN_REVIEW: plan_review_breakpoint,  # Human-in-the-Loop plan review
         Node.SELECT_LLM: select_llm_node,
         Node.GENERATE_PROMPT: generate_prompt_node,
         Node.EXECUTE_WORKER: execute_worker_node,
@@ -152,11 +161,25 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     for node, func in node_functions.items():
         graph.add_node(node, _create_node_with_session(func, session))
 
-    # Set entry point
+    # Set entry point: architect (analyze_task) creates the project plan
     graph.set_entry_point(Node.ANALYZE_TASK)
 
-    # Add edges from analyze_task
-    graph.add_edge(Node.ANALYZE_TASK, Node.SELECT_LLM)
+    # architect -> plan_review (Human-in-the-Loop breakpoint)
+    graph.add_edge(Node.ANALYZE_TASK, Node.PLAN_REVIEW)
+
+    # plan_review -> conditional routing based on user action
+    # - execute_worker: Plan approved, continue to execution via select_llm
+    # - architect: Revision requested, regenerate plan
+    # - END: Plan rejected
+    graph.add_conditional_edges(
+        Node.PLAN_REVIEW,
+        plan_review_router,
+        {
+            "execute_worker": Node.SELECT_LLM,  # Approved: continue to LLM selection
+            "architect": Node.ANALYZE_TASK,  # Revision: go back to architect
+            END: END,  # Rejected: end workflow
+        },
+    )
 
     # Add conditional edge for MetaPrompter (skip for TRIVIAL/SIMPLE)
     graph.add_conditional_edges(

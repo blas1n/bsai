@@ -125,6 +125,11 @@ class AgentState(TypedDict):
     project_plan: NotRequired[ProjectPlan | None]  # Hierarchical project plan
     plan_status: NotRequired[PlanStatus | None]  # Current plan status
 
+    # Plan Review (Human-in-the-Loop for Architect)
+    waiting_for_plan_review: NotRequired[bool]  # Whether waiting for user review
+    revision_requested: NotRequired[bool]  # Whether user requested revision
+    revision_feedback: NotRequired[str | None]  # User's revision feedback
+
     # Failure recovery fields
     strategy_retry_attempted: NotRequired[bool]  # Whether strategy retry has been attempted
     failure_context: NotRequired[dict[str, Any]]  # Context for failure report generation

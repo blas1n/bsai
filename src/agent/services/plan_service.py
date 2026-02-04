@@ -15,11 +15,11 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.core.architect import ArchitectAgent
 from agent.db.repository.project_plan_repo import ProjectPlanRepository
 from agent.llm.schemas import PlanStatus
 
 if TYPE_CHECKING:
+    from agent.core.architect import ArchitectAgent
     from agent.db.models.project_plan import ProjectPlan
 
 logger = structlog.get_logger()

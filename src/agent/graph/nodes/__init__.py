@@ -25,16 +25,6 @@ from agent.container import ContainerState
 from agent.db.models.enums import TaskStatus
 from agent.db.repository.task_repo import TaskRepository
 from agent.events import AgentActivityEvent, AgentStatus, EventBus, EventType
-
-# Import plan review node functions (imported here to avoid circular imports)
-# These are re-exported for convenient access from the nodes package
-from agent.graph.nodes.plan_review import (
-    plan_review_breakpoint,
-    plan_review_router,
-    resume_after_approval,
-    resume_after_rejection,
-    resume_after_revision,
-)
 from agent.mcp.executor import McpToolExecutor
 from agent.memory import LongTermMemoryManager
 from agent.services import BreakpointService
@@ -407,6 +397,16 @@ async def check_task_cancelled(
 
     return False
 
+
+# Import plan review node functions after all definitions to avoid circular imports
+# These are re-exported for convenient access from the nodes package
+from agent.graph.nodes.plan_review import (  # noqa: E402
+    plan_review_breakpoint,
+    plan_review_router,
+    resume_after_approval,
+    resume_after_rejection,
+    resume_after_revision,
+)
 
 __all__ = [
     "Node",

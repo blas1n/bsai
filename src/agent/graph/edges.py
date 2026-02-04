@@ -49,6 +49,14 @@ class RecoveryRoute(StrEnum):
     FAILURE_REPORT = "failure_report"  # Generate failure report
 
 
+class PlanReviewRoute(StrEnum):
+    """Plan review routing options."""
+
+    EXECUTE_WORKER = "execute_worker"  # Plan approved, continue to execution
+    ARCHITECT = "architect"  # Revision requested, go back to architect
+    END = "__end__"  # Plan rejected or workflow should end
+
+
 # Maximum retry attempts for QA validation
 MAX_RETRIES = 3
 
