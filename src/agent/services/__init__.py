@@ -2,12 +2,14 @@
 
 from .breakpoint_service import BreakpointService
 from .plan_service import InvalidPlanStateError, PlanNotFoundError, PlanService
+from .qa_runner import QARunner
 
 __all__ = [
     "BreakpointService",
     "InvalidPlanStateError",
     "PlanNotFoundError",
     "PlanService",
+    "QARunner",
 ]
 
 # Task services are available via agent.services.task
