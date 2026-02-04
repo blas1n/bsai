@@ -231,23 +231,36 @@ class NodeContext:
 
 
 class Node(StrEnum):
-    """Workflow node names."""
+    """Workflow node names.
 
-    ANALYZE_TASK = "analyze_task"
+    Simplified 7-node workflow:
+    1. ANALYZE_TASK (architect) - Creates project plan
+    2. PLAN_REVIEW - Human-in-the-Loop plan review breakpoint
+    3. EXECUTE_WORKER - Executes tasks with MCP tools
+    4. VERIFY_QA - QA validation
+    5. EXECUTION_BREAKPOINT - Task-level pause control
+    6. ADVANCE - Progress to next task
+    7. GENERATE_RESPONSE - Creates user response
+    """
+
+    ANALYZE_TASK = "analyze_task"  # Architect: creates project plan
+    PLAN_REVIEW = "plan_review"  # Human-in-the-Loop plan review
+    EXECUTE_WORKER = "execute_worker"
+    VERIFY_QA = "verify_qa"
+    EXECUTION_BREAKPOINT = "execution_breakpoint"  # Task-level pausing
+    ADVANCE = "advance"
+    GENERATE_RESPONSE = "generate_response"
+
+    # Deprecated nodes (kept for backward compatibility with checkpoints)
+    # TODO: Remove after migration period
     SELECT_LLM = "select_llm"
     GENERATE_PROMPT = "generate_prompt"
-    EXECUTE_WORKER = "execute_worker"
     QA_BREAKPOINT = "qa_breakpoint"
-    VERIFY_QA = "verify_qa"
     CHECK_CONTEXT = "check_context"
     SUMMARIZE = "summarize"
-    ADVANCE = "advance"
     TASK_SUMMARY = "task_summary"
-    GENERATE_RESPONSE = "generate_response"
-    REPLAN = "replan"  # Dynamic plan modification
-    RECOVERY = "recovery"  # Graceful failure recovery
-    PLAN_REVIEW = "plan_review"  # Plan review breakpoint (Human-in-the-Loop)
-    EXECUTION_BREAKPOINT = "execution_breakpoint"  # Execution breakpoint for task-level pausing
+    REPLAN = "replan"
+    RECOVERY = "recovery"
 
 
 def get_breakpoint_service(config: RunnableConfig) -> BreakpointService:

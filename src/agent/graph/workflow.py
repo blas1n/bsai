@@ -1,7 +1,11 @@
 """LangGraph StateGraph composition and compilation.
 
-Builds and compiles the multi-agent workflow graph that orchestrates
-the 8 specialized agents for task execution.
+Builds and compiles the simplified 7-node workflow graph that orchestrates
+task execution with Architect planning and Human-in-the-Loop review.
+
+Simplified Workflow (7 nodes):
+    architect -> plan_review -> execute_worker -> verify_qa
+        -> execution_breakpoint -> advance -> generate_response -> END
 """
 
 from __future__ import annotations
@@ -33,21 +37,13 @@ from agent.tracing import get_langfuse_callback, get_langfuse_tracer
 from .checkpointer import get_checkpointer
 from .edges import (
     AdvanceRoute,
-    CompressionRoute,
-    PromptRoute,
     QARoute,
-    RecoveryRoute,
     route_advance,
     route_qa_decision,
-    route_recovery,
-    should_compress_context,
-    should_use_meta_prompter,
 )
 from .nodes import Node
 from .nodes.advance import advance_node
 from .nodes.analyze import analyze_task_node
-from .nodes.breakpoint import qa_breakpoint_node
-from .nodes.context import check_context_node, summarize_node
 from .nodes.execute import execute_worker_node
 from .nodes.execution_breakpoint import (
     execution_breakpoint as execution_breakpoint_node,
@@ -55,13 +51,9 @@ from .nodes.execution_breakpoint import (
 from .nodes.execution_breakpoint import (
     execution_breakpoint_router,
 )
-from .nodes.llm import generate_prompt_node, select_llm_node
 from .nodes.plan_review import plan_review_breakpoint, plan_review_router
 from .nodes.qa import verify_qa_node
-from .nodes.recovery import recovery_node
-from .nodes.replan import replan_node
 from .nodes.response import generate_response_node
-from .nodes.task_summary import task_summary_node
 from .state import AgentState, MilestoneData
 
 if TYPE_CHECKING:
@@ -114,15 +106,12 @@ def _create_node_with_session(
 def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     """Build the agent orchestration workflow graph.
 
-    Flow:
+    Simplified 7-node workflow:
         Entry -> architect (analyze_task) -> plan_review -> [router]
-             -> select_llm -> [generate_prompt?]
-             -> execute_worker -> verify_qa -> [retry/fail/next/replan]
-             -> [replan -> select_llm]  (ReAct dynamic replanning)
+             -> execute_worker -> verify_qa -> [retry/complete]
              -> execution_breakpoint -> [pause/continue]
-             -> check_context -> [summarize?]
-             -> advance -> [next_milestone/task_summary/retry]
-             -> task_summary -> generate_response -> END
+             -> advance -> [next_task/complete/retry]
+             -> generate_response -> END
 
     Plan Review Router:
         - execute_worker: Plan approved, continue to execution
@@ -130,15 +119,13 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         - END: Plan rejected or workflow should end
 
     Execution Breakpoint Router:
-        - advance: Continue to check_context -> advance flow
+        - advance: Continue to advance flow
         - END: Pause execution and wait for resume via API
 
-    The task_summary node generates a summary of all milestones for:
-    - Responder to create a complete user response
-    - Next task's Conductor to understand previous work
-
-    The replan node enables dynamic plan modification based on
-    observations from Worker execution and plan viability assessments.
+    QA Router:
+        - NEXT: Proceed to execution_breakpoint
+        - RETRY: Go back to execute_worker
+        - FAIL: Go to generate_response with error
 
     Args:
         session: Database session for node operations
@@ -149,24 +136,16 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     # Create graph with AgentState
     graph: StateGraph[AgentState] = StateGraph(AgentState)
 
-    # Node function mapping
-    # Note: ANALYZE_TASK now acts as the "architect" node
+    # Node function mapping - simplified 7-node workflow
+    # Removed: select_llm, generate_prompt, qa_breakpoint, check_context, summarize, task_summary, replan, recovery
     node_functions = {
         Node.ANALYZE_TASK: analyze_task_node,  # Architect: creates project plan
         Node.PLAN_REVIEW: plan_review_breakpoint,  # Human-in-the-Loop plan review
-        Node.SELECT_LLM: select_llm_node,
-        Node.GENERATE_PROMPT: generate_prompt_node,
         Node.EXECUTE_WORKER: execute_worker_node,
-        Node.QA_BREAKPOINT: qa_breakpoint_node,
         Node.VERIFY_QA: verify_qa_node,
-        Node.CHECK_CONTEXT: check_context_node,
-        Node.SUMMARIZE: summarize_node,
+        Node.EXECUTION_BREAKPOINT: execution_breakpoint_node,  # Execution breakpoint for task-level pausing
         Node.ADVANCE: advance_node,
-        Node.TASK_SUMMARY: task_summary_node,
         Node.GENERATE_RESPONSE: generate_response_node,
-        Node.REPLAN: replan_node,
-        Node.RECOVERY: recovery_node,
-        Node.EXECUTION_BREAKPOINT: execution_breakpoint_node,  # Execution breakpoint
     }
 
     # Add all nodes with session bound
@@ -180,106 +159,62 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     graph.add_edge(Node.ANALYZE_TASK, Node.PLAN_REVIEW)
 
     # plan_review -> conditional routing based on user action
-    # - execute_worker: Plan approved, continue to execution via select_llm
+    # - execute_worker: Plan approved, continue to execution directly
     # - architect: Revision requested, regenerate plan
     # - END: Plan rejected
     graph.add_conditional_edges(
         Node.PLAN_REVIEW,
         plan_review_router,
         {
-            "execute_worker": Node.SELECT_LLM,  # Approved: continue to LLM selection
+            "execute_worker": Node.EXECUTE_WORKER,  # Approved: continue directly to worker
             "architect": Node.ANALYZE_TASK,  # Revision: go back to architect
             END: END,  # Rejected: end workflow
         },
     )
 
-    # Add conditional edge for MetaPrompter (skip for TRIVIAL/SIMPLE)
-    graph.add_conditional_edges(
-        Node.SELECT_LLM,
-        should_use_meta_prompter,
-        {
-            PromptRoute.GENERATE: Node.GENERATE_PROMPT,
-            PromptRoute.SKIP: Node.EXECUTE_WORKER,
-        },
-    )
-
-    # Edge from generate_prompt to execute_worker
-    graph.add_edge(Node.GENERATE_PROMPT, Node.EXECUTE_WORKER)
-
-    # Edge from execute_worker to qa_breakpoint (Human-in-the-Loop checkpoint)
-    graph.add_edge(Node.EXECUTE_WORKER, Node.QA_BREAKPOINT)
-
-    # Edge from qa_breakpoint to verify_qa
-    graph.add_edge(Node.QA_BREAKPOINT, Node.VERIFY_QA)
+    # Edge from execute_worker to verify_qa (direct, no qa_breakpoint)
+    graph.add_edge(Node.EXECUTE_WORKER, Node.VERIFY_QA)
 
     # Conditional edges from verify_qa based on QA decision
-    # NOTE: RETRY also goes to ADVANCE first to increment retry_count
-    # then ADVANCE routes back to EXECUTE_WORKER via RETRY_MILESTONE
-    # REPLAN triggers dynamic plan modification when QA detects plan viability issues
-    # FAIL now routes to RECOVERY for graceful failure handling
-    # NEXT now routes to EXECUTION_BREAKPOINT for task-level pause control
+    # - NEXT: Proceed to execution_breakpoint for task-level pause control
+    # - RETRY: Go to advance to handle retry logic
+    # - FAIL: Go directly to generate_response (simplified error handling)
     graph.add_conditional_edges(
         Node.VERIFY_QA,
         route_qa_decision,
         {
-            QARoute.NEXT: Node.EXECUTION_BREAKPOINT,  # Changed from CHECK_CONTEXT
+            QARoute.NEXT: Node.EXECUTION_BREAKPOINT,
             QARoute.RETRY: Node.ADVANCE,
-            QARoute.FAIL: Node.RECOVERY,
-            QARoute.REPLAN: Node.REPLAN,
+            QARoute.FAIL: Node.GENERATE_RESPONSE,
         },
     )
 
     # execution_breakpoint -> conditional routing
-    # - advance: Continue to check_context -> advance flow
-    # - END: Pause execution and wait for resume
+    # - advance: Continue to advance flow
+    # - END: Pause execution and wait for resume via API
     graph.add_conditional_edges(
         Node.EXECUTION_BREAKPOINT,
         execution_breakpoint_router,
         {
-            "advance": Node.CHECK_CONTEXT,
+            "advance": Node.ADVANCE,
             END: END,
         },
     )
 
-    graph.add_edge(Node.REPLAN, Node.SELECT_LLM)
-
-    # Conditional edges from recovery node
-    # - STRATEGY_RETRY: Try a completely different approach (back to select_llm)
-    # - FAILURE_REPORT: Generate detailed failure report (to task_summary -> response)
-    graph.add_conditional_edges(
-        Node.RECOVERY,
-        route_recovery,
-        {
-            RecoveryRoute.STRATEGY_RETRY: Node.SELECT_LLM,
-            RecoveryRoute.FAILURE_REPORT: Node.TASK_SUMMARY,
-        },
-    )
-
-    # Conditional edges for context compression
-    graph.add_conditional_edges(
-        Node.CHECK_CONTEXT,
-        should_compress_context,
-        {
-            CompressionRoute.SUMMARIZE: Node.SUMMARIZE,
-            CompressionRoute.SKIP: Node.ADVANCE,
-        },
-    )
-
-    # Edge from summarize to advance
-    graph.add_edge(Node.SUMMARIZE, Node.ADVANCE)
-
     # Conditional edges from advance
+    # - NEXT_MILESTONE: Loop back to execute_worker for next task
+    # - COMPLETE: All tasks done, go to generate_response
+    # - RETRY_MILESTONE: QA retry, go back to execute_worker
     graph.add_conditional_edges(
         Node.ADVANCE,
         route_advance,
         {
-            AdvanceRoute.NEXT_MILESTONE: Node.SELECT_LLM,
-            AdvanceRoute.COMPLETE: Node.TASK_SUMMARY,
+            AdvanceRoute.NEXT_MILESTONE: Node.EXECUTE_WORKER,
+            AdvanceRoute.COMPLETE: Node.GENERATE_RESPONSE,
             AdvanceRoute.RETRY_MILESTONE: Node.EXECUTE_WORKER,
         },
     )
 
-    graph.add_edge(Node.TASK_SUMMARY, Node.GENERATE_RESPONSE)
     graph.add_edge(Node.GENERATE_RESPONSE, END)
 
     logger.info("workflow_graph_built")
