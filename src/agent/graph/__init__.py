@@ -1,9 +1,12 @@
 """LangGraph workflow module for multi-agent orchestration.
 
 This module provides the LangGraph-based workflow that orchestrates
-the 5 specialized agents (Conductor, MetaPrompter, Worker, QA, Summarizer)
-for task execution with automatic LLM selection, quality validation,
-and context management.
+the specialized agents (Architect, Worker, QA, Responder) for task
+execution with project planning, quality validation, and context management.
+
+Simplified 7-node workflow:
+    architect -> plan_review -> execute_worker -> verify_qa
+        -> execution_breakpoint -> advance -> generate_response -> END
 
 Exports:
     State:

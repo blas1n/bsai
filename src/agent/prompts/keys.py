@@ -11,13 +11,6 @@ class ConductorPrompts(str, Enum):
     RETHINK_STRATEGY_PROMPT = "rethink_strategy_prompt"
 
 
-class MetaPrompterPrompts(str, Enum):
-    """Prompt keys for Meta Prompter agent."""
-
-    META_PROMPT = "meta_prompt"
-    STRATEGIES = "strategies"
-
-
 class WorkerPrompts(str, Enum):
     """Prompt keys for Worker agent."""
 
@@ -29,13 +22,6 @@ class QAAgentPrompts(str, Enum):
     """Prompt keys for QA Agent."""
 
     VALIDATION_PROMPT = "validation_prompt"
-
-
-class SummarizerPrompts(str, Enum):
-    """Prompt keys for Summarizer agent."""
-
-    SUMMARY_PROMPT = "summary_prompt"
-    CHECKPOINT_PROMPT = "checkpoint_prompt"
 
 
 class ResponderPrompts(str, Enum):
