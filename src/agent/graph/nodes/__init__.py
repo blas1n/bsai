@@ -400,6 +400,13 @@ async def check_task_cancelled(
 
 # Import plan review node functions after all definitions to avoid circular imports
 # These are re-exported for convenient access from the nodes package
+# Import execution breakpoint node functions
+from agent.graph.nodes.execution_breakpoint import (  # noqa: E402
+    execution_breakpoint,
+    execution_breakpoint_router,
+    get_current_progress,
+    resume_execution,
+)
 from agent.graph.nodes.plan_review import (  # noqa: E402
     plan_review_breakpoint,
     plan_review_router,
@@ -424,4 +431,9 @@ __all__ = [
     "resume_after_approval",
     "resume_after_revision",
     "resume_after_rejection",
+    # Execution breakpoint
+    "execution_breakpoint",
+    "execution_breakpoint_router",
+    "resume_execution",
+    "get_current_progress",
 ]
