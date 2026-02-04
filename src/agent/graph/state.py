@@ -4,13 +4,17 @@ Immutable state structure for multi-agent orchestration.
 All updates should return new dicts, not mutate existing state.
 """
 
-from typing import Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 from uuid import UUID
 
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
 from agent.db.models.project_plan import ProjectPlan
 from agent.llm import ChatMessage
 from agent.llm.schemas import PlanStatus
+
+if TYPE_CHECKING:
+    from agent.services.dependency_graph import DependencyGraph
+    from agent.services.execution_engine import ExecutionStatus
 
 
 class MilestoneData(TypedDict):
@@ -133,6 +137,14 @@ class AgentState(TypedDict):
     # Failure recovery fields
     strategy_retry_attempted: NotRequired[bool]  # Whether strategy retry has been attempted
     failure_context: NotRequired[dict[str, Any]]  # Context for failure report generation
+
+    # Parallel execution fields (Task 6.3)
+    dependency_graph: NotRequired[
+        "DependencyGraph | None"
+    ]  # Task dependency graph for parallel execution
+    ready_tasks: NotRequired[list[str]]  # List of task IDs ready for parallel execution
+    execution_status: NotRequired["ExecutionStatus | None"]  # Current execution engine status
+    current_task_id: NotRequired[str | None]  # Current task ID being executed (project_plan flow)
 
 
 def update_milestone(milestone: MilestoneData, **updates: Any) -> MilestoneData:

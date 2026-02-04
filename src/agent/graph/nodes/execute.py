@@ -7,6 +7,7 @@ Supports both:
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -690,3 +691,220 @@ async def execute_worker_node(
             "error": str(e),
             "error_node": "execute_worker",
         }
+
+
+async def create_task_executor(
+    state: AgentState,
+    config: RunnableConfig,
+    session: AsyncSession,
+) -> Callable[[str], Awaitable[dict[str, Any]]]:
+    """Create a task executor function for parallel execution.
+
+    Returns a callable that can be used by ExecutionEngine to execute
+    individual tasks by their ID.
+
+    This function is a factory that creates task executors bound to the
+    current state, config, and session.
+
+    Args:
+        state: Current workflow state
+        config: LangGraph config with ws_manager
+        session: Database session
+
+    Returns:
+        Async callable that takes task_id and returns execution result dict.
+        The result dict contains:
+        - success: bool - Whether execution succeeded
+        - output: str - Worker output content
+        - error: str | None - Error message if failed
+        - tokens_used: int - Total tokens consumed
+        - cost_usd: str - Execution cost
+
+    Example:
+        >>> executor = await create_task_executor(state, config, session)
+        >>> result = await executor("T1.1.1")
+        >>> if result["success"]:
+        ...     print(f"Output: {result['output']}")
+    """
+    container = get_container(config)
+    event_bus = get_event_bus(config)
+    ws_manager = get_ws_manager_optional(config)
+    project_plan = state.get("project_plan")
+
+    if not project_plan:
+        raise ValueError("create_task_executor requires project_plan in state")
+
+    tasks = get_tasks_from_plan(project_plan)
+
+    async def task_executor(task_id: str) -> dict[str, Any]:
+        """Execute a single task by ID.
+
+        Args:
+            task_id: Task ID from project plan (e.g., "T1.1.1")
+
+        Returns:
+            Execution result dict with success, output, error, tokens_used, cost_usd
+        """
+        task = get_task_by_id(tasks, task_id)
+
+        if task is None:
+            logger.error("task_not_found_for_execution", task_id=task_id)
+            return {
+                "success": False,
+                "output": "",
+                "error": f"Task {task_id} not found in project plan",
+                "tokens_used": 0,
+                "cost_usd": "0",
+            }
+
+        try:
+            # Get task complexity
+            complexity = _get_complexity_from_task(task)
+
+            # Build milestone-like dict for compatibility
+            milestone: MilestoneData = {
+                "id": state["task_id"],  # Use workflow task_id
+                "description": task.get("description", ""),
+                "complexity": complexity,
+                "acceptance_criteria": task.get("acceptance_criteria", ""),
+                "status": MilestoneStatus.IN_PROGRESS,
+                "selected_model": None,
+                "generated_prompt": None,
+                "worker_output": None,
+                "qa_feedback": None,
+                "retry_count": 0,
+            }
+
+            # Emit worker started event for this task
+            await event_bus.emit(
+                AgentActivityEvent(
+                    type=EventType.AGENT_STARTED,
+                    session_id=state["session_id"],
+                    task_id=state["task_id"],
+                    milestone_id=milestone["id"],
+                    sequence_number=0,  # Parallel execution doesn't use sequential numbering
+                    agent="worker",
+                    status=AgentStatus.STARTED,
+                    message=f"Executing task {task_id}",
+                    details={"parallel_task_id": task_id},
+                )
+            )
+
+            # Initialize worker
+            worker = WorkerAgent(
+                llm_client=container.llm_client,
+                router=container.router,
+                prompt_manager=container.prompt_manager,
+                session=session,
+                ws_manager=ws_manager,
+            )
+            artifact_repo = ArtifactRepository(session)
+
+            # Load artifacts for context
+            _, _, merged_artifacts = await _load_artifacts_for_context(
+                artifact_repo, state["task_id"], state["session_id"]
+            )
+
+            # Build context messages
+            context_messages = list(state.get("context_messages", []))
+            artifacts_context = _build_artifacts_context_message(merged_artifacts)
+            if artifacts_context:
+                context_messages = [
+                    msg
+                    for msg in context_messages
+                    if not (msg.role == "system" and "Artifacts" in msg.content)
+                ]
+                context_messages.insert(0, artifacts_context)
+
+            # Prepare prompt
+            prompt = _prepare_worker_prompt_from_task(state, task)
+
+            # Execute task
+            response = await worker.execute_milestone(
+                milestone_id=milestone["id"],
+                prompt=prompt,
+                complexity=complexity,
+                user_id=state["user_id"],
+                session_id=state["session_id"],
+                task_id=state["task_id"],
+                preferred_model=None,
+                context_messages=context_messages,
+            )
+
+            # Calculate cost
+            model = container.router.select_model(complexity=complexity)
+            call_cost = container.router.calculate_cost(
+                model=model,
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+            )
+
+            logger.info(
+                "parallel_task_executed",
+                task_id=task_id,
+                output_length=len(response.content),
+                tokens=response.usage.total_tokens,
+                cost_usd=float(call_cost),
+            )
+
+            # Emit worker completed event
+            await event_bus.emit(
+                AgentActivityEvent(
+                    type=EventType.AGENT_COMPLETED,
+                    session_id=state["session_id"],
+                    task_id=state["task_id"],
+                    milestone_id=milestone["id"],
+                    sequence_number=0,
+                    agent="worker",
+                    status=AgentStatus.COMPLETED,
+                    message=f"Task {task_id} completed ({response.usage.total_tokens} tokens)",
+                    details={
+                        "parallel_task_id": task_id,
+                        "output_length": len(response.content),
+                        "tokens_used": response.usage.total_tokens,
+                        "cost_usd": float(call_cost),
+                    },
+                )
+            )
+
+            return {
+                "success": True,
+                "output": response.content,
+                "error": None,
+                "tokens_used": response.usage.total_tokens,
+                "cost_usd": str(call_cost),
+            }
+
+        except Exception as e:
+            logger.error("parallel_task_failed", task_id=task_id, error=str(e))
+
+            # Emit worker failed event
+            await event_bus.emit(
+                AgentActivityEvent(
+                    type=EventType.AGENT_FAILED,
+                    session_id=state["session_id"],
+                    task_id=state["task_id"],
+                    milestone_id=state["task_id"],
+                    sequence_number=0,
+                    agent="worker",
+                    status=AgentStatus.FAILED,
+                    message=f"Task {task_id} failed: {e}",
+                    details={"parallel_task_id": task_id, "error": str(e)},
+                )
+            )
+
+            return {
+                "success": False,
+                "output": "",
+                "error": str(e),
+                "tokens_used": 0,
+                "cost_usd": "0",
+            }
+
+    return task_executor
+
+
+__all__ = [
+    "execute_worker_node",
+    "create_task_executor",
+]

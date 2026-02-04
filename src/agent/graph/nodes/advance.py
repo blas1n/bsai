@@ -18,12 +18,12 @@ from agent.db.models.enums import MilestoneStatus, TaskStatus
 from agent.db.repository.project_plan_repo import ProjectPlanRepository
 from agent.events import EventType, MilestoneRetryEvent, MilestoneStatusChangedEvent
 from agent.graph.utils import (
-    find_next_pending_task,
     get_task_index,
     get_tasks_from_plan,
     update_task_status,
 )
 from agent.memory import store_task_memory
+from agent.services.dependency_graph import DependencyGraph
 
 from ..state import AgentState
 from . import get_event_bus, get_memory_manager
@@ -93,6 +93,33 @@ async def advance_node(
         )
 
 
+def _build_dependency_graph(tasks: list[dict[str, Any]]) -> DependencyGraph:
+    """Build dependency graph from project plan tasks.
+
+    Args:
+        tasks: List of task dictionaries from plan_data
+
+    Returns:
+        DependencyGraph instance for parallel execution
+    """
+    return DependencyGraph(tasks)
+
+
+def _get_ready_tasks_from_graph(graph: DependencyGraph) -> list[str]:
+    """Get list of task IDs ready for execution.
+
+    Uses the dependency graph to determine which tasks
+    can be executed in parallel (all dependencies completed).
+
+    Args:
+        graph: DependencyGraph instance
+
+    Returns:
+        List of task IDs that can be executed in parallel
+    """
+    return graph.get_ready_tasks()
+
+
 async def _advance_with_project_plan(
     state: AgentState,
     config: RunnableConfig,
@@ -102,7 +129,8 @@ async def _advance_with_project_plan(
 ) -> dict[str, Any]:
     """Advance using project_plan-based task flow.
 
-    Uses dependency-aware task selection.
+    Uses DependencyGraph for dependency-aware task selection and
+    returns ready_tasks for potential parallel execution.
 
     Args:
         state: Current workflow state
@@ -112,7 +140,7 @@ async def _advance_with_project_plan(
         event_bus: Event bus for emitting events
 
     Returns:
-        Partial state with updated task or completion flag
+        Partial state with updated task, dependency_graph, and ready_tasks
     """
     qa_decision = state.get("current_qa_decision")
     current_task_id: str | None = state.get("current_task_id")  # type: ignore[assignment]
@@ -131,6 +159,11 @@ async def _advance_with_project_plan(
         )
 
     elif qa_decision == "fail":
+        # Update dependency graph to mark task as failed
+        dep_graph = state.get("dependency_graph")
+        if dep_graph and current_task_id:
+            dep_graph.mark_failed(current_task_id)
+
         return await _handle_fail(
             state=state,
             event_bus=event_bus,
@@ -176,12 +209,42 @@ async def _advance_with_project_plan(
                 )
             )
 
-        # Find next pending task (dependency-aware)
+        # Build dependency graph from updated tasks
         updated_tasks = get_tasks_from_plan(project_plan)
-        next_task = find_next_pending_task(updated_tasks)
+        dep_graph = _build_dependency_graph(updated_tasks)
 
-        if next_task is None:
-            # All tasks completed
+        # Update graph with current completion status from plan_data
+        for task in updated_tasks:
+            task_status = task.get("status", "pending")
+            if task_status == "completed":
+                dep_graph.mark_completed(task["id"])
+            elif task_status == "in_progress":
+                dep_graph.mark_in_progress(task["id"])
+            elif task_status == "failed":
+                dep_graph.mark_failed(task["id"])
+
+        # Get ready tasks for parallel execution
+        ready_tasks = _get_ready_tasks_from_graph(dep_graph)
+
+        logger.info(
+            "dependency_graph_updated",
+            task_id=str(state["task_id"]),
+            completed_task=current_task_id,
+            ready_tasks=ready_tasks,
+            graph_stats=dep_graph.get_stats(),
+        )
+
+        # Check if all tasks completed
+        if dep_graph.is_all_completed() or not ready_tasks:
+            # Check for blocked tasks
+            blocked_tasks = dep_graph.get_blocked_tasks()
+            if blocked_tasks:
+                logger.warning(
+                    "tasks_blocked_by_failures",
+                    blocked_tasks=blocked_tasks,
+                )
+
+            # All tasks completed or no more executable
             logger.info(
                 "workflow_complete",
                 task_id=str(state["task_id"]),
@@ -208,13 +271,16 @@ async def _advance_with_project_plan(
 
             return {
                 "project_plan": project_plan,
+                "dependency_graph": dep_graph,
+                "ready_tasks": [],
                 "task_status": TaskStatus.COMPLETED,
                 "workflow_complete": True,
                 "should_continue": False,
             }
 
-        # Advance to next task
-        next_task_id = next_task["id"]
+        # Select next task from ready tasks (first one for sequential execution)
+        # For parallel execution, the ExecutionEngine will handle multiple ready tasks
+        next_task_id = ready_tasks[0]
         next_idx = get_task_index(updated_tasks, next_task_id)
 
         logger.info(
@@ -222,10 +288,13 @@ async def _advance_with_project_plan(
             from_task=current_task_id,
             to_task=next_task_id,
             to_index=next_idx,
+            ready_for_parallel=len(ready_tasks),
         )
 
         return {
             "project_plan": project_plan,
+            "dependency_graph": dep_graph,
+            "ready_tasks": ready_tasks,
             "current_task_id": next_task_id,
             "current_milestone_index": next_idx,
             "retry_count": 0,
