@@ -26,6 +26,7 @@ from .routers import (
     mcp_router,
     memories_router,
     milestones_router,
+    plan_router,
     sessions_router,
     snapshots_router,
     tasks_router,
@@ -174,6 +175,7 @@ def create_app() -> FastAPI:
     app.include_router(artifacts_router, prefix=api_prefix)
     app.include_router(mcp_router, prefix=api_prefix)
     app.include_router(memories_router, prefix=api_prefix)
+    app.include_router(plan_router, prefix=api_prefix)
 
     # WebSocket (under api prefix)
     app.include_router(websocket_router, prefix=api_prefix)
