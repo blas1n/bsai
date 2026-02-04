@@ -1,8 +1,12 @@
 """Replan node for dynamic plan modification.
 
-Implements the ReAct pattern by allowing the Conductor to modify
+Implements the ReAct pattern by allowing the Architect (or Conductor) to modify
 the execution plan based on observations from Worker execution
 and plan viability assessments from QA.
+
+Supports both:
+1. New flow: ArchitectAgent with project_plan
+2. Legacy flow: ConductorAgent with milestones
 """
 
 from __future__ import annotations
@@ -15,12 +19,19 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.api.config import get_agent_settings
+from agent.core.architect import ArchitectAgent
 from agent.core.conductor import ConductorAgent
 from agent.db.models.enums import MilestoneStatus, TaskComplexity
 from agent.db.repository.milestone_repo import MilestoneRepository
+from agent.db.repository.project_plan_repo import ProjectPlanRepository
 from agent.events import EventType
 from agent.events.types import PlanModificationEvent
 from agent.graph.state import AgentState, MilestoneData
+from agent.graph.utils import (
+    apply_task_modifications,
+    convert_plan_to_milestones,
+    get_tasks_from_plan,
+)
 from agent.llm.schemas import MilestoneModification
 
 from . import get_container, get_event_bus
@@ -36,7 +47,7 @@ async def replan_node(
     """Execute replanning based on observations and QA feedback.
 
     This node is triggered when QA determines the plan needs revision.
-    It uses the Conductor to analyze the situation and modify the plan.
+    Supports both new ArchitectAgent flow and legacy ConductorAgent flow.
 
     Args:
         state: Current workflow state
@@ -44,14 +55,13 @@ async def replan_node(
         session: Database session
 
     Returns:
-        Partial state with updated milestones and replan metadata
+        Partial state with updated plan/milestones and replan metadata
     """
     container = get_container(config)
     event_bus = get_event_bus(config)
     settings = get_agent_settings()
 
     task_id = state["task_id"]
-    session_id = state["session_id"]
 
     # Check replan iteration limit (from config)
     replan_count = state.get("replan_count", 0)
@@ -76,6 +86,217 @@ async def replan_node(
         replan_iteration=replan_count + 1,
         reason=state.get("replan_reason"),
     )
+
+    # Check if using new project_plan flow or legacy milestones flow
+    project_plan = state.get("project_plan")
+
+    if project_plan:
+        return await _replan_with_architect(
+            state=state,
+            config=config,
+            session=session,
+            container=container,
+            event_bus=event_bus,
+            project_plan=project_plan,
+            replan_count=replan_count,
+        )
+    else:
+        return await _replan_with_conductor(
+            state=state,
+            config=config,
+            session=session,
+            container=container,
+            event_bus=event_bus,
+            replan_count=replan_count,
+        )
+
+
+async def _replan_with_architect(
+    state: AgentState,
+    config: RunnableConfig,
+    session: AsyncSession,
+    container: Any,
+    event_bus: Any,
+    project_plan: Any,
+    replan_count: int,
+) -> dict[str, Any]:
+    """Replan using Architect agent for project_plan-based execution.
+
+    Args:
+        state: Current workflow state
+        config: LangGraph config
+        session: Database session
+        container: Dependency container
+        event_bus: Event bus for emitting events
+        project_plan: Current project plan
+        replan_count: Current replan iteration count
+
+    Returns:
+        Partial state with updated project_plan and metadata
+    """
+    task_id = state["task_id"]
+    session_id = state["session_id"]
+
+    try:
+        observations = state.get("current_observations", [])
+        qa_feedback = state.get("current_qa_feedback", "")
+        replan_reason = state.get("replan_reason", "Plan viability issue")
+        current_task_id: str | None = state.get("current_task_id")  # type: ignore[assignment]
+
+        # Get completed tasks from plan_data
+        tasks = get_tasks_from_plan(project_plan)
+        completed_task_ids = [t["id"] for t in tasks if t.get("status") == "completed"]
+
+        # Create Architect agent for replanning
+        architect = ArchitectAgent(
+            llm_client=container.llm_client,
+            router=container.router,
+            prompt_manager=container.prompt_manager,
+            session=session,
+        )
+
+        # Get replan output from Architect
+        replan_output = await architect.replan_on_execution(
+            plan_id=project_plan.id,
+            current_task_id=current_task_id or "",
+            execution_issue=qa_feedback or replan_reason or "Plan viability issue",
+            worker_observations=observations,
+            completed_tasks=completed_task_ids,
+        )
+
+        logger.info(
+            "architect_replan_result",
+            task_id=str(task_id),
+            action=replan_output.action,
+            modifications_count=len(replan_output.modifications or []),
+            confidence=replan_output.confidence,
+        )
+
+        result: dict[str, Any] = {
+            "replan_count": replan_count + 1,
+            "plan_confidence": replan_output.confidence,
+            "needs_replan": False,
+            "replan_reason": None,
+            "current_observations": [],
+            "retry_count": 0,
+            "current_qa_decision": None,
+            "current_qa_feedback": None,
+        }
+
+        # Apply modifications based on action
+        if replan_output.action == "modify" and replan_output.modifications:
+            # Apply task modifications to plan_data
+            updated_plan_data = apply_task_modifications(
+                project_plan.plan_data,
+                replan_output.modifications,
+            )
+
+            # Persist updated plan to database
+            plan_repo = ProjectPlanRepository(session)
+            await plan_repo.update(
+                project_plan.id,
+                plan_data=updated_plan_data,
+            )
+            await session.commit()
+
+            # Refresh project_plan with updated data
+            project_plan.plan_data = updated_plan_data
+
+            # Convert to legacy milestones for compatibility
+            updated_milestones = convert_plan_to_milestones(project_plan)
+
+            result["project_plan"] = project_plan
+            result["milestones"] = updated_milestones
+
+            # Build modification record for history
+            modification_record = {
+                "iteration": replan_count + 1,
+                "trigger_task_id": current_task_id,
+                "reason": replan_reason,
+                "analysis": replan_output.analysis,
+                "modifications": [m.model_dump() for m in replan_output.modifications],
+                "confidence": replan_output.confidence,
+                "reasoning": replan_output.reasoning,
+            }
+
+            plan_modifications = state.get("plan_modifications", [])
+            plan_modifications = [*plan_modifications, modification_record]
+            result["plan_modifications"] = plan_modifications
+
+            # Emit plan modification event
+            await event_bus.emit(
+                PlanModificationEvent(
+                    type=EventType.PLAN_MODIFIED,
+                    session_id=session_id,
+                    task_id=task_id,
+                    milestone_id=task_id,  # Use task_id as fallback
+                    replan_iteration=replan_count + 1,
+                    modifications_count=len(replan_output.modifications),
+                    reason=replan_reason or "Plan viability issue",
+                    confidence=replan_output.confidence,
+                )
+            )
+
+            logger.info(
+                "architect_replan_completed",
+                task_id=str(task_id),
+                replan_iteration=replan_count + 1,
+                modifications_count=len(replan_output.modifications),
+                confidence=replan_output.confidence,
+            )
+
+        elif replan_output.action == "abort":
+            # Abort the workflow
+            logger.warning(
+                "architect_replan_abort",
+                task_id=str(task_id),
+                reason=replan_output.reasoning,
+            )
+            return {
+                "error": f"Plan aborted by Architect: {replan_output.reasoning}",
+                "error_node": "replan",
+                "workflow_complete": True,
+            }
+
+        # action == "continue" - no modifications needed
+        return result
+
+    except Exception as e:
+        logger.error(
+            "architect_replan_failed",
+            task_id=str(task_id),
+            error=str(e),
+        )
+        return {
+            "error": str(e),
+            "error_node": "replan",
+            "workflow_complete": True,
+        }
+
+
+async def _replan_with_conductor(
+    state: AgentState,
+    config: RunnableConfig,
+    session: AsyncSession,
+    container: Any,
+    event_bus: Any,
+    replan_count: int,
+) -> dict[str, Any]:
+    """Legacy replan using Conductor agent for milestone-based execution.
+
+    Args:
+        state: Current workflow state
+        config: LangGraph config
+        session: Database session
+        container: Dependency container
+        event_bus: Event bus for emitting events
+        replan_count: Current replan iteration count
+
+    Returns:
+        Partial state with updated milestones and metadata
+    """
+    task_id = state["task_id"]
+    session_id = state["session_id"]
 
     try:
         # Gather context for replanning
@@ -158,7 +379,7 @@ async def replan_node(
         )
 
         logger.info(
-            "replan_completed",
+            "conductor_replan_completed",
             task_id=str(task_id),
             replan_iteration=replan_count + 1,
             modifications_count=len(replan_output.modifications),
@@ -182,7 +403,7 @@ async def replan_node(
 
     except Exception as e:
         logger.error(
-            "replan_failed",
+            "conductor_replan_failed",
             task_id=str(task_id),
             error=str(e),
         )

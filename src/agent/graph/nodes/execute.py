@@ -1,4 +1,9 @@
-"""Worker execution node."""
+"""Worker execution node.
+
+Supports both:
+1. New flow: project_plan with tasks
+2. Legacy flow: milestones list
+"""
 
 from __future__ import annotations
 
@@ -14,10 +19,12 @@ from agent.api.config import get_agent_settings
 from agent.core import WorkerAgent
 from agent.core.artifact_extractor import ExtractionResult, extract_artifacts
 from agent.db.models.artifact import Artifact
-from agent.db.models.enums import TaskStatus
+from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
 from agent.db.repository.artifact_repo import ArtifactRepository
 from agent.db.repository.milestone_repo import MilestoneRepository
+from agent.db.repository.project_plan_repo import ProjectPlanRepository
 from agent.events import AgentActivityEvent, AgentStatus, EventType
+from agent.graph.utils import get_task_by_id, get_tasks_from_plan, update_task_status
 from agent.llm import ChatMessage
 from agent.llm.schemas import WorkerReActOutput
 
@@ -266,6 +273,53 @@ def _prepare_worker_prompt(
     return base_prompt
 
 
+def _prepare_worker_prompt_from_task(
+    state: AgentState,
+    task: dict[str, Any],
+) -> str:
+    """Prepare prompt for Worker execution from project plan task.
+
+    Args:
+        state: Current workflow state
+        task: Current task dict from project_plan
+
+    Returns:
+        Prepared prompt string
+    """
+    base_prompt = state.get("current_prompt") or task.get("description", "")
+    original_request = state.get("original_request", "")
+    acceptance_criteria = task.get("acceptance_criteria", "")
+
+    # Build comprehensive prompt with task details
+    prompt_parts = []
+
+    if original_request and original_request not in base_prompt:
+        prompt_parts.append(f"Original user request:\n{original_request}")
+
+    prompt_parts.append(f"Current task:\n{base_prompt}")
+
+    if acceptance_criteria:
+        prompt_parts.append(f"Acceptance criteria:\n{acceptance_criteria}")
+
+    return "\n\n".join(prompt_parts)
+
+
+def _get_complexity_from_task(task: dict[str, Any]) -> TaskComplexity:
+    """Extract complexity from task dict.
+
+    Args:
+        task: Task dict from project_plan
+
+    Returns:
+        TaskComplexity enum value
+    """
+    complexity_str = task.get("complexity", "MODERATE")
+    try:
+        return TaskComplexity[complexity_str]
+    except KeyError:
+        return TaskComplexity.MODERATE
+
+
 def _extract_react_observations(worker_output: str) -> list[str]:
     """Extract ReAct observations from worker output.
 
@@ -293,10 +347,14 @@ async def execute_worker_node(
     config: RunnableConfig,
     session: AsyncSession,
 ) -> dict[str, Any]:
-    """Execute milestone via Worker agent.
+    """Execute task/milestone via Worker agent.
 
     Handles both fresh execution and retry scenarios,
     passing QA feedback for retries.
+
+    Supports both:
+    - New flow: project_plan with tasks
+    - Legacy flow: milestones list
 
     Args:
         state: Current workflow state
@@ -321,6 +379,8 @@ async def execute_worker_node(
         }
 
     try:
+        # Check if using new project_plan flow or legacy milestones flow
+        project_plan = state.get("project_plan")
         milestones = state.get("milestones")
         idx = state.get("current_milestone_index")
 
@@ -329,12 +389,42 @@ async def execute_worker_node(
             user_id=state["user_id"],
             session_id=str(state["session_id"]),
             task_id=str(state["task_id"]),
+            has_project_plan=project_plan is not None,
         )
 
-        if milestones is None or idx is None:
-            return {"error": "No milestones available", "error_node": "execute_worker"}
+        # Extract task information based on flow type
+        if project_plan:
+            current_task_id: str | None = state.get("current_task_id")  # type: ignore[assignment]
+            tasks = get_tasks_from_plan(project_plan)
+            task = get_task_by_id(tasks, current_task_id) if current_task_id else None
 
-        milestone = milestones[idx]
+            if task is None:
+                return {
+                    "error": "No task available in project plan",
+                    "error_node": "execute_worker",
+                }
+
+            # Create milestone-like dict for compatibility
+            task_complexity = _get_complexity_from_task(task)
+            milestone: MilestoneData = {
+                "id": state["task_id"],  # Use task_id as milestone_id for events
+                "description": task.get("description", ""),
+                "complexity": task_complexity,
+                "acceptance_criteria": task.get("acceptance_criteria", ""),
+                "status": MilestoneStatus.IN_PROGRESS,
+                "selected_model": None,
+                "generated_prompt": None,
+                "worker_output": None,
+                "qa_feedback": None,
+                "retry_count": state.get("retry_count", 0),
+            }
+            idx = idx if idx is not None else 0
+        else:
+            if milestones is None or idx is None:
+                return {"error": "No milestones available", "error_node": "execute_worker"}
+            milestone = milestones[idx]
+            task = None
+
         retry_count = state.get("retry_count", 0)
 
         # Emit worker started event
@@ -389,7 +479,10 @@ async def execute_worker_node(
             )
 
         # Prepare prompt and execute
-        prompt = _prepare_worker_prompt(state, milestone)
+        if project_plan and task:
+            prompt = _prepare_worker_prompt_from_task(state, task)
+        else:
+            prompt = _prepare_worker_prompt(state, milestone)
         previous_output = milestone.get("worker_output")
         qa_feedback = state.get("current_qa_feedback")
 
@@ -416,9 +509,25 @@ async def execute_worker_node(
                 context_messages=context_messages,
             )
 
-        # Update milestone with output
-        updated_milestones = list(milestones)
-        updated_milestones[idx] = update_milestone(milestone, worker_output=response.content)
+        # Update milestone with output (for legacy flow)
+        updated_milestones = None
+        if milestones:
+            updated_milestones = list(milestones)
+            updated_milestones[idx] = update_milestone(milestone, worker_output=response.content)
+
+        # Update project_plan task status (for new flow)
+        updated_project_plan = None
+        if project_plan and task:
+            plan_current_task_id: str | None = state.get("current_task_id")  # type: ignore[assignment]
+            if plan_current_task_id:
+                updated_plan_data = update_task_status(
+                    project_plan.plan_data,
+                    plan_current_task_id,
+                    "in_progress",
+                )
+                # Note: We update to in_progress here; completion happens in advance node
+                project_plan.plan_data = updated_plan_data
+                updated_project_plan = project_plan
 
         # Update context with new exchange
         context_messages = list(state.get("context_messages", []))
@@ -459,26 +568,36 @@ async def execute_worker_node(
                 output_length=len(response.content),
                 message="Worker response was cut off due to token limit",
             )
-            return {
+            truncated_result: dict[str, Any] = {
                 "error": "Worker response was truncated due to token limit.",
                 "error_node": "execute_worker",
-                "milestones": updated_milestones,
                 "current_output": response.content,
             }
+            if updated_milestones:
+                truncated_result["milestones"] = updated_milestones
+            if updated_project_plan:
+                truncated_result["project_plan"] = updated_project_plan
+            return truncated_result
 
-        # Update milestone in DB
+        # Update milestone in DB (only for legacy flow with real milestones)
         milestone_repo = MilestoneRepository(session)
-        await milestone_repo.update_llm_usage(
-            milestone_id=milestone["id"],
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            cost=call_cost,
-        )
-        await milestone_repo.update(
-            milestone["id"],
-            selected_llm=model.name,
-            worker_output=response.content,
-        )
+        if not project_plan and milestones:
+            await milestone_repo.update_llm_usage(
+                milestone_id=milestone["id"],
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+                cost=call_cost,
+            )
+            await milestone_repo.update(
+                milestone["id"],
+                selected_llm=model.name,
+                worker_output=response.content,
+            )
+        elif project_plan:
+            # For project_plan flow, persist plan data update
+            plan_repo = ProjectPlanRepository(session)
+            await plan_repo.update(project_plan.id, plan_data=project_plan.plan_data)
+            await session.commit()
 
         # Extract and save artifacts
         extraction_result = extract_artifacts(response.content)
@@ -491,6 +610,7 @@ async def execute_worker_node(
                 message="No artifacts extracted, JSON parsing may have failed",
             )
 
+        # For project_plan flow, pass None for milestone_repo to skip milestone validation
         artifacts_for_broadcast = await _save_milestone_artifacts(
             artifact_repo=artifact_repo,
             session_id=state["session_id"],
@@ -498,7 +618,7 @@ async def execute_worker_node(
             milestone_id=milestone["id"],
             extraction_result=extraction_result,
             previous_snapshot=previous_snapshot,
-            milestone_repo=milestone_repo,
+            milestone_repo=milestone_repo if not project_plan else None,
         )
 
         # Build and emit worker completed event
@@ -545,8 +665,8 @@ async def execute_worker_node(
                     observation_count=len(observations),
                 )
 
-        return {
-            "milestones": updated_milestones,
+        # Build result with flow-specific fields
+        result: dict[str, Any] = {
             "current_output": response.content,
             "context_messages": context_messages,
             "current_context_tokens": current_tokens,
@@ -555,6 +675,14 @@ async def execute_worker_node(
             "total_cost_usd": str(total_cost),
             "current_observations": current_observations,
         }
+
+        if updated_milestones:
+            result["milestones"] = updated_milestones
+
+        if updated_project_plan:
+            result["project_plan"] = updated_project_plan
+
+        return result
 
     except Exception as e:
         logger.error("execute_worker_failed", error=str(e))

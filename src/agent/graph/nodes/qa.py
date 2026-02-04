@@ -1,4 +1,9 @@
-"""QA verification node."""
+"""QA verification node.
+
+Supports both:
+1. New flow: project_plan with tasks
+2. Legacy flow: milestones list
+"""
 
 from __future__ import annotations
 
@@ -9,10 +14,11 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import QAAgent, QADecision
-from agent.db.models.enums import MilestoneStatus
+from agent.db.models.enums import MilestoneStatus, TaskComplexity
+from agent.graph.utils import get_task_by_id, get_tasks_from_plan
 from agent.memory import store_qa_learning
 
-from ..state import AgentState, update_milestone
+from ..state import AgentState, MilestoneData, update_milestone
 from . import NodeContext
 
 logger = structlog.get_logger()
@@ -27,6 +33,10 @@ async def verify_qa_node(
 
     Performs independent validation of Worker output
     and provides structured feedback for improvements.
+
+    Supports both:
+    - New flow: project_plan with tasks
+    - Legacy flow: milestones list
 
     Args:
         state: Current workflow state
@@ -44,13 +54,46 @@ async def verify_qa_node(
         return ctx.cancelled_response("verify_qa")
 
     try:
+        # Check if using new project_plan flow or legacy milestones flow
+        project_plan = state.get("project_plan")
         milestones = state.get("milestones")
         idx = state.get("current_milestone_index")
 
-        if milestones is None or idx is None:
-            return {"error": "No milestones available", "error_node": "verify_qa"}
+        # Extract task/milestone information based on flow type
+        if project_plan:
+            current_task_id: str | None = state.get("current_task_id")  # type: ignore[assignment]
+            tasks = get_tasks_from_plan(project_plan)
+            task = get_task_by_id(tasks, current_task_id) if current_task_id else None
 
-        milestone = milestones[idx]
+            if task is None:
+                return {"error": "No task available in project plan", "error_node": "verify_qa"}
+
+            # Create milestone-like dict for QA compatibility
+            complexity_str = task.get("complexity", "MODERATE")
+            try:
+                task_complexity = TaskComplexity[complexity_str]
+            except KeyError:
+                task_complexity = TaskComplexity.MODERATE
+
+            milestone: MilestoneData = {
+                "id": state["task_id"],  # Use task_id as milestone_id
+                "description": task.get("description", ""),
+                "complexity": task_complexity,
+                "acceptance_criteria": task.get("acceptance_criteria", ""),
+                "status": MilestoneStatus.IN_PROGRESS,
+                "selected_model": None,
+                "generated_prompt": None,
+                "worker_output": state.get("current_output"),
+                "qa_feedback": None,
+                "retry_count": state.get("retry_count", 0),
+            }
+            idx = idx if idx is not None else 0
+        else:
+            if milestones is None or idx is None:
+                return {"error": "No milestones available", "error_node": "verify_qa"}
+            milestone = milestones[idx]
+            task = None
+
         retry_count = state.get("retry_count", 0)
 
         # Emit QA started event
@@ -80,8 +123,7 @@ async def verify_qa_node(
             session_id=state["session_id"],
         )
 
-        # Update milestone with QA result (immutable)
-        updated_milestones = list(milestones)
+        # Determine new status based on decision
         new_status = milestone["status"]
         if decision == QADecision.PASS:
             new_status = MilestoneStatus.PASSED
@@ -89,11 +131,15 @@ async def verify_qa_node(
             new_status = MilestoneStatus.FAILED
         # RETRY keeps IN_PROGRESS status
 
-        updated_milestones[idx] = update_milestone(
-            milestone,
-            qa_feedback=feedback,
-            status=new_status,
-        )
+        # Update milestone with QA result (only for legacy flow)
+        updated_milestones = None
+        if milestones:
+            updated_milestones = list(milestones)
+            updated_milestones[idx] = update_milestone(
+                milestone,
+                qa_feedback=feedback,
+                status=new_status,
+            )
 
         # Check for plan viability issues (ReAct replanning trigger)
         needs_replan = False
@@ -168,12 +214,16 @@ async def verify_qa_node(
             details=qa_details,
         )
 
+        # Build result with flow-specific fields
         result: dict[str, Any] = {
-            "milestones": updated_milestones,
             "current_qa_decision": decision.value,
             "current_qa_feedback": feedback,
             "plan_confidence": plan_confidence,
         }
+
+        # Include milestones only for legacy flow
+        if updated_milestones:
+            result["milestones"] = updated_milestones
 
         # Add replan trigger fields if plan viability is compromised
         if needs_replan:

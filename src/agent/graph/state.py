@@ -4,15 +4,13 @@ Immutable state structure for multi-agent orchestration.
 All updates should return new dicts, not mutate existing state.
 """
 
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 from uuid import UUID
 
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.db.models.project_plan import ProjectPlan
 from agent.llm import ChatMessage
 from agent.llm.schemas import PlanStatus
-
-if TYPE_CHECKING:
-    from agent.db.models.project_plan import ProjectPlan
 
 
 class MilestoneData(TypedDict):
