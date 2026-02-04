@@ -247,6 +247,7 @@ class Node(StrEnum):
     REPLAN = "replan"  # Dynamic plan modification
     RECOVERY = "recovery"  # Graceful failure recovery
     PLAN_REVIEW = "plan_review"  # Plan review breakpoint (Human-in-the-Loop)
+    EXECUTION_BREAKPOINT = "execution_breakpoint"  # Execution breakpoint for task-level pausing
 
 
 def get_breakpoint_service(config: RunnableConfig) -> BreakpointService:

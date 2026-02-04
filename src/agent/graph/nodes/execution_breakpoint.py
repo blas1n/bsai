@@ -6,7 +6,7 @@ based on BreakpointConfig settings.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 from langchain_core.runnables import RunnableConfig
@@ -16,12 +16,16 @@ from agent.graph.state import AgentState
 from agent.llm.schemas import BreakpointConfig
 from agent.services.breakpoint_service import BreakpointService
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 logger = structlog.get_logger()
 
 
 async def execution_breakpoint(
     state: AgentState,
     config: RunnableConfig,
+    session: AsyncSession,
 ) -> dict[str, Any]:
     """Check if execution should pause after current task.
 
@@ -31,10 +35,13 @@ async def execution_breakpoint(
     Args:
         state: Current graph state
         config: LangGraph RunnableConfig
+        session: Database session (unused but required for consistency)
 
     Returns:
         Updated state with breakpoint info
     """
+    # Session is passed for consistency with other nodes but not used
+    _ = session
     # Get breakpoint config from state or config
     configurable = config.get("configurable", {})
     breakpoint_service: BreakpointService | None = configurable.get("breakpoint_service")

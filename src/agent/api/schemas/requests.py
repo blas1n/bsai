@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from agent.llm.schemas import BreakpointConfig, QAConfig
+
 
 class SessionCreate(BaseModel):
     """Request schema for creating a new session."""
@@ -56,6 +58,14 @@ class TaskCreate(BaseModel):
     breakpoint_nodes: list[str] = Field(
         default_factory=lambda: ["qa_breakpoint"],
         description="List of node names to pause at. Use 'all' to pause at all breakpoints.",
+    )
+    breakpoint_config: BreakpointConfig | None = Field(
+        default=None,
+        description="Breakpoint configuration for execution control",
+    )
+    qa_config: QAConfig | None = Field(
+        default=None,
+        description="QA configuration for validation settings",
     )
 
 

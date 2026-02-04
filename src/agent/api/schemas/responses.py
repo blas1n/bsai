@@ -183,3 +183,62 @@ class ErrorResponse(BaseModel):
     detail: str | None = Field(default=None, description="Detailed error information")
     code: str = Field(description="Error code (e.g., HTTP_404)")
     request_id: str = Field(description="Request ID for tracking")
+
+
+class FeatureProgress(BaseModel):
+    """Progress information for a feature."""
+
+    id: str = Field(description="Feature ID")
+    title: str = Field(description="Feature title")
+    completed: int = Field(description="Number of completed tasks")
+    total: int = Field(description="Total number of tasks")
+    percent: float = Field(description="Completion percentage (0-100)")
+
+
+class EpicProgress(BaseModel):
+    """Progress information for an epic."""
+
+    id: str = Field(description="Epic ID")
+    title: str = Field(description="Epic title")
+    completed: int = Field(description="Number of completed tasks")
+    total: int = Field(description="Total number of tasks")
+    percent: float = Field(description="Completion percentage (0-100)")
+
+
+class ProgressResponse(BaseModel):
+    """Task progress response.
+
+    Returns progress information including:
+    - Overall completion percentage
+    - Task/Feature/Epic level progress
+    - Current breakpoint reason (if paused)
+    """
+
+    total_tasks: int = Field(description="Total number of tasks")
+    completed_tasks: int = Field(description="Number of completed tasks")
+    pending_tasks: int = Field(description="Number of pending tasks")
+    failed_tasks: int = Field(description="Number of failed tasks")
+    overall_percent: float = Field(description="Overall completion percentage (0-100)")
+    current_task: str | None = Field(
+        default=None,
+        description="Current task ID (if in progress)",
+    )
+    breakpoint_reason: str | None = Field(
+        default=None,
+        description="Reason for breakpoint pause (if paused)",
+    )
+    feature_progress: list[FeatureProgress] = Field(
+        default_factory=list,
+        description="Progress for each feature",
+    )
+    epic_progress: list[EpicProgress] = Field(
+        default_factory=list,
+        description="Progress for each epic",
+    )
+
+
+class ActionResponse(BaseModel):
+    """Generic action response."""
+
+    success: bool = Field(description="Whether the action was successful")
+    message: str = Field(description="Action result message")

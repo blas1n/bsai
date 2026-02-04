@@ -6,6 +6,7 @@ Handles task creation, retrieval, and status management.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -14,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
 from agent.api.schemas import (
     AgentStepResponse,
+    EpicProgress,
+    FeatureProgress,
     MilestoneDetailResponse,
     MilestoneResponse,
     PaginatedResponse,
@@ -30,6 +33,7 @@ from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.events import EventBus
+from agent.llm.schemas import BreakpointConfig
 from agent.services import BreakpointService
 
 from .executor import TaskExecutor
@@ -442,6 +446,98 @@ class TaskService:
 
         milestones = await self.milestone_repo.get_by_task_id(task_id)
         return [MilestoneResponse.model_validate(m) for m in milestones]
+
+    async def get_progress(
+        self,
+        task_id: UUID,
+        user_id: str,
+    ) -> dict[str, Any]:
+        """Get current task execution progress.
+
+        Returns progress information including:
+        - Overall completion percentage
+        - Task/Feature/Epic level progress
+        - Current breakpoint reason (if paused)
+
+        Args:
+            task_id: Task ID
+            user_id: User ID
+
+        Returns:
+            Progress dictionary compatible with ProgressResponse
+        """
+        await self._get_task_for_user(task_id, user_id)
+
+        # Get milestones for the task
+        milestones = await self.milestone_repo.get_by_task_id(task_id)
+
+        # Calculate progress
+        total_tasks = len(milestones)
+        completed_tasks = sum(1 for m in milestones if m.status == "passed")
+        pending_tasks = sum(1 for m in milestones if m.status == "pending")
+        failed_tasks = sum(1 for m in milestones if m.status == "failed")
+        in_progress_tasks = sum(1 for m in milestones if m.status == "in_progress")
+
+        # Calculate overall percentage
+        overall_percent = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+
+        # Find current task (first in_progress milestone)
+        current_task = None
+        for m in milestones:
+            if m.status == "in_progress":
+                current_task = str(m.id)
+                break
+
+        # Get breakpoint state
+        breakpoint_state = self.breakpoint_service.get_state(task_id)
+        breakpoint_reason = None
+        if breakpoint_state and breakpoint_state.get("paused"):
+            breakpoint_reason = breakpoint_state.get("reason", "Paused at breakpoint")
+
+        # For now, feature and epic progress are empty lists
+        # These would be populated from project_plan data if available
+        feature_progress: list[FeatureProgress] = []
+        epic_progress: list[EpicProgress] = []
+
+        return {
+            "total_tasks": total_tasks,
+            "completed_tasks": completed_tasks,
+            "pending_tasks": pending_tasks + in_progress_tasks,
+            "failed_tasks": failed_tasks,
+            "overall_percent": overall_percent,
+            "current_task": current_task,
+            "breakpoint_reason": breakpoint_reason,
+            "feature_progress": feature_progress,
+            "epic_progress": epic_progress,
+        }
+
+    async def update_breakpoint_config(
+        self,
+        task_id: UUID,
+        user_id: str,
+        config: BreakpointConfig,
+    ) -> None:
+        """Update breakpoint configuration during execution.
+
+        Allows changing breakpoint settings while task is running.
+
+        Args:
+            task_id: Task ID
+            user_id: User ID
+            config: New breakpoint configuration
+        """
+        await self._get_task_for_user(task_id, user_id)
+
+        # Update the breakpoint service configuration
+        self.breakpoint_service.update_config(config)
+
+        logger.info(
+            "breakpoint_config_updated",
+            task_id=str(task_id),
+            pause_level=config.pause_level,
+            pause_on_plan_review=config.pause_on_plan_review,
+            pause_on_failure=config.pause_on_failure,
+        )
 
     async def _get_task_for_user(
         self,

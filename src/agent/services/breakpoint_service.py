@@ -354,3 +354,35 @@ class BreakpointService:
         self._breakpoint_enabled.pop(task_uuid, None)
         self._paused_at.pop(task_uuid, None)
         logger.debug("breakpoint_task_cleanup", task_id=str(task_uuid))
+
+    def get_state(self, task_uuid: UUID) -> dict[str, Any] | None:
+        """Get current breakpoint state for a task.
+
+        Args:
+            task_uuid: Task UUID
+
+        Returns:
+            State dict with paused status and reason, or None if not paused
+        """
+        milestone_index = self._paused_at.get(task_uuid)
+        if milestone_index is not None:
+            return {
+                "paused": True,
+                "milestone_index": milestone_index,
+                "reason": f"Paused at milestone {milestone_index}",
+            }
+        return None
+
+    def update_config(self, config: BreakpointConfig) -> None:
+        """Update the breakpoint configuration.
+
+        Args:
+            config: New breakpoint configuration
+        """
+        self.config = config
+        logger.info(
+            "breakpoint_config_updated",
+            pause_level=config.pause_level,
+            pause_on_plan_review=config.pause_on_plan_review,
+            pause_on_failure=config.pause_on_failure,
+        )

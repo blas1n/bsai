@@ -49,6 +49,12 @@ from .nodes.analyze import analyze_task_node
 from .nodes.breakpoint import qa_breakpoint_node
 from .nodes.context import check_context_node, summarize_node
 from .nodes.execute import execute_worker_node
+from .nodes.execution_breakpoint import (
+    execution_breakpoint as execution_breakpoint_node,
+)
+from .nodes.execution_breakpoint import (
+    execution_breakpoint_router,
+)
 from .nodes.llm import generate_prompt_node, select_llm_node
 from .nodes.plan_review import plan_review_breakpoint, plan_review_router
 from .nodes.qa import verify_qa_node
@@ -113,6 +119,7 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
              -> select_llm -> [generate_prompt?]
              -> execute_worker -> verify_qa -> [retry/fail/next/replan]
              -> [replan -> select_llm]  (ReAct dynamic replanning)
+             -> execution_breakpoint -> [pause/continue]
              -> check_context -> [summarize?]
              -> advance -> [next_milestone/task_summary/retry]
              -> task_summary -> generate_response -> END
@@ -121,6 +128,10 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         - execute_worker: Plan approved, continue to execution
         - architect: Revision requested, regenerate plan
         - END: Plan rejected or workflow should end
+
+    Execution Breakpoint Router:
+        - advance: Continue to check_context -> advance flow
+        - END: Pause execution and wait for resume via API
 
     The task_summary node generates a summary of all milestones for:
     - Responder to create a complete user response
@@ -155,6 +166,7 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
         Node.GENERATE_RESPONSE: generate_response_node,
         Node.REPLAN: replan_node,
         Node.RECOVERY: recovery_node,
+        Node.EXECUTION_BREAKPOINT: execution_breakpoint_node,  # Execution breakpoint
     }
 
     # Add all nodes with session bound
@@ -205,14 +217,27 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     # then ADVANCE routes back to EXECUTE_WORKER via RETRY_MILESTONE
     # REPLAN triggers dynamic plan modification when QA detects plan viability issues
     # FAIL now routes to RECOVERY for graceful failure handling
+    # NEXT now routes to EXECUTION_BREAKPOINT for task-level pause control
     graph.add_conditional_edges(
         Node.VERIFY_QA,
         route_qa_decision,
         {
-            QARoute.NEXT: Node.CHECK_CONTEXT,
+            QARoute.NEXT: Node.EXECUTION_BREAKPOINT,  # Changed from CHECK_CONTEXT
             QARoute.RETRY: Node.ADVANCE,
             QARoute.FAIL: Node.RECOVERY,
             QARoute.REPLAN: Node.REPLAN,
+        },
+    )
+
+    # execution_breakpoint -> conditional routing
+    # - advance: Continue to check_context -> advance flow
+    # - END: Pause execution and wait for resume
+    graph.add_conditional_edges(
+        Node.EXECUTION_BREAKPOINT,
+        execution_breakpoint_router,
+        {
+            "advance": Node.CHECK_CONTEXT,
+            END: END,
         },
     )
 

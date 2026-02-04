@@ -18,12 +18,16 @@ from .requests import (
     TaskResume,
 )
 from .responses import (
+    ActionResponse,
     AgentStepResponse,
     ArtifactResponse,
+    EpicProgress,
     ErrorResponse,
+    FeatureProgress,
     MilestoneDetailResponse,
     MilestoneResponse,
     PaginatedResponse,
+    ProgressResponse,
     SessionDetailResponse,
     SessionResponse,
     SnapshotResponse,
@@ -54,6 +58,7 @@ __all__ = [
     "SnapshotCreate",
     "BulkSessionAction",
     # Responses
+    "ActionResponse",
     "AgentStepResponse",
     "SessionResponse",
     "SessionDetailResponse",
@@ -64,6 +69,9 @@ __all__ = [
     "SnapshotResponse",
     "ArtifactResponse",
     "PaginatedResponse",
+    "ProgressResponse",
+    "FeatureProgress",
+    "EpicProgress",
     "ErrorResponse",
     # Memory
     "MemoryResponse",
