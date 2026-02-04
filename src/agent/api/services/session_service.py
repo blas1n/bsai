@@ -228,8 +228,10 @@ class SessionService:
         if context_messages:
             await self._create_pause_snapshot(session_id, context_messages)
 
-        # Update session status
-        updated_session = await self.session_repo.pause_session(session_id)
+        # Business logic: mark session as paused
+        updated_session = await self.session_repo.update(
+            session_id, status=SessionStatus.PAUSED.value
+        )
         if updated_session is None:
             raise NotFoundError("Session", session_id)
         await self.db.commit()
@@ -349,7 +351,10 @@ class SessionService:
                 action="completed",
             )
 
-        closed_session = await self.session_repo.close_session(session_id)
+        # Business logic: mark session as completed
+        closed_session = await self.session_repo.update(
+            session_id, status=SessionStatus.COMPLETED.value
+        )
         if closed_session is None:
             raise NotFoundError("Session", session_id)
         await self.db.commit()

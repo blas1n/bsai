@@ -1,5 +1,6 @@
 """Agent services module."""
 
+from .agent_step_service import AgentStepService
 from .breakpoint_service import BreakpointService
 from .dependency_graph import DependencyGraph, TaskNode
 from .execution_engine import ExecutionEngine, ExecutionStatus
@@ -7,6 +8,7 @@ from .plan_service import InvalidPlanStateError, PlanNotFoundError, PlanService
 from .qa_runner import QARunner
 
 __all__ = [
+    "AgentStepService",
     "BreakpointService",
     "DependencyGraph",
     "ExecutionEngine",

@@ -93,42 +93,6 @@ class TaskRepository(BaseRepository[Task]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def update_status(self, task_id: UUID, status: str) -> Task | None:
-        """Update task status.
-
-        Args:
-            task_id: Task UUID
-            status: New status value
-
-        Returns:
-            Updated task or None if not found
-        """
-        return await self.update(task_id, status=status)
-
-    async def complete_task(self, task_id: UUID, final_result: str) -> Task | None:
-        """Mark task as completed with final result.
-
-        Args:
-            task_id: Task UUID
-            final_result: Final task output
-
-        Returns:
-            Updated task or None if not found
-        """
-        return await self.update(task_id, status="completed", final_result=final_result)
-
-    async def fail_task(self, task_id: UUID, error_message: str) -> Task | None:
-        """Mark task as failed with error message.
-
-        Args:
-            task_id: Task UUID
-            error_message: Error description
-
-        Returns:
-            Updated task or None if not found
-        """
-        return await self.update(task_id, status="failed", final_result=error_message)
-
     async def save_handover_context(self, task_id: UUID, handover_context: str) -> Task | None:
         """Save handover context for next task's Conductor.
 
