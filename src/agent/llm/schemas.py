@@ -410,6 +410,28 @@ class ExtendedQAOutput(BaseModel):
     build_result: BuildResult | None = None
 
 
+class QAResult(BaseModel):
+    """Comprehensive QA validation result."""
+
+    model_config = {"extra": "forbid"}
+
+    decision: Literal["PASS", "RETRY"]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+    # Static analysis
+    static_issues: list[str] = Field(default_factory=list)
+    static_suggestions: list[str] = Field(default_factory=list)
+
+    # Dynamic validation results
+    lint_result: LintResult | None = None
+    typecheck_result: TypecheckResult | None = None
+    test_result: TestResult | None = None
+    build_result: BuildResult | None = None
+
+    # Summary
+    summary: str = ""
+
+
 # =============================================================================
 # Architect Replanning Schemas
 # =============================================================================

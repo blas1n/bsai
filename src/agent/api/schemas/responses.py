@@ -242,3 +242,64 @@ class ActionResponse(BaseModel):
 
     success: bool = Field(description="Whether the action was successful")
     message: str = Field(description="Action result message")
+
+
+# =============================================================================
+# QA Result Response Models
+# =============================================================================
+
+
+class LintResultResponse(BaseModel):
+    """Lint result for API."""
+
+    success: bool = Field(description="Whether linting passed")
+    errors: int = Field(description="Number of lint errors")
+    warnings: int = Field(description="Number of lint warnings")
+    issues: list[str] = Field(default_factory=list, description="List of lint issues")
+
+
+class TypecheckResultResponse(BaseModel):
+    """Typecheck result for API."""
+
+    success: bool = Field(description="Whether type checking passed")
+    errors: int = Field(description="Number of type errors")
+    issues: list[str] = Field(default_factory=list, description="List of type check issues")
+
+
+class TestResultResponse(BaseModel):
+    """Test result for API."""
+
+    success: bool = Field(description="Whether all tests passed")
+    passed: int = Field(description="Number of passed tests")
+    failed: int = Field(description="Number of failed tests")
+    skipped: int = Field(description="Number of skipped tests")
+    total: int = Field(description="Total number of tests")
+    coverage: float | None = Field(default=None, description="Test coverage percentage")
+    failed_tests: list[str] = Field(default_factory=list, description="List of failed test names")
+
+
+class BuildResultResponse(BaseModel):
+    """Build result for API."""
+
+    success: bool = Field(description="Whether build succeeded")
+    error_message: str | None = Field(default=None, description="Build error message if failed")
+
+
+class QAResultResponse(BaseModel):
+    """API response for QA results."""
+
+    task_id: UUID = Field(description="Task UUID")
+    decision: str = Field(description="QA decision (PASS or RETRY)")
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence score (0.0-1.0)")
+    summary: str = Field(description="Summary of QA validation")
+
+    # Detailed results
+    static_analysis: dict[str, Any] | None = Field(
+        default=None, description="Static analysis results (issues and suggestions)"
+    )
+    lint: LintResultResponse | None = Field(default=None, description="Lint validation result")
+    typecheck: TypecheckResultResponse | None = Field(
+        default=None, description="Type check validation result"
+    )
+    test: TestResultResponse | None = Field(default=None, description="Test execution result")
+    build: BuildResultResponse | None = Field(default=None, description="Build verification result")

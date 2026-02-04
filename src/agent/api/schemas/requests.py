@@ -101,3 +101,22 @@ class TaskReject(BaseModel):
         max_length=1000,
         description="Optional reason for rejecting the task",
     )
+
+
+class QAConfigRequest(BaseModel):
+    """QA configuration update request."""
+
+    validations: list[Literal["static", "lint", "typecheck", "test", "build"]] = Field(
+        default=["static"],
+        description="Validation types to enable",
+    )
+    test_command: str | None = Field(default=None, description="Custom test command")
+    lint_command: str | None = Field(default=None, description="Custom lint command")
+    typecheck_command: str | None = Field(default=None, description="Custom typecheck command")
+    build_command: str | None = Field(default=None, description="Custom build command")
+    allow_lint_warnings: bool = Field(
+        default=True, description="Whether to allow lint warnings without failing"
+    )
+    require_all_tests_pass: bool = Field(
+        default=True, description="Whether all tests must pass for QA to pass"
+    )

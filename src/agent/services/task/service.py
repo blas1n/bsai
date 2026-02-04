@@ -33,7 +33,7 @@ from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.events import EventBus
-from agent.llm.schemas import BreakpointConfig
+from agent.llm.schemas import BreakpointConfig, QAConfig, QAResult
 from agent.services import BreakpointService
 
 from .executor import TaskExecutor
@@ -537,6 +537,136 @@ class TaskService:
             pause_level=config.pause_level,
             pause_on_plan_review=config.pause_on_plan_review,
             pause_on_failure=config.pause_on_failure,
+        )
+
+    async def get_qa_result(
+        self,
+        task_id: UUID,
+        user_id: str,
+    ) -> QAResult | None:
+        """Get QA validation results for a task.
+
+        Retrieves the most recent QA result from the task's milestones.
+        Returns None if no QA validation has been performed.
+
+        Args:
+            task_id: Task ID
+            user_id: User ID
+
+        Returns:
+            QAResult containing validation details, or None if not found
+        """
+        await self._get_task_for_user(task_id, user_id)
+
+        # Get the most recent milestone with QA result
+        milestones = await self.milestone_repo.get_by_task_id(task_id)
+
+        # Find the latest milestone with a QA result
+        latest_qa_milestone = None
+        for milestone in reversed(milestones):
+            if milestone.qa_result:
+                latest_qa_milestone = milestone
+                break
+
+        if latest_qa_milestone is None or not latest_qa_milestone.qa_result:
+            return None
+
+        # Parse the stored QA result
+        # The qa_result field stores the QA feedback as text
+        # We construct a QAResult from the available data
+        qa_text = latest_qa_milestone.qa_result
+
+        # Determine decision based on milestone status
+        if latest_qa_milestone.status == "passed":
+            decision = "PASS"
+        else:
+            decision = "RETRY"
+
+        # Parse issues and suggestions from the qa_text if available
+        static_issues: list[str] = []
+        static_suggestions: list[str] = []
+        summary = qa_text
+
+        # Try to extract structured data from qa_text
+        if "ISSUES FOUND" in qa_text:
+            # Extract issues section
+            parts = qa_text.split("ISSUES FOUND")
+            if len(parts) > 1:
+                issues_section = parts[1]
+                if "SUGGESTIONS" in issues_section:
+                    issues_part, suggestions_part = issues_section.split("SUGGESTIONS", 1)
+                else:
+                    issues_part = issues_section
+                    suggestions_part = ""
+
+                # Parse issue lines
+                for line in issues_part.split("\n"):
+                    line = line.strip()
+                    if line.startswith("- "):
+                        static_issues.append(line[2:])
+
+                # Parse suggestion lines
+                for line in suggestions_part.split("\n"):
+                    line = line.strip()
+                    if line.startswith("- "):
+                        static_suggestions.append(line[2:])
+
+        # Build QAResult
+        # For now, we don't have persisted dynamic validation results
+        # so those fields will be None
+        qa_result = QAResult(
+            decision=decision,  # type: ignore
+            confidence=0.8 if decision == "PASS" else 0.6,
+            static_issues=static_issues,
+            static_suggestions=static_suggestions,
+            summary=summary,
+            lint_result=None,
+            typecheck_result=None,
+            test_result=None,
+            build_result=None,
+        )
+
+        logger.debug(
+            "qa_result_retrieved",
+            task_id=str(task_id),
+            milestone_id=str(latest_qa_milestone.id),
+            decision=decision,
+        )
+
+        return qa_result
+
+    async def update_qa_config(
+        self,
+        task_id: UUID,
+        user_id: str,
+        config: QAConfig,
+    ) -> None:
+        """Update QA configuration for a task.
+
+        Updates the QA validation settings that will be used
+        for subsequent milestone validations.
+
+        Args:
+            task_id: Task ID
+            user_id: User ID
+            config: New QA configuration
+        """
+        await self._get_task_for_user(task_id, user_id)
+
+        # Store QA config in cache for the task
+        cache_key = f"task:{task_id}:qa_config"
+        await self.cache.client.setex(
+            cache_key,
+            3600,  # 1 hour TTL
+            config.model_dump_json(),
+        )
+
+        logger.info(
+            "qa_config_updated",
+            task_id=str(task_id),
+            validations=config.validations,
+            allow_lint_warnings=config.allow_lint_warnings,
+            require_all_tests_pass=config.require_all_tests_pass,
         )
 
     async def _get_task_for_user(

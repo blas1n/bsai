@@ -2,10 +2,10 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, status
 
 from agent.db.models.enums import TaskStatus
-from agent.llm.schemas import BreakpointConfig
+from agent.llm.schemas import BreakpointConfig, QAConfig
 
 from ..dependencies import (
     AppBreakpointService,
@@ -17,13 +17,19 @@ from ..dependencies import (
 )
 from ..schemas import (
     ActionResponse,
+    BuildResultResponse,
+    LintResultResponse,
     PaginatedResponse,
     ProgressResponse,
+    QAConfigRequest,
+    QAResultResponse,
     TaskCreate,
     TaskDetailResponse,
     TaskReject,
     TaskResponse,
     TaskResume,
+    TestResultResponse,
+    TypecheckResultResponse,
 )
 from ..services import TaskService
 
@@ -351,4 +357,166 @@ async def update_breakpoint_config(
     return ActionResponse(
         success=True,
         message="Breakpoint config updated",
+    )
+
+
+@router.get(
+    "/{task_id}/qa-results",
+    response_model=QAResultResponse,
+    summary="Get QA validation results",
+)
+async def get_qa_results(
+    session_id: UUID,
+    task_id: UUID,
+    db: DBSession,
+    cache: Cache,
+    event_bus: AppEventBus,
+    ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
+    user_id: CurrentUserId,
+) -> QAResultResponse:
+    """Get QA validation results for a task.
+
+    Returns detailed results of all QA validations including:
+    - Static analysis (LLM)
+    - Lint results
+    - Type check results
+    - Test results
+    - Build results
+
+    Args:
+        session_id: Session UUID (for URL consistency)
+        task_id: Task UUID
+        db: Database session
+        cache: Session cache
+        event_bus: EventBus for event-driven notifications
+        ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
+        user_id: Current user ID
+
+    Returns:
+        QA validation results
+    """
+    _ = session_id
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
+    qa_result = await service.get_qa_result(task_id, user_id)
+    if qa_result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="QA results not found",
+        )
+
+    return QAResultResponse(
+        task_id=task_id,
+        decision=qa_result.decision,
+        confidence=qa_result.confidence,
+        summary=qa_result.summary,
+        static_analysis=(
+            {
+                "issues": qa_result.static_issues,
+                "suggestions": qa_result.static_suggestions,
+            }
+            if qa_result.static_issues or qa_result.static_suggestions
+            else None
+        ),
+        lint=(
+            LintResultResponse(
+                success=qa_result.lint_result.success,
+                errors=qa_result.lint_result.errors,
+                warnings=qa_result.lint_result.warnings,
+                issues=qa_result.lint_result.issues,
+            )
+            if qa_result.lint_result
+            else None
+        ),
+        typecheck=(
+            TypecheckResultResponse(
+                success=qa_result.typecheck_result.success,
+                errors=qa_result.typecheck_result.errors,
+                issues=qa_result.typecheck_result.issues,
+            )
+            if qa_result.typecheck_result
+            else None
+        ),
+        test=(
+            TestResultResponse(
+                success=qa_result.test_result.success,
+                passed=qa_result.test_result.passed,
+                failed=qa_result.test_result.failed,
+                skipped=qa_result.test_result.skipped,
+                total=qa_result.test_result.total,
+                coverage=qa_result.test_result.coverage,
+                failed_tests=qa_result.test_result.failed_tests,
+            )
+            if qa_result.test_result
+            else None
+        ),
+        build=(
+            BuildResultResponse(
+                success=qa_result.build_result.success,
+                error_message=qa_result.build_result.error_message,
+            )
+            if qa_result.build_result
+            else None
+        ),
+    )
+
+
+@router.put(
+    "/{task_id}/qa-config",
+    response_model=ActionResponse,
+    summary="Update QA configuration",
+)
+async def update_qa_config(
+    session_id: UUID,
+    task_id: UUID,
+    config: QAConfigRequest,
+    db: DBSession,
+    cache: Cache,
+    event_bus: AppEventBus,
+    ws_manager: WSManager,
+    breakpoint_service: AppBreakpointService,
+    user_id: CurrentUserId,
+) -> ActionResponse:
+    """Update QA configuration for a task.
+
+    Allows changing which validations are enabled:
+    - STATIC: LLM-based analysis
+    - LINT: Code linting
+    - TYPECHECK: Type checking
+    - TEST: Test execution
+    - BUILD: Build verification
+
+    Args:
+        session_id: Session UUID (for URL consistency)
+        task_id: Task UUID
+        config: QA configuration request
+        db: Database session
+        cache: Session cache
+        event_bus: EventBus for event-driven notifications
+        ws_manager: WebSocket connection manager
+        breakpoint_service: BreakpointService for HITL workflows
+        user_id: Current user ID
+
+    Returns:
+        Success status
+    """
+    _ = session_id
+    service = TaskService(db, cache, event_bus, ws_manager, breakpoint_service)
+
+    # Convert QAConfigRequest to QAConfig
+    qa_config = QAConfig(
+        validations=config.validations,
+        test_command=config.test_command,
+        lint_command=config.lint_command,
+        typecheck_command=config.typecheck_command,
+        build_command=config.build_command,
+        allow_lint_warnings=config.allow_lint_warnings,
+        require_all_tests_pass=config.require_all_tests_pass,
+    )
+
+    await service.update_qa_config(task_id, user_id, qa_config)
+    return ActionResponse(
+        success=True,
+        message="QA config updated",
     )
