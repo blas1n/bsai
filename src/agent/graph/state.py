@@ -4,11 +4,15 @@ Immutable state structure for multi-agent orchestration.
 All updates should return new dicts, not mutate existing state.
 """
 
-from typing import Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 from uuid import UUID
 
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
 from agent.llm import ChatMessage
+from agent.llm.schemas import PlanStatus
+
+if TYPE_CHECKING:
+    from agent.db.models.project_plan import ProjectPlan
 
 
 class MilestoneData(TypedDict):
@@ -118,6 +122,10 @@ class AgentState(TypedDict):
     current_observations: NotRequired[list[str]]  # Observations from Worker
     needs_replan: NotRequired[bool]  # Flag set by QA when replan needed
     replan_reason: NotRequired[str | None]  # Why replan was triggered
+
+    # Project Plan (Architect agent output)
+    project_plan: NotRequired[ProjectPlan | None]  # Hierarchical project plan
+    plan_status: NotRequired[PlanStatus | None]  # Current plan status
 
     # Failure recovery fields
     strategy_retry_attempted: NotRequired[bool]  # Whether strategy retry has been attempted

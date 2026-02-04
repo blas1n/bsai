@@ -1,4 +1,8 @@
-"""Analyze task node for Conductor agent."""
+"""Analyze task node for Architect agent.
+
+This node uses the Architect agent to create hierarchical project plans
+and converts them to the legacy milestone format for compatibility.
+"""
 
 from __future__ import annotations
 
@@ -9,10 +13,12 @@ import structlog
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.core import ConductorAgent
+from agent.core import ArchitectAgent
 from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.db.models.project_plan import ProjectPlan
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.events import AgentActivityEvent, AgentStatus, EventType
+from agent.llm.schemas import PlanStatus
 from agent.memory import get_memory_context
 
 from ..state import AgentState, MilestoneData
@@ -21,15 +27,60 @@ from . import get_container, get_event_bus, get_memory_manager
 logger = structlog.get_logger()
 
 
+def _convert_plan_to_milestones(
+    plan: ProjectPlan,
+    sequence_offset: int = 0,
+) -> list[MilestoneData]:
+    """Convert ProjectPlan tasks to legacy milestone format.
+
+    Temporary compatibility layer for gradual migration.
+    Creates MilestoneData entries from the plan's task list.
+
+    Args:
+        plan: ProjectPlan database instance
+        sequence_offset: Offset for milestone numbering
+
+    Returns:
+        List of MilestoneData dictionaries
+    """
+    milestones: list[MilestoneData] = []
+    tasks: list[dict[str, Any]] = plan.plan_data.get("tasks", [])
+
+    for task in tasks:
+        # Parse complexity from string
+        complexity_str = task.get("complexity", "MODERATE")
+        try:
+            complexity = TaskComplexity[complexity_str]
+        except KeyError:
+            complexity = TaskComplexity.MODERATE
+
+        milestones.append(
+            MilestoneData(
+                id=uuid4(),  # Generate new UUID for milestone
+                description=task.get("description", ""),
+                complexity=complexity,
+                acceptance_criteria=task.get("acceptance_criteria", ""),
+                status=MilestoneStatus.PENDING,
+                selected_model=None,
+                generated_prompt=None,
+                worker_output=None,
+                qa_feedback=None,
+                retry_count=0,
+            )
+        )
+
+    return milestones
+
+
 async def analyze_task_node(
     state: AgentState,
     config: RunnableConfig,
     session: AsyncSession,
 ) -> dict[str, Any]:
-    """Analyze task and create milestones via Conductor.
+    """Analyze task and create project plan using Architect agent.
 
-    This is the entry node that breaks down the user request
-    into manageable milestones with complexity assessments.
+    This is the entry node that creates a hierarchical project plan
+    and converts it to milestones for the existing workflow.
 
     Args:
         state: Current workflow state
@@ -37,12 +88,12 @@ async def analyze_task_node(
         session: Database session (per-request)
 
     Returns:
-        Partial state with milestones list and initial status
+        Partial state with project_plan, milestones list and initial status
     """
     container = get_container(config)
     event_bus = get_event_bus(config)
 
-    # Emit conductor started event
+    # Emit architect started event
     await event_bus.emit(
         AgentActivityEvent(
             type=EventType.AGENT_STARTED,
@@ -50,9 +101,9 @@ async def analyze_task_node(
             task_id=state["task_id"],
             milestone_id=state["task_id"],  # Use task_id as placeholder
             sequence_number=0,
-            agent="conductor",
+            agent="architect",
             status=AgentStatus.STARTED,
-            message="Analyzing task and planning milestones",
+            message="Analyzing task and creating project plan",
         )
     )
 
@@ -66,7 +117,7 @@ async def analyze_task_node(
         )
 
         # Get handover context from previous task (passed via context_messages)
-        # This helps Conductor understand what was done in the previous task
+        # This helps Architect understand what was done in the previous task
         handover_context = None
         context_messages = state.get("context_messages", [])
         for msg in context_messages:
@@ -102,78 +153,53 @@ async def analyze_task_node(
                 await milestone_repo.delete(old_milestone.id)
             await session.commit()
 
-        conductor = ConductorAgent(
+        # Create Architect agent and generate project plan
+        architect = ArchitectAgent(
             llm_client=container.llm_client,
             router=container.router,
             prompt_manager=container.prompt_manager,
             session=session,
         )
 
-        # Pass sequence_offset to conductor so DB records have correct sequence numbers
-        milestones_raw = await conductor.analyze_and_plan(
+        # Create hierarchical project plan
+        project_plan = await architect.create_plan(
             task_id=state["task_id"],
+            session_id=state["session_id"],
             original_request=state["original_request"],
             memory_context=combined_context,
-            sequence_offset=sequence_offset,
+            project_context=None,  # TODO: Add project context support
         )
 
-        # Commit milestones to ensure they're persisted before subsequent nodes
-        # reference them (e.g., generate_prompt_node creates generated_prompts
-        # with milestone_id foreign key)
+        logger.info(
+            "project_plan_created",
+            task_id=str(state["task_id"]),
+            plan_id=str(project_plan.id),
+            structure_type=project_plan.structure_type,
+            total_tasks=project_plan.total_tasks,
+        )
+
+        # Convert plan to milestones for legacy compatibility
+        new_milestones = _convert_plan_to_milestones(project_plan, sequence_offset)
+
+        # Persist milestones to database for compatibility with existing flow
+        for i, milestone_data in enumerate(new_milestones):
+            db_milestone = await milestone_repo.create(
+                task_id=state["task_id"],
+                sequence_number=sequence_offset + i,
+                description=milestone_data["description"],
+                complexity=milestone_data["complexity"],
+                acceptance_criteria=milestone_data["acceptance_criteria"],
+            )
+            # Update milestone_data with actual DB ID
+            milestone_data["id"] = db_milestone.id
+
         await session.commit()
 
         logger.debug(
             "milestones_committed",
             task_id=str(state["task_id"]),
-            milestone_count=len(milestones_raw),
+            milestone_count=len(new_milestones),
         )
-
-        # Fetch persisted milestones from database to get actual IDs
-        db_milestones = await milestone_repo.get_by_task_id(state["task_id"])
-
-        logger.debug(
-            "milestones_fetched_from_db",
-            task_id=str(state["task_id"]),
-            fetched_count=len(db_milestones),
-            milestone_ids=[str(m.id) for m in db_milestones],
-        )
-
-        # Convert to MilestoneData format with actual DB IDs
-        new_milestones: list[MilestoneData] = []
-        for i, m in enumerate(milestones_raw):
-            # Get DB ID if available, otherwise generate a random UUID
-            # (this should rarely happen if conductor properly persists milestones)
-            if i < len(db_milestones):
-                db_id = db_milestones[i].id
-            else:
-                db_id = uuid4()
-                logger.warning(
-                    "milestone_missing_db_id",
-                    task_id=str(state["task_id"]),
-                    milestone_index=i,
-                    fallback_id=str(db_id),
-                    message="Generated fallback UUID - conductor may not have persisted milestone",
-                )
-
-            # Ensure complexity is TaskComplexity
-            complexity = m["complexity"]
-            if not isinstance(complexity, TaskComplexity):
-                complexity = TaskComplexity(complexity)
-
-            new_milestones.append(
-                MilestoneData(
-                    id=db_id,
-                    description=str(m["description"]),
-                    complexity=complexity,
-                    acceptance_criteria=str(m["acceptance_criteria"]),
-                    status=MilestoneStatus.PENDING,
-                    selected_model=None,
-                    generated_prompt=None,
-                    worker_output=None,
-                    qa_feedback=None,
-                    retry_count=0,
-                )
-            )
 
         # Combine existing milestones with new ones
         all_milestones = existing_milestones + new_milestones
@@ -181,6 +207,7 @@ async def analyze_task_node(
         logger.info(
             "analyze_task_complete",
             task_id=str(state["task_id"]),
+            plan_id=str(project_plan.id),
             new_milestone_count=len(new_milestones),
             total_milestone_count=len(all_milestones),
             sequence_offset=sequence_offset,
@@ -190,6 +217,8 @@ async def analyze_task_node(
 
         # Build milestone details for broadcast (only new milestones)
         milestone_details = {
+            "plan_id": str(project_plan.id),
+            "structure_type": project_plan.structure_type,
             "milestones": [
                 {
                     "index": sequence_offset + i + 1,  # Continue numbering from offset
@@ -202,10 +231,10 @@ async def analyze_task_node(
                     "acceptance_criteria": m["acceptance_criteria"],
                 }
                 for i, m in enumerate(new_milestones)
-            ]
+            ],
         }
 
-        # Emit conductor completed event with milestone details
+        # Emit architect completed event with milestone details
         await event_bus.emit(
             AgentActivityEvent(
                 type=EventType.AGENT_COMPLETED,
@@ -213,15 +242,19 @@ async def analyze_task_node(
                 task_id=state["task_id"],
                 milestone_id=state["task_id"],
                 sequence_number=0,
-                agent="conductor",
+                agent="architect",
                 status=AgentStatus.COMPLETED,
-                message=f"Created {len(new_milestones)} milestones (total: {len(all_milestones)})",
+                message=f"Created project plan with {len(new_milestones)} tasks (total: {len(all_milestones)})",
                 details=milestone_details,
             )
         )
 
-        # Return combined milestones, starting index after existing ones
+        # Return combined state including new project_plan fields
         return {
+            # New project plan fields
+            "project_plan": project_plan,
+            "plan_status": PlanStatus.DRAFT,
+            # Legacy compatibility: milestones for existing flow
             "milestones": all_milestones,
             "current_milestone_index": len(existing_milestones),  # Start at first new milestone
             "task_status": TaskStatus.IN_PROGRESS,
