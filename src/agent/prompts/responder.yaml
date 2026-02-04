@@ -56,3 +56,25 @@ failure_report_prompt: |
   % if has_partial_results:
   Make sure to highlight any usable partial results.
   % endif
+
+generate_response_with_summary: |
+  USER REQUEST:
+  ${original_request}
+
+  TASK SUMMARY:
+  ${task_summary}
+
+  WORKER OUTPUTS:
+  ${worker_output}
+
+  Create a ${language} response that:
+  1. Summarizes what was accomplished based on the task summary
+  2. Highlights any issues or failures from the task execution
+  3. Provides actionable next steps if applicable
+  4. Keeps the response concise and user-friendly
+
+  % if has_artifacts:
+  Mention that code/files are available in the Artifacts panel.
+  % endif
+
+  Focus on communicating the overall outcome and key results to the user.

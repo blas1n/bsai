@@ -29,6 +29,7 @@ class ResponderPrompts(str, Enum):
 
     SYSTEM_PROMPT = "system_prompt"
     GENERATE_RESPONSE = "generate_response"
+    GENERATE_RESPONSE_WITH_SUMMARY = "generate_response_with_summary"
     FAILURE_REPORT_PROMPT = "failure_report_prompt"
 
 
