@@ -2,6 +2,10 @@
 
 Immutable state structure for multi-agent orchestration.
 All updates should return new dicts, not mutate existing state.
+
+Simplified 7-node workflow:
+    architect -> plan_review -> execute_worker -> verify_qa
+        -> execution_breakpoint -> advance -> generate_response -> END
 """
 
 from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
@@ -34,10 +38,6 @@ class MilestoneData(TypedDict):
     qa_feedback: str | None
     retry_count: int
 
-    # ReAct replanning metadata (optional)
-    is_modified: NotRequired[bool]  # True if added/modified during replan
-    added_at_replan: NotRequired[int | None]  # Replan iteration when added (None = original)
-
 
 class AgentState(TypedDict):
     """Immutable state for LangGraph workflow.
@@ -54,9 +54,11 @@ class AgentState(TypedDict):
     5. Context Management - Memory and token tracking
     6. Error Tracking - Failure information
     7. Workflow Control - Execution flow flags
+    8. Project Plan - Architect output and HITL review
+    9. Parallel Execution - Dependency graph and execution status
     """
 
-    # Session context
+    # Session context (Required)
     session_id: UUID
     task_id: UUID
     user_id: str
@@ -68,7 +70,6 @@ class AgentState(TypedDict):
     # Milestones (list of MilestoneData)
     milestones: NotRequired[list[MilestoneData]]
     current_milestone_index: NotRequired[int]
-    milestone_sequence_offset: NotRequired[int]  # Offset for new milestone numbering
 
     # Current milestone processing state
     current_prompt: NotRequired[str | None]
@@ -88,9 +89,6 @@ class AgentState(TypedDict):
     total_output_tokens: NotRequired[int]
     total_cost_usd: NotRequired[str]  # Stored as string for JSON serialization
 
-    # Memory state
-    needs_compression: NotRequired[bool]
-
     # Error tracking
     error: NotRequired[str | None]
     error_node: NotRequired[str | None]
@@ -99,31 +97,15 @@ class AgentState(TypedDict):
     should_continue: NotRequired[bool]
     workflow_complete: NotRequired[bool]
 
-    # Task summary (from Task Summary agent)
-    task_summary: NotRequired[dict[str, Any]]
-
     # Final response (from Responder agent)
     final_response: NotRequired[str | None]
 
     # Observability
     trace_url: NotRequired[str]  # Langfuse trace URL (empty string if disabled)
 
-    # Breakpoint configuration (Human-in-the-Loop)
-    breakpoint_enabled: NotRequired[bool]  # Whether breakpoints are enabled
-    breakpoint_nodes: NotRequired[list[str]]  # List of node names to pause at
-    breakpoint_user_input: NotRequired[str | None]  # User input at breakpoint
-
     # Long-term memory (retrieved from past experiences)
     relevant_memories: NotRequired[list[dict[str, Any]]]  # Retrieved memories
     memory_context: NotRequired[str | None]  # Formatted memory context for LLM
-
-    # ReAct dynamic planning fields
-    plan_modifications: NotRequired[list[dict[str, Any]]]  # History of plan changes
-    replan_count: NotRequired[int]  # Number of replan iterations (max 3)
-    plan_confidence: NotRequired[float]  # 0.0-1.0 confidence in current plan
-    current_observations: NotRequired[list[str]]  # Observations from Worker
-    needs_replan: NotRequired[bool]  # Flag set by QA when replan needed
-    replan_reason: NotRequired[str | None]  # Why replan was triggered
 
     # Project Plan (Architect agent output)
     project_plan: NotRequired[ProjectPlan | None]  # Hierarchical project plan
@@ -134,11 +116,12 @@ class AgentState(TypedDict):
     revision_requested: NotRequired[bool]  # Whether user requested revision
     revision_feedback: NotRequired[str | None]  # User's revision feedback
 
-    # Failure recovery fields
-    strategy_retry_attempted: NotRequired[bool]  # Whether strategy retry has been attempted
-    failure_context: NotRequired[dict[str, Any]]  # Context for failure report generation
+    # Breakpoint configuration (Human-in-the-Loop)
+    breakpoint_enabled: NotRequired[bool]  # Whether breakpoints are enabled
+    breakpoint_nodes: NotRequired[list[str]]  # List of node names to pause at
+    breakpoint_user_input: NotRequired[str | None]  # User input at breakpoint
 
-    # Parallel execution fields (Task 6.3)
+    # Parallel execution fields
     dependency_graph: NotRequired[
         "DependencyGraph | None"
     ]  # Task dependency graph for parallel execution
@@ -170,9 +153,4 @@ def update_milestone(milestone: MilestoneData, **updates: Any) -> MilestoneData:
         qa_feedback=merged["qa_feedback"],
         retry_count=merged["retry_count"],
     )
-    # Add optional ReAct fields if present
-    if "is_modified" in merged:
-        result["is_modified"] = merged["is_modified"]
-    if "added_at_replan" in merged:
-        result["added_at_replan"] = merged["added_at_replan"]
     return result

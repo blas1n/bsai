@@ -41,13 +41,16 @@ class TaskComplexity(str, Enum):
 
 
 class AgentType(str, Enum):
-    """Agent types in the system."""
+    """Agent types in the simplified 7-node workflow.
 
-    CONDUCTOR = "conductor"
-    META_PROMPTER = "meta_prompter"
+    Workflow: architect -> plan_review -> execute_worker -> verify_qa
+        -> execution_breakpoint -> advance -> generate_response -> END
+    """
+
+    ARCHITECT = "architect"
     WORKER = "worker"
     QA = "qa"
-    SUMMARIZER = "summarizer"
+    RESPONDER = "responder"
 
 
 class SnapshotType(str, Enum):

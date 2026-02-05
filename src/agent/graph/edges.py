@@ -2,11 +2,13 @@
 
 These functions determine the next node based on current state.
 All functions are pure and synchronous for LangGraph compatibility.
+
+Simplified 7-node workflow:
+    architect -> plan_review -> execute_worker -> verify_qa
+        -> execution_breakpoint -> advance -> generate_response -> END
 """
 
 from enum import StrEnum
-
-from agent.db.models.enums import TaskComplexity
 
 from .state import AgentState
 
@@ -25,33 +27,12 @@ class QARoute(StrEnum):
     NEXT = "next"
 
 
-class PromptRoute(StrEnum):
-    """MetaPrompter routing options."""
-
-    GENERATE = "generate_prompt"
-    SKIP = "skip_prompt"
-
-
-class CompressionRoute(StrEnum):
-    """Context compression routing options."""
-
-    SUMMARIZE = "summarize"
-    SKIP = "skip_summarize"
-
-
 class AdvanceRoute(StrEnum):
     """Milestone advance routing options."""
 
     NEXT_MILESTONE = "next_milestone"
     COMPLETE = "complete"
     RETRY_MILESTONE = "retry_milestone"
-
-
-class RecoveryRoute(StrEnum):
-    """Recovery routing options."""
-
-    STRATEGY_RETRY = "strategy_retry"  # Try different strategy
-    FAILURE_REPORT = "failure_report"  # Generate failure report
 
 
 class PlanReviewRoute(StrEnum):
@@ -64,40 +45,6 @@ class PlanReviewRoute(StrEnum):
 
 # Maximum retry attempts for QA validation
 MAX_RETRIES = 3
-
-# Maximum replan iterations to prevent infinite loops
-# Note: This is a fallback default. The actual limit is configured via
-# AgentSettings.max_replan_iterations and enforced in replan_node.
-MAX_REPLAN_ITERATIONS = 3
-
-
-def should_use_meta_prompter(state: AgentState) -> PromptRoute:
-    """Determine if MetaPrompter should be used.
-
-    MetaPrompter is skipped for TRIVIAL and SIMPLE complexity tasks
-    as the overhead of prompt optimization is not worth it for simple tasks.
-
-    Args:
-        state: Current workflow state
-
-    Returns:
-        PromptRoute.GENERATE if MetaPrompter should run,
-        PromptRoute.SKIP to go directly to Worker
-    """
-    milestones = state.get("milestones")
-    idx = state.get("current_milestone_index")
-
-    if milestones is None or idx is None or idx >= len(milestones):
-        return PromptRoute.SKIP
-
-    milestone = milestones[idx]
-    complexity = milestone["complexity"]
-
-    # Skip for trivial/simple tasks
-    if complexity in (TaskComplexity.TRIVIAL, TaskComplexity.SIMPLE):
-        return PromptRoute.SKIP
-
-    return PromptRoute.GENERATE
 
 
 def route_qa_decision(state: AgentState) -> QARoute:
@@ -133,22 +80,6 @@ def route_qa_decision(state: AgentState) -> QARoute:
         return QARoute.RETRY
     else:
         return QARoute.FAIL
-
-
-def should_compress_context(state: AgentState) -> CompressionRoute:
-    """Determine if context compression is needed.
-
-    Checks the needs_compression flag set by check_context_node.
-
-    Args:
-        state: Current workflow state
-
-    Returns:
-        CompressionRoute.SUMMARIZE if compression needed, CompressionRoute.SKIP otherwise
-    """
-    if state.get("needs_compression", False):
-        return CompressionRoute.SUMMARIZE
-    return CompressionRoute.SKIP
 
 
 def route_advance(state: AgentState) -> AdvanceRoute:
@@ -187,25 +118,3 @@ def has_error(state: AgentState) -> bool:
         True if error exists in state
     """
     return state.get("error") is not None
-
-
-def route_recovery(state: AgentState) -> RecoveryRoute:
-    """Route after recovery node.
-
-    Determines whether to:
-    1. Retry with a different strategy (if not yet attempted)
-    2. Generate failure report (if strategy retry exhausted)
-
-    Args:
-        state: Current workflow state
-
-    Returns:
-        RecoveryRoute.STRATEGY_RETRY or RecoveryRoute.FAILURE_REPORT
-    """
-    # If strategy retry was successful (workflow_complete is False),
-    # route back to select_llm for the new strategy
-    if not state.get("workflow_complete", False):
-        return RecoveryRoute.STRATEGY_RETRY
-
-    # Otherwise, go to failure report
-    return RecoveryRoute.FAILURE_REPORT
