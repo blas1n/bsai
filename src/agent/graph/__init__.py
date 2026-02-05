@@ -11,7 +11,6 @@ Simplified 7-node workflow:
 Exports:
     State:
         - AgentState: Workflow state TypedDict
-        - MilestoneData: Milestone data structure
 
     Workflow:
         - build_workflow: Graph builder function
@@ -37,13 +36,12 @@ Example:
     ...     print(result["task_status"])
 """
 
-from .state import AgentState, MilestoneData
+from .state import AgentState
 from .workflow import WorkflowRunner, build_workflow, compile_workflow
 
 __all__ = [
     # State
     "AgentState",
-    "MilestoneData",
     # Workflow
     "build_workflow",
     "compile_workflow",

@@ -558,50 +558,6 @@ class QAAgent:
             worker_output=worker_output,
         )
 
-    def _parse_validation_response(
-        self,
-        response_content: str,
-    ) -> tuple[QADecision, str, QAOutput]:
-        """Parse QA validation response.
-
-        Args:
-            response_content: Raw LLM response (structured JSON)
-
-        Returns:
-            Tuple of (decision, formatted_feedback, raw_output):
-                - decision: QADecision enum
-                - formatted_feedback: Human-readable feedback string
-                - raw_output: Full QAOutput for plan viability info
-
-        Raises:
-            ValueError: If response validation fails
-        """
-        # Parse using Pydantic model
-        output = QAOutput.model_validate_json(response_content)
-
-        # Map decision string to enum
-        if output.decision == "PASS":
-            decision = QADecision.PASS
-        else:
-            decision = QADecision.RETRY
-
-        # Format feedback
-        feedback_parts = [output.feedback]
-
-        if decision == QADecision.RETRY and output.issues:
-            feedback_parts.append("\n\nISSUES FOUND:")
-            for issue in output.issues:
-                feedback_parts.append(f"- {issue}")
-
-        if decision == QADecision.RETRY and output.suggestions:
-            feedback_parts.append("\n\nSUGGESTIONS:")
-            for suggestion in output.suggestions:
-                feedback_parts.append(f"- {suggestion}")
-
-        formatted_feedback = "\n".join(feedback_parts)
-
-        return decision, formatted_feedback, output
-
     async def _update_milestone_status(
         self,
         milestone_id: UUID,

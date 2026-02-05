@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from agent.db.models.enums import TaskComplexity, TaskStatus
+from agent.db.models.enums import TaskStatus
 from agent.graph.nodes.analyze import analyze_task_node
 from agent.graph.state import AgentState
 from agent.llm.schemas import ChatMessage, PlanStatus
@@ -38,7 +38,6 @@ class TestAnalyzeTaskNode:
         """Test successful task analysis."""
         with (
             patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # Mock memory context retrieval
@@ -48,6 +47,7 @@ class TestAnalyzeTaskNode:
             mock_plan = create_mock_project_plan(
                 tasks=[
                     {
+                        "id": "T1",
                         "description": "Setup project",
                         "complexity": "SIMPLE",
                         "acceptance_criteria": "Project initialized",
@@ -59,20 +59,12 @@ class TestAnalyzeTaskNode:
             mock_architect.create_plan.return_value = mock_plan
             MockArchitect.return_value = mock_architect
 
-            mock_repo = AsyncMock()
-            mock_db_milestone = MagicMock()
-            mock_db_milestone.id = uuid4()
-            mock_repo.get_by_task_id.return_value = []  # No existing milestones
-            mock_repo.create.return_value = mock_db_milestone
-            MockMilestoneRepo.return_value = mock_repo
-
             result = await analyze_task_node(base_state, mock_config, mock_session)
 
-            assert len(result["milestones"]) == 1
-            assert result["current_milestone_index"] == 0
+            assert result["project_plan"] == mock_plan
+            assert result["current_task_id"] == "T1"
             assert result["task_status"] == TaskStatus.IN_PROGRESS
             assert result["retry_count"] == 0
-            assert result["project_plan"] == mock_plan
             assert result["plan_status"] == PlanStatus.DRAFT
 
     @pytest.mark.asyncio
@@ -85,16 +77,10 @@ class TestAnalyzeTaskNode:
         """Test error handling in analyze_task."""
         with (
             patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # Mock memory context retrieval
             mock_get_memory_context.return_value = ([], "")
-
-            # Mock milestone repo for cleanup check (no existing milestones)
-            mock_repo = AsyncMock()
-            mock_repo.get_by_task_id.return_value = []
-            MockMilestoneRepo.return_value = mock_repo
 
             mock_architect = AsyncMock()
             mock_architect.create_plan.side_effect = ValueError("LLM error")
@@ -124,7 +110,6 @@ class TestAnalyzeTaskNode:
 
         with (
             patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # Mock memory context retrieval with actual context
@@ -134,6 +119,7 @@ class TestAnalyzeTaskNode:
             mock_plan = create_mock_project_plan(
                 tasks=[
                     {
+                        "id": "T1",
                         "description": "Continue from previous",
                         "complexity": "MODERATE",
                         "acceptance_criteria": "Task completed",
@@ -145,13 +131,6 @@ class TestAnalyzeTaskNode:
             mock_architect.create_plan.return_value = mock_plan
             MockArchitect.return_value = mock_architect
 
-            mock_repo = AsyncMock()
-            mock_db_milestone = MagicMock()
-            mock_db_milestone.id = uuid4()
-            mock_repo.get_by_task_id.return_value = []
-            mock_repo.create.return_value = mock_db_milestone
-            MockMilestoneRepo.return_value = mock_repo
-
             result = await analyze_task_node(state_with_handover, mock_config, mock_session)
 
             # Verify architect was called with combined context
@@ -160,7 +139,7 @@ class TestAnalyzeTaskNode:
             assert "Context from previous task" in call_kwargs["memory_context"]
             assert "Related memory" in call_kwargs["memory_context"]
 
-            assert len(result["milestones"]) == 1
+            assert result["project_plan"] == mock_plan
             assert result["task_status"] == TaskStatus.IN_PROGRESS
 
     @pytest.mark.asyncio
@@ -179,16 +158,16 @@ class TestAnalyzeTaskNode:
 
         with (
             patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # No memory context, only handover
             mock_get_memory_context.return_value = ([], None)
 
-            # Create mock ProjectPlan with lowercase complexity string
+            # Create mock ProjectPlan
             mock_plan = create_mock_project_plan(
                 tasks=[
                     {
+                        "id": "T1",
                         "description": "Phase 2",
                         "complexity": "SIMPLE",
                         "acceptance_criteria": "Phase 2 done",
@@ -200,90 +179,77 @@ class TestAnalyzeTaskNode:
             mock_architect.create_plan.return_value = mock_plan
             MockArchitect.return_value = mock_architect
 
-            mock_repo = AsyncMock()
-            mock_db_milestone = MagicMock()
-            mock_db_milestone.id = uuid4()
-            mock_repo.get_by_task_id.return_value = []
-            mock_repo.create.return_value = mock_db_milestone
-            MockMilestoneRepo.return_value = mock_repo
-
             result = await analyze_task_node(state_with_handover, mock_config, mock_session)
 
             # Verify architect was called with handover context only
             call_kwargs = mock_architect.create_plan.call_args[1]
             assert "Context from previous task" in call_kwargs["memory_context"]
 
-            assert len(result["milestones"]) == 1
+            assert result["project_plan"] == mock_plan
 
     @pytest.mark.asyncio
-    async def test_complexity_string_conversion(
+    async def test_empty_tasks_list(
         self,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
     ) -> None:
-        """Test complexity string is converted to TaskComplexity enum."""
+        """Test handling empty tasks list."""
         with (
             patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             mock_get_memory_context.return_value = ([], "")
 
-            # Create mock ProjectPlan with COMPLEX complexity
-            mock_plan = create_mock_project_plan(
-                tasks=[
-                    {
-                        "description": "Complex task",
-                        "complexity": "COMPLEX",
-                        "acceptance_criteria": "Task done",
-                    }
-                ]
-            )
+            # Create mock ProjectPlan with empty tasks
+            mock_plan = create_mock_project_plan(tasks=[])
 
             mock_architect = AsyncMock()
             mock_architect.create_plan.return_value = mock_plan
             MockArchitect.return_value = mock_architect
 
-            mock_repo = AsyncMock()
-            mock_db_milestone = MagicMock()
-            mock_db_milestone.id = uuid4()
-            mock_repo.get_by_task_id.return_value = []
-            mock_repo.create.return_value = mock_db_milestone
-            MockMilestoneRepo.return_value = mock_repo
-
             result = await analyze_task_node(base_state, mock_config, mock_session)
 
-            assert len(result["milestones"]) == 1
-            assert result["milestones"][0]["complexity"] == TaskComplexity.COMPLEX
+            assert result["project_plan"] == mock_plan
+            assert result["current_task_id"] is None
+            assert result["task_status"] == TaskStatus.IN_PROGRESS
 
     @pytest.mark.asyncio
-    async def test_milestone_missing_db_id_fallback(
+    async def test_multiple_tasks(
         self,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
         base_state: AgentState,
     ) -> None:
-        """Test milestone creation with multiple tasks."""
+        """Test handling multiple tasks in plan."""
         with (
             patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             mock_get_memory_context.return_value = ([], "")
 
-            # Create mock ProjectPlan with 2 tasks
+            # Create mock ProjectPlan with 3 tasks
             mock_plan = create_mock_project_plan(
                 tasks=[
                     {
+                        "id": "T1",
                         "description": "Task 1",
                         "complexity": "SIMPLE",
                         "acceptance_criteria": "Done 1",
                     },
                     {
+                        "id": "T2",
                         "description": "Task 2",
                         "complexity": "MODERATE",
                         "acceptance_criteria": "Done 2",
+                        "depends_on": ["T1"],
+                    },
+                    {
+                        "id": "T3",
+                        "description": "Task 3",
+                        "complexity": "COMPLEX",
+                        "acceptance_criteria": "Done 3",
+                        "depends_on": ["T1", "T2"],
                     },
                 ]
             )
@@ -292,66 +258,12 @@ class TestAnalyzeTaskNode:
             mock_architect.create_plan.return_value = mock_plan
             MockArchitect.return_value = mock_architect
 
-            mock_repo = AsyncMock()
-            # Create returns different IDs for each milestone
-            mock_milestone_1 = MagicMock()
-            mock_milestone_1.id = uuid4()
-            mock_milestone_2 = MagicMock()
-            mock_milestone_2.id = uuid4()
-            mock_repo.get_by_task_id.return_value = []
-            mock_repo.create.side_effect = [mock_milestone_1, mock_milestone_2]
-            MockMilestoneRepo.return_value = mock_repo
-
             result = await analyze_task_node(base_state, mock_config, mock_session)
 
-            # Should create 2 milestones with proper IDs
-            assert len(result["milestones"]) == 2
-            assert result["milestones"][0]["id"] == mock_milestone_1.id
-            assert result["milestones"][1]["id"] == mock_milestone_2.id
-
-    @pytest.mark.asyncio
-    async def test_with_existing_milestones(
-        self,
-        mock_config: RunnableConfig,
-        mock_session: AsyncMock,
-        state_with_milestone: AgentState,
-    ) -> None:
-        """Test task analysis with existing milestones from previous tasks."""
-        with (
-            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
-            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
-        ):
-            mock_get_memory_context.return_value = ([], "")
-
-            # Create mock ProjectPlan
-            mock_plan = create_mock_project_plan(
-                tasks=[
-                    {
-                        "description": "New task",
-                        "complexity": "SIMPLE",
-                        "acceptance_criteria": "New task done",
-                    }
-                ]
-            )
-
-            mock_architect = AsyncMock()
-            mock_architect.create_plan.return_value = mock_plan
-            MockArchitect.return_value = mock_architect
-
-            mock_repo = AsyncMock()
-            mock_db_milestone = MagicMock()
-            mock_db_milestone.id = uuid4()
-            mock_repo.get_by_task_id.return_value = []
-            mock_repo.create.return_value = mock_db_milestone
-            MockMilestoneRepo.return_value = mock_repo
-
-            result = await analyze_task_node(state_with_milestone, mock_config, mock_session)
-
-            # Should have 2 milestones: 1 existing + 1 new
-            assert len(result["milestones"]) == 2
-            # Current index should point to first new milestone
-            assert result["current_milestone_index"] == 1
+            assert result["project_plan"] == mock_plan
+            # First task ID should be set
+            assert result["current_task_id"] == "T1"
+            assert result["task_status"] == TaskStatus.IN_PROGRESS
 
     @pytest.mark.asyncio
     async def test_with_only_memory_context(
@@ -363,7 +275,6 @@ class TestAnalyzeTaskNode:
         """Test task analysis with only memory context (no handover)."""
         with (
             patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.MilestoneRepository") as MockMilestoneRepo,
             patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # Only memory context, no handover
@@ -376,6 +287,7 @@ class TestAnalyzeTaskNode:
             mock_plan = create_mock_project_plan(
                 tasks=[
                     {
+                        "id": "T1",
                         "description": "Memory-informed task",
                         "complexity": "SIMPLE",
                         "acceptance_criteria": "Task done",
@@ -387,76 +299,54 @@ class TestAnalyzeTaskNode:
             mock_architect.create_plan.return_value = mock_plan
             MockArchitect.return_value = mock_architect
 
-            mock_repo = AsyncMock()
-            mock_db_milestone = MagicMock()
-            mock_db_milestone.id = uuid4()
-            mock_repo.get_by_task_id.return_value = []
-            mock_repo.create.return_value = mock_db_milestone
-            MockMilestoneRepo.return_value = mock_repo
-
             result = await analyze_task_node(base_state, mock_config, mock_session)
 
             # Verify architect was called with memory context
             call_kwargs = mock_architect.create_plan.call_args[1]
             assert call_kwargs["memory_context"] == "Relevant memory context here"
 
-            assert result["memory_context"] == "Relevant memory context here"
-            assert result["relevant_memories"] == [{"content": "memory1"}]
+            assert result["project_plan"] == mock_plan
 
+    @pytest.mark.asyncio
+    async def test_broadcasts_agent_events(
+        self,
+        mock_config: RunnableConfig,
+        mock_session: AsyncMock,
+        base_state: AgentState,
+        mock_event_bus: MagicMock,
+    ) -> None:
+        """Test that agent started and completed events are broadcast."""
+        with (
+            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
+            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+        ):
+            mock_get_memory_context.return_value = ([], "")
 
-class TestConvertPlanToMilestones:
-    """Tests for _convert_plan_to_milestones helper function."""
+            mock_plan = create_mock_project_plan(
+                tasks=[
+                    {
+                        "id": "T1",
+                        "description": "Task 1",
+                        "complexity": "SIMPLE",
+                        "acceptance_criteria": "Done",
+                    }
+                ]
+            )
 
-    def test_convert_empty_plan(self) -> None:
-        """Test converting empty plan."""
-        from agent.graph.nodes.analyze import _convert_plan_to_milestones
+            mock_architect = AsyncMock()
+            mock_architect.create_plan.return_value = mock_plan
+            MockArchitect.return_value = mock_architect
 
-        mock_plan = create_mock_project_plan(tasks=[])
-        result = _convert_plan_to_milestones(mock_plan)
-        assert result == []
+            await analyze_task_node(base_state, mock_config, mock_session)
 
-    def test_convert_plan_with_tasks(self) -> None:
-        """Test converting plan with tasks."""
-        from agent.graph.nodes.analyze import _convert_plan_to_milestones
+            # Verify event bus emit was called twice (started + completed)
+            assert mock_event_bus.emit.call_count == 2
 
-        mock_plan = create_mock_project_plan(
-            tasks=[
-                {
-                    "description": "Task 1",
-                    "complexity": "SIMPLE",
-                    "acceptance_criteria": "Done 1",
-                },
-                {
-                    "description": "Task 2",
-                    "complexity": "MODERATE",
-                    "acceptance_criteria": "Done 2",
-                },
-            ]
-        )
+            # Verify started event
+            started_event = mock_event_bus.emit.call_args_list[0][0][0]
+            assert started_event.agent == "architect"
 
-        result = _convert_plan_to_milestones(mock_plan)
-
-        assert len(result) == 2
-        assert result[0]["description"] == "Task 1"
-        assert result[0]["complexity"] == TaskComplexity.SIMPLE
-        assert result[1]["description"] == "Task 2"
-        assert result[1]["complexity"] == TaskComplexity.MODERATE
-
-    def test_convert_plan_with_invalid_complexity(self) -> None:
-        """Test converting plan with invalid complexity defaults to MODERATE."""
-        from agent.graph.nodes.analyze import _convert_plan_to_milestones
-
-        mock_plan = create_mock_project_plan(
-            tasks=[
-                {
-                    "description": "Task with invalid complexity",
-                    "complexity": "INVALID",
-                    "acceptance_criteria": "Done",
-                },
-            ]
-        )
-
-        result = _convert_plan_to_milestones(mock_plan)
-
-        assert len(result) == 1
-        assert result[0]["complexity"] == TaskComplexity.MODERATE
+            # Verify completed event
+            completed_event = mock_event_bus.emit.call_args_list[1][0][0]
+            assert completed_event.agent == "architect"
+            assert "plan_id" in completed_event.details

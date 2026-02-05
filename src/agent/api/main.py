@@ -25,7 +25,6 @@ from .routers import (
     health_router,
     mcp_router,
     memories_router,
-    milestones_router,
     plan_router,
     sessions_router,
     snapshots_router,
@@ -104,7 +103,7 @@ def create_app() -> FastAPI:
             {"name": "health", "description": "Health check endpoints"},
             {"name": "sessions", "description": "Session management"},
             {"name": "tasks", "description": "Task execution and management"},
-            {"name": "milestones", "description": "Session milestone tracking"},
+            {"name": "plan", "description": "Project plan management"},
             {"name": "snapshots", "description": "Memory snapshot management"},
             {"name": "mcp", "description": "MCP server configuration and tool logs"},
             {"name": "memories", "description": "Long-term episodic memory management"},
@@ -170,7 +169,6 @@ def create_app() -> FastAPI:
     # API routes
     app.include_router(sessions_router, prefix=api_prefix)
     app.include_router(tasks_router, prefix=api_prefix)
-    app.include_router(milestones_router, prefix=api_prefix)
     app.include_router(snapshots_router, prefix=api_prefix)
     app.include_router(artifacts_router, prefix=api_prefix)
     app.include_router(mcp_router, prefix=api_prefix)

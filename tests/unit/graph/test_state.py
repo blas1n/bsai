@@ -2,59 +2,15 @@
 
 from uuid import uuid4
 
-from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
-from agent.graph.state import AgentState, MilestoneData
-
-
-class TestMilestoneData:
-    """Tests for MilestoneData TypedDict."""
-
-    def test_create_milestone_data(self) -> None:
-        """Test creating a MilestoneData instance."""
-        milestone = MilestoneData(
-            id=uuid4(),
-            description="Setup project",
-            complexity=TaskComplexity.SIMPLE,
-            acceptance_criteria="Project initialized",
-            status=MilestoneStatus.PENDING,
-            selected_model=None,
-            generated_prompt=None,
-            worker_output=None,
-            qa_feedback=None,
-            retry_count=0,
-        )
-
-        assert milestone["description"] == "Setup project"
-        assert milestone["complexity"] == TaskComplexity.SIMPLE
-        assert milestone["status"] == MilestoneStatus.PENDING
-        assert milestone["retry_count"] == 0
-
-    def test_milestone_data_with_all_fields(self) -> None:
-        """Test MilestoneData with all fields populated."""
-        milestone = MilestoneData(
-            id=uuid4(),
-            description="Build feature",
-            complexity=TaskComplexity.COMPLEX,
-            acceptance_criteria="Feature works",
-            status=MilestoneStatus.PASSED,
-            selected_model="gpt-4o",
-            generated_prompt="Optimized prompt text",
-            worker_output="Feature implementation",
-            qa_feedback="Looks good",
-            retry_count=1,
-        )
-
-        assert milestone["selected_model"] == "gpt-4o"
-        assert milestone["generated_prompt"] == "Optimized prompt text"
-        assert milestone["worker_output"] == "Feature implementation"
-        assert milestone["qa_feedback"] == "Looks good"
+from agent.db.models.enums import TaskStatus
+from agent.graph.state import AgentState
 
 
 class TestAgentState:
     """Tests for AgentState TypedDict."""
 
     def test_create_minimal_state(self) -> None:
-        """Test creating AgentState with minimal fields."""
+        """Test creating AgentState with minimal required fields."""
         state: AgentState = {
             "session_id": uuid4(),
             "task_id": uuid4(),
@@ -70,28 +26,15 @@ class TestAgentState:
         session_id = uuid4()
         task_id = uuid4()
 
-        milestone = MilestoneData(
-            id=uuid4(),
-            description="Setup",
-            complexity=TaskComplexity.SIMPLE,
-            acceptance_criteria="Done",
-            status=MilestoneStatus.PENDING,
-            selected_model=None,
-            generated_prompt=None,
-            worker_output=None,
-            qa_feedback=None,
-            retry_count=0,
-        )
-
         state: AgentState = {
             "session_id": session_id,
             "task_id": task_id,
             "user_id": "test-user",
             "original_request": "Build something",
             "task_status": TaskStatus.IN_PROGRESS,
-            "milestones": [milestone],
-            "current_milestone_index": 0,
-            "current_prompt": None,
+            "project_plan": None,
+            "plan_status": None,
+            "current_task_id": "T1",
             "current_output": None,
             "current_qa_decision": None,
             "current_qa_feedback": None,
@@ -100,7 +43,6 @@ class TestAgentState:
             "context_summary": None,
             "current_context_tokens": 0,
             "max_context_tokens": 100000,
-            "needs_compression": False,
             "error": None,
             "error_node": None,
             "should_continue": True,
@@ -109,7 +51,6 @@ class TestAgentState:
 
         assert state["session_id"] == session_id
         assert state["task_status"] == TaskStatus.IN_PROGRESS
-        assert len(state["milestones"]) == 1
         assert state["max_context_tokens"] == 100000
         assert state["workflow_complete"] is False
 
@@ -137,57 +78,86 @@ class TestAgentState:
         assert merged["current_qa_decision"] == "retry"
         assert merged["original_request"] == "Test"
 
-    def test_immutable_pattern(self) -> None:
-        """Test that state updates create new dicts (immutable pattern)."""
-        milestone = MilestoneData(
-            id=uuid4(),
-            description="Test",
-            complexity=TaskComplexity.SIMPLE,
-            acceptance_criteria="Done",
-            status=MilestoneStatus.PENDING,
-            selected_model=None,
-            generated_prompt=None,
-            worker_output=None,
-            qa_feedback=None,
-            retry_count=0,
-        )
+    def test_state_with_project_plan(self) -> None:
+        """Test state with project plan fields."""
+        from unittest.mock import MagicMock
+
+        mock_plan = MagicMock()
+        mock_plan.id = uuid4()
+        mock_plan.plan_data = {"tasks": [{"id": "T1", "description": "Task 1"}]}
 
         state: AgentState = {
             "session_id": uuid4(),
             "task_id": uuid4(),
             "user_id": "test-user",
-            "original_request": "Test",
-            "milestones": [milestone],
-            "current_milestone_index": 0,
+            "original_request": "Build something",
+            "project_plan": mock_plan,
+            "current_task_id": "T1",
         }
 
-        # Create updated milestone (immutable pattern)
-        updated_milestone = MilestoneData(
-            id=milestone["id"],
-            description=milestone["description"],
-            complexity=milestone["complexity"],
-            acceptance_criteria=milestone["acceptance_criteria"],
-            status=MilestoneStatus.IN_PROGRESS,
-            selected_model=milestone["selected_model"],
-            generated_prompt=milestone["generated_prompt"],
-            worker_output=milestone["worker_output"],
-            qa_feedback=milestone["qa_feedback"],
-            retry_count=milestone["retry_count"],
-        )
+        assert state["project_plan"] is mock_plan
+        assert state["current_task_id"] == "T1"
 
-        updated_milestones = list(state["milestones"])
-        updated_milestones[0] = updated_milestone
+    def test_state_with_dependency_graph(self) -> None:
+        """Test state with dependency graph fields."""
+        from unittest.mock import MagicMock
 
-        new_state: AgentState = {
-            "session_id": state["session_id"],
-            "task_id": state["task_id"],
-            "user_id": state["user_id"],
-            "original_request": state["original_request"],
-            "milestones": updated_milestones,
-            "current_milestone_index": state["current_milestone_index"],
+        mock_graph = MagicMock()
+
+        state: AgentState = {
+            "session_id": uuid4(),
+            "task_id": uuid4(),
+            "user_id": "test-user",
+            "original_request": "Build something",
+            "dependency_graph": mock_graph,
+            "ready_tasks": ["T1", "T2"],
         }
 
-        # Original state should be unchanged
-        assert state["milestones"][0]["status"] == MilestoneStatus.PENDING
-        # New state should have the update
-        assert new_state["milestones"][0]["status"] == MilestoneStatus.IN_PROGRESS
+        assert state["dependency_graph"] is mock_graph
+        assert state["ready_tasks"] == ["T1", "T2"]
+
+    def test_state_with_plan_review_fields(self) -> None:
+        """Test state with plan review (human-in-the-loop) fields."""
+        state: AgentState = {
+            "session_id": uuid4(),
+            "task_id": uuid4(),
+            "user_id": "test-user",
+            "original_request": "Build something",
+            "waiting_for_plan_review": True,
+            "revision_requested": False,
+            "revision_feedback": None,
+        }
+
+        assert state["waiting_for_plan_review"] is True
+        assert state["revision_requested"] is False
+
+    def test_state_with_breakpoint_fields(self) -> None:
+        """Test state with breakpoint configuration fields."""
+        state: AgentState = {
+            "session_id": uuid4(),
+            "task_id": uuid4(),
+            "user_id": "test-user",
+            "original_request": "Build something",
+            "breakpoint_enabled": True,
+            "breakpoint_nodes": ["verify_qa", "execute_worker"],
+            "breakpoint_user_input": None,
+        }
+
+        assert state["breakpoint_enabled"] is True
+        assert "verify_qa" in state["breakpoint_nodes"]
+
+    def test_state_with_cost_tracking(self) -> None:
+        """Test state with token and cost tracking fields."""
+        state: AgentState = {
+            "session_id": uuid4(),
+            "task_id": uuid4(),
+            "user_id": "test-user",
+            "original_request": "Build something",
+            "total_input_tokens": 1000,
+            "total_output_tokens": 500,
+            "total_cost_usd": "0.0150",
+        }
+
+        assert state["total_input_tokens"] == 1000
+        assert state["total_output_tokens"] == 500
+        assert state["total_cost_usd"] == "0.0150"

@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.core import ResponderAgent
+from agent.graph.utils import get_tasks_from_plan
 
 from ..state import AgentState
 from . import NodeContext
@@ -23,7 +24,7 @@ async def generate_response_node(
 ) -> dict[str, Any]:
     """Generate final user-facing response via Responder agent.
 
-    Called after all milestones are complete to create a clean,
+    Called after all tasks are complete to create a clean,
     localized response for the user.
 
     Args:
@@ -77,7 +78,7 @@ async def generate_response_node(
                 "final_response": f"Task could not be completed. Error: {state.get('error', 'Unknown error')}",
             }
 
-    # If there was an error without failure_context (legacy path)
+    # If there was an error without failure_context
     if state.get("error"):
         error_msg = state.get("error", "Task failed or was cancelled")
         logger.info(
@@ -107,17 +108,8 @@ async def generate_response_node(
             session=session,
         )
 
-        # Get worker output from milestones
-        milestones = state.get("milestones", [])
-        worker_output = ""
-        if milestones:
-            # Combine outputs from all completed milestones
-            worker_output_parts = []
-            for milestone in milestones:
-                output = milestone.get("worker_output")
-                if output:
-                    worker_output_parts.append(f"## {milestone['description']}\n{output}")
-            worker_output = "\n\n".join(worker_output_parts) if worker_output_parts else ""
+        # Get worker output from project plan tasks
+        worker_output = _get_worker_output_from_plan(state)
         has_artifacts = bool(worker_output and "```" in worker_output)
 
         # Generate clean response
@@ -158,12 +150,38 @@ async def generate_response_node(
     except Exception as e:
         logger.error("generate_response_failed", error=str(e))
         # Fallback to worker output if responder fails
-        milestones = state.get("milestones", [])
-        fallback = "Task completed."
-        if milestones:
-            fallback = milestones[-1].get("worker_output") or "Task completed."
+        fallback = _get_worker_output_from_plan(state) or "Task completed."
         return {
             "final_response": fallback,
             "error": str(e),
             "error_node": "generate_response",
         }
+
+
+def _get_worker_output_from_plan(state: AgentState) -> str:
+    """Extract worker output from project plan tasks.
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        Combined worker output from all completed tasks
+    """
+    project_plan = state.get("project_plan")
+    if not project_plan:
+        return ""
+
+    tasks = get_tasks_from_plan(project_plan)
+    if not tasks:
+        return ""
+
+    # Combine outputs from all completed tasks
+    worker_output_parts = []
+    for task in tasks:
+        if task.get("status") == "completed":
+            output = task.get("worker_output")
+            if output:
+                description = task.get("description", task.get("id", "Task"))
+                worker_output_parts.append(f"## {description}\n{output}")
+
+    return "\n\n".join(worker_output_parts) if worker_output_parts else ""

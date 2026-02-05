@@ -24,9 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.api.websocket.manager import ConnectionManager
 from agent.cache import SessionCache
 from agent.container import lifespan
-from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.db.models.enums import TaskStatus
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
-from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.events import EventBus
@@ -54,7 +53,7 @@ from .nodes.execution_breakpoint import (
 from .nodes.plan_review import plan_review_breakpoint, plan_review_router
 from .nodes.qa import verify_qa_node
 from .nodes.response import generate_response_node
-from .state import AgentState, MilestoneData
+from .state import AgentState
 
 if TYPE_CHECKING:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -280,67 +279,6 @@ class WorkflowRunner:
         self.breakpoint_service = breakpoint_service
         self._tracer = get_langfuse_tracer()
 
-    async def _load_previous_milestones(
-        self,
-        session_id: UUID,
-    ) -> tuple[list[MilestoneData], int]:
-        """Load previous milestones from session for continuity.
-
-        Args:
-            session_id: Session UUID
-
-        Returns:
-            Tuple of (milestones_data, next_sequence_number)
-        """
-        # Map QADecision values to MilestoneStatus
-        status_mapping = {
-            "pass": MilestoneStatus.PASSED,
-            "retry": MilestoneStatus.IN_PROGRESS,
-            "fail": MilestoneStatus.FAILED,
-        }
-
-        milestone_repo = MilestoneRepository(self.session)
-        db_milestones = await milestone_repo.get_by_session_id(session_id)
-
-        milestones: list[MilestoneData] = []
-        for m in db_milestones:
-            # Convert DB model to MilestoneData
-            complexity = m.complexity
-            if isinstance(complexity, str):
-                complexity = TaskComplexity(complexity)
-
-            status = m.status
-            if isinstance(status, str):
-                # Try mapping from QADecision values first, then MilestoneStatus
-                status = status_mapping.get(status) or MilestoneStatus(status)
-
-            milestones.append(
-                MilestoneData(
-                    id=m.id,
-                    description=m.description,
-                    complexity=complexity,
-                    acceptance_criteria=m.acceptance_criteria or "",
-                    status=status,
-                    selected_model=m.selected_llm or None,
-                    generated_prompt=None,
-                    worker_output=m.worker_output,
-                    qa_feedback=m.qa_result,
-                    retry_count=m.retry_count,
-                )
-            )
-
-        # Get max sequence number for next milestone numbering
-        max_seq = await milestone_repo.get_max_sequence_for_session(session_id)
-
-        logger.info(
-            "previous_milestones_loaded",
-            session_id=str(session_id),
-            milestone_count=len(milestones),
-            max_sequence=max_seq,
-        )
-
-        return milestones, max_seq
-
     async def _load_previous_context(
         self,
         session_id: UUID,
@@ -478,11 +416,10 @@ class WorkflowRunner:
             raise ValueError(f"Session {session_id} not found")
         user_id = session.user_id or "unknown"
 
-        # Load previous context and milestones from same session
+        # Load previous context from same session
         context_messages, context_summary, context_tokens = await self._load_previous_context(
             session_id
         )
-        previous_milestones, max_sequence = await self._load_previous_milestones(session_id)
 
         # Load handover context from previous completed task (if any)
         previous_task_handover = await self._load_previous_task_handover(session_id)
@@ -502,22 +439,18 @@ class WorkflowRunner:
             trace_name=f"task-{task_id}",
             metadata={
                 "original_request": original_request[:500],
-                "previous_milestone_count": len(previous_milestones),
             },
             tags=["bsai", "langgraph", "multi-agent"],
         )
         trace_url = self.get_trace_url(task_id)
 
-        # Build initial state with previous context and milestones
+        # Build initial state with previous context
         initial_state: AgentState = {
             "session_id": session_id,
             "task_id": task_id,
             "user_id": user_id,
             "original_request": original_request,
             "task_status": TaskStatus.PENDING,
-            "milestones": previous_milestones,
-            "current_milestone_index": len(previous_milestones),
-            "milestone_sequence_offset": max_sequence,
             "retry_count": 0,
             "context_messages": context_messages,
             "context_summary": context_summary,
@@ -526,7 +459,6 @@ class WorkflowRunner:
             "total_input_tokens": 0,
             "total_output_tokens": 0,
             "total_cost_usd": "0",
-            "needs_compression": False,
             "workflow_complete": False,
             "should_continue": True,
             "breakpoint_enabled": breakpoint_enabled,
@@ -538,7 +470,6 @@ class WorkflowRunner:
             session_id=str(session_id),
             task_id=str(task_id),
             has_previous_context=len(context_messages) > 0,
-            previous_milestone_count=len(previous_milestones),
             has_handover_context=previous_task_handover is not None,
             trace_url=trace_url,
             tracing_enabled=langfuse_callback is not None,

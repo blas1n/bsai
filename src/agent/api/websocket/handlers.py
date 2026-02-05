@@ -13,7 +13,7 @@ from agent.db.session import get_db_session
 from agent.services import BreakpointService
 
 from ..auth import authenticate_websocket
-from ..schemas import (
+from ..schemas.websocket import (
     WSMessage,
     WSMessageType,
 )

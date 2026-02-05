@@ -1,19 +1,13 @@
 import { TaskComplexity, MilestoneStatus } from './session';
 import { AgentDetails, ArtifactData } from './websocket';
 
-// Agent types in the workflow
+// Agent types in the workflow (simplified 4-agent architecture)
 export type AgentType =
-  | 'conductor'
-  | 'meta_prompter'
+  | 'architect'
   | 'worker'
   | 'qa'
-  | 'summarizer'
   | 'responder'
-  | 'advance'
-  | 'recovery'
-  | 'replan'
-  | 'artifact_extractor'
-  | 'task_summary';
+  | 'advance';
 
 // Re-export for convenience
 export type { ArtifactData } from './websocket';
@@ -139,19 +133,13 @@ export interface ChatState {
   stats: SessionStats;
 }
 
-// Agent display info
+// Agent display info (simplified 4-agent architecture)
 export const AGENT_DISPLAY: Record<AgentType, { label: string; color: string; icon: string }> = {
-  conductor: { label: 'Conductor', color: 'blue', icon: '🎯' },
-  meta_prompter: { label: 'Meta Prompter', color: 'purple', icon: '✨' },
+  architect: { label: 'Architect', color: 'blue', icon: '🎯' },
   worker: { label: 'Worker', color: 'green', icon: '⚙️' },
   qa: { label: 'QA Agent', color: 'orange', icon: '✓' },
-  summarizer: { label: 'Summarizer', color: 'gray', icon: '📝' },
   responder: { label: 'Responder', color: 'teal', icon: '💬' },
   advance: { label: 'Advance', color: 'indigo', icon: '➡️' },
-  recovery: { label: 'Recovery', color: 'red', icon: '🔄' },
-  replan: { label: 'Replan', color: 'amber', icon: '📋' },
-  artifact_extractor: { label: 'Artifact Extractor', color: 'cyan', icon: '📦' },
-  task_summary: { label: 'Task Summary', color: 'lime', icon: '📊' },
 };
 
 // Complexity display info

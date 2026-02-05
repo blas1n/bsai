@@ -8,7 +8,7 @@ import pytest
 
 from agent.api.websocket.manager import ConnectionManager
 from agent.cache import SessionCache
-from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.db.models.enums import TaskStatus
 from agent.events.bus import EventBus
 from agent.graph.nodes import Node
 from agent.graph.workflow import (
@@ -71,9 +71,29 @@ class TestBuildWorkflow:
         """Test that graph has all required nodes."""
         graph = build_workflow(mock_session)
 
-        # Check all nodes are present (using Node enum)
-        for node in Node:
+        # Active nodes in the simplified 7-node workflow
+        active_nodes = {
+            Node.ANALYZE_TASK,
+            Node.PLAN_REVIEW,
+            Node.EXECUTE_WORKER,
+            Node.VERIFY_QA,
+            Node.EXECUTION_BREAKPOINT,
+            Node.ADVANCE,
+            Node.GENERATE_RESPONSE,
+        }
+
+        # Check all active nodes are present
+        for node in active_nodes:
             assert node in graph.nodes, f"Missing node: {node}"
+
+        # Deprecated nodes should NOT be in the graph
+        deprecated_nodes = {
+            Node.SELECT_LLM,
+            Node.GENERATE_PROMPT,
+            Node.QA_BREAKPOINT,
+        }
+        for node in deprecated_nodes:
+            assert node not in graph.nodes, f"Deprecated node should not be in graph: {node}"
 
 
 class TestCompileWorkflow:
@@ -173,12 +193,6 @@ class TestWorkflowRunner:
             ),
             patch.object(
                 WorkflowRunner,
-                "_load_previous_milestones",
-                new_callable=AsyncMock,
-                return_value=([], 0),
-            ),
-            patch.object(
-                WorkflowRunner,
                 "_load_previous_task_handover",
                 new_callable=AsyncMock,
                 return_value=None,
@@ -261,12 +275,6 @@ class TestWorkflowRunner:
             ),
             patch.object(
                 WorkflowRunner,
-                "_load_previous_milestones",
-                new_callable=AsyncMock,
-                return_value=([], 0),
-            ),
-            patch.object(
-                WorkflowRunner,
                 "_load_previous_task_handover",
                 new_callable=AsyncMock,
                 return_value=None,
@@ -325,253 +333,6 @@ class TestWorkflowRunner:
             assert isinstance(call_args["task_id"], UUID)
 
     @pytest.mark.asyncio
-    async def test_run_with_custom_max_tokens(
-        self,
-        mock_session: AsyncMock,
-        mock_ws_manager: MagicMock,
-        mock_cache: MagicMock,
-        mock_event_bus: MagicMock,
-        mock_breakpoint_service: MagicMock,
-    ) -> None:
-        """Test that run accepts custom max_context_tokens."""
-        with (
-            patch("agent.graph.workflow.lifespan") as mock_lifespan,
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
-            patch.object(
-                WorkflowRunner,
-                "_load_previous_context",
-                new_callable=AsyncMock,
-                return_value=([], None, 0),
-            ),
-            patch.object(
-                WorkflowRunner,
-                "_load_previous_milestones",
-                new_callable=AsyncMock,
-                return_value=([], 0),
-            ),
-            patch.object(
-                WorkflowRunner,
-                "_load_previous_task_handover",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-        ):
-            mock_container = MagicMock()
-            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
-            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            # Setup mock checkpointer context manager
-            mock_checkpointer = MagicMock()
-            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
-                return_value=mock_checkpointer
-            )
-            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            # Setup mock session repository
-            mock_session_obj = MagicMock()
-            mock_session_obj.user_id = "test-user-123"
-            mock_session_repo = MagicMock()
-            mock_session_repo.get_by_id = AsyncMock(return_value=mock_session_obj)
-            mock_session_repo_class.return_value = mock_session_repo
-
-            mock_compiled = MagicMock()
-            mock_compiled.ainvoke = AsyncMock(
-                return_value={
-                    "task_status": TaskStatus.COMPLETED,
-                }
-            )
-            # Mock aget_state
-            mock_graph_state = MagicMock()
-            mock_graph_state.next = ()
-            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
-            mock_compile.return_value = mock_compiled
-
-            runner = WorkflowRunner(
-                mock_session,
-                ws_manager=mock_ws_manager,
-                cache=mock_cache,
-                event_bus=mock_event_bus,
-                breakpoint_service=mock_breakpoint_service,
-            )
-
-            await runner.run(
-                session_id=str(uuid4()),
-                task_id=str(uuid4()),
-                original_request="Test request",
-                max_context_tokens=50000,
-            )
-
-            call_args = mock_compiled.ainvoke.call_args[0][0]
-            assert call_args["max_context_tokens"] == 50000
-
-    @pytest.mark.asyncio
-    async def test_run_passes_container_in_config(
-        self,
-        mock_session: AsyncMock,
-        mock_ws_manager: MagicMock,
-        mock_cache: MagicMock,
-        mock_event_bus: MagicMock,
-        mock_breakpoint_service: MagicMock,
-    ) -> None:
-        """Test that run passes container in config to ainvoke."""
-        with (
-            patch("agent.graph.workflow.lifespan") as mock_lifespan,
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
-            patch.object(
-                WorkflowRunner,
-                "_load_previous_context",
-                new_callable=AsyncMock,
-                return_value=([], None, 0),
-            ),
-            patch.object(
-                WorkflowRunner,
-                "_load_previous_milestones",
-                new_callable=AsyncMock,
-                return_value=([], 0),
-            ),
-            patch.object(
-                WorkflowRunner,
-                "_load_previous_task_handover",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-        ):
-            mock_container = MagicMock()
-            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
-            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            # Setup mock checkpointer context manager
-            mock_checkpointer = MagicMock()
-            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
-                return_value=mock_checkpointer
-            )
-            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            # Setup mock session repository
-            mock_session_obj = MagicMock()
-            mock_session_obj.user_id = "test-user-123"
-            mock_session_repo = MagicMock()
-            mock_session_repo.get_by_id = AsyncMock(return_value=mock_session_obj)
-            mock_session_repo_class.return_value = mock_session_repo
-
-            mock_compiled = MagicMock()
-            mock_compiled.ainvoke = AsyncMock(
-                return_value={
-                    "task_status": TaskStatus.COMPLETED,
-                }
-            )
-            # Mock aget_state
-            mock_graph_state = MagicMock()
-            mock_graph_state.next = ()
-            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
-            mock_compile.return_value = mock_compiled
-
-            runner = WorkflowRunner(
-                mock_session,
-                ws_manager=mock_ws_manager,
-                cache=mock_cache,
-                event_bus=mock_event_bus,
-                breakpoint_service=mock_breakpoint_service,
-            )
-
-            await runner.run(
-                session_id=str(uuid4()),
-                task_id=str(uuid4()),
-                original_request="Test request",
-            )
-
-            # Check config was passed correctly
-            call_config = mock_compiled.ainvoke.call_args[1]["config"]
-            assert call_config["configurable"]["container"] is mock_container
-            assert call_config["configurable"]["ws_manager"] is mock_ws_manager
-            assert call_config["configurable"]["event_bus"] is mock_event_bus
-
-    @pytest.mark.asyncio
-    async def test_run_uses_lifespan_context(
-        self,
-        mock_session: AsyncMock,
-        mock_ws_manager: MagicMock,
-        mock_cache: MagicMock,
-        mock_event_bus: MagicMock,
-        mock_breakpoint_service: MagicMock,
-    ) -> None:
-        """Test that run uses lifespan context manager."""
-        with (
-            patch("agent.graph.workflow.lifespan") as mock_lifespan,
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
-            patch.object(
-                WorkflowRunner,
-                "_load_previous_context",
-                new_callable=AsyncMock,
-                return_value=([], None, 0),
-            ),
-            patch.object(
-                WorkflowRunner,
-                "_load_previous_milestones",
-                new_callable=AsyncMock,
-                return_value=([], 0),
-            ),
-            patch.object(
-                WorkflowRunner,
-                "_load_previous_task_handover",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-        ):
-            mock_container = MagicMock()
-            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
-            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            # Setup mock checkpointer context manager
-            mock_checkpointer = MagicMock()
-            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
-                return_value=mock_checkpointer
-            )
-            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            # Setup mock session repository
-            mock_session_obj = MagicMock()
-            mock_session_obj.user_id = "test-user-123"
-            mock_session_repo = MagicMock()
-            mock_session_repo.get_by_id = AsyncMock(return_value=mock_session_obj)
-            mock_session_repo_class.return_value = mock_session_repo
-
-            mock_compiled = MagicMock()
-            mock_compiled.ainvoke = AsyncMock(
-                return_value={
-                    "task_status": TaskStatus.COMPLETED,
-                }
-            )
-            # Mock aget_state
-            mock_graph_state = MagicMock()
-            mock_graph_state.next = ()
-            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
-            mock_compile.return_value = mock_compiled
-
-            runner = WorkflowRunner(
-                mock_session,
-                ws_manager=mock_ws_manager,
-                cache=mock_cache,
-                event_bus=mock_event_bus,
-                breakpoint_service=mock_breakpoint_service,
-            )
-
-            await runner.run(
-                session_id=str(uuid4()),
-                task_id=str(uuid4()),
-                original_request="Test request",
-            )
-
-            # Verify lifespan was called with session
-            mock_lifespan.assert_called_once_with(mock_session)
-
-    @pytest.mark.asyncio
     async def test_run_raises_for_missing_session(
         self,
         mock_session: AsyncMock,
@@ -624,12 +385,6 @@ class TestWorkflowRunner:
             ),
             patch.object(
                 WorkflowRunner,
-                "_load_previous_milestones",
-                new_callable=AsyncMock,
-                return_value=([], 0),
-            ),
-            patch.object(
-                WorkflowRunner,
                 "_load_previous_task_handover",
                 new_callable=AsyncMock,
                 return_value=None,
@@ -659,7 +414,7 @@ class TestWorkflowRunner:
             )
             # Mock aget_state to return pending nodes (interrupted)
             mock_graph_state = MagicMock()
-            mock_graph_state.next = ["qa_breakpoint"]
+            mock_graph_state.next = ["plan_review"]
             mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
             mock_compile.return_value = mock_compiled
 
@@ -678,7 +433,7 @@ class TestWorkflowRunner:
             )
 
             assert result.interrupted is True
-            assert result.interrupt_node == "qa_breakpoint"
+            assert result.interrupt_node == "plan_review"
 
 
 class TestWorkflowRunnerResume:
@@ -728,97 +483,6 @@ class TestWorkflowRunnerResume:
 
             mock_compiled.ainvoke.assert_called_once()
             assert result.interrupted is False
-
-    @pytest.mark.asyncio
-    async def test_resume_passes_user_input(
-        self,
-        mock_session: AsyncMock,
-        mock_ws_manager: MagicMock,
-        mock_cache: MagicMock,
-        mock_event_bus: MagicMock,
-        mock_breakpoint_service: MagicMock,
-    ) -> None:
-        """Test that resume passes user_input to ainvoke."""
-        with (
-            patch("agent.graph.workflow.lifespan") as mock_lifespan,
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-        ):
-            mock_container = MagicMock()
-            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
-            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            mock_checkpointer = MagicMock()
-            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
-                return_value=mock_checkpointer
-            )
-            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            mock_compiled = MagicMock()
-            mock_compiled.ainvoke = AsyncMock(return_value={"task_status": TaskStatus.COMPLETED})
-            mock_graph_state = MagicMock()
-            mock_graph_state.next = ()
-            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
-            mock_compile.return_value = mock_compiled
-
-            runner = WorkflowRunner(
-                mock_session,
-                ws_manager=mock_ws_manager,
-                cache=mock_cache,
-                event_bus=mock_event_bus,
-                breakpoint_service=mock_breakpoint_service,
-            )
-            user_input = {"user_input": "Modified output", "rejected": False}
-
-            await runner.resume(task_id=str(uuid4()), user_input=user_input)
-
-            call_args = mock_compiled.ainvoke.call_args
-            assert call_args[0][0] == user_input
-
-    @pytest.mark.asyncio
-    async def test_resume_detects_interrupt(
-        self,
-        mock_session: AsyncMock,
-        mock_ws_manager: MagicMock,
-        mock_cache: MagicMock,
-        mock_event_bus: MagicMock,
-        mock_breakpoint_service: MagicMock,
-    ) -> None:
-        """Test that resume detects when workflow is interrupted again."""
-        with (
-            patch("agent.graph.workflow.lifespan") as mock_lifespan,
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-        ):
-            mock_container = MagicMock()
-            mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
-            mock_lifespan.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            mock_checkpointer = MagicMock()
-            mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
-                return_value=mock_checkpointer
-            )
-            mock_get_checkpointer.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            mock_compiled = MagicMock()
-            mock_compiled.ainvoke = AsyncMock(return_value={"task_status": TaskStatus.IN_PROGRESS})
-            mock_graph_state = MagicMock()
-            mock_graph_state.next = ["verify_qa"]  # Another interrupt
-            mock_compiled.aget_state = AsyncMock(return_value=mock_graph_state)
-            mock_compile.return_value = mock_compiled
-
-            runner = WorkflowRunner(
-                mock_session,
-                ws_manager=mock_ws_manager,
-                cache=mock_cache,
-                event_bus=mock_event_bus,
-                breakpoint_service=mock_breakpoint_service,
-            )
-
-            result = await runner.resume(task_id=uuid4())
-
-            assert result.interrupted is True
-            assert result.interrupt_node == "verify_qa"
 
 
 class TestWorkflowRunnerGetState:
@@ -977,45 +641,6 @@ class TestWorkflowRunnerLoadContext:
         assert "Previous summary" in messages[0].content
         assert summary == "Previous summary"
         assert tokens == 200
-
-    @pytest.mark.asyncio
-    async def test_load_previous_milestones(
-        self,
-        mock_session: AsyncMock,
-        mock_ws_manager: MagicMock,
-        mock_cache: MagicMock,
-        mock_event_bus: MagicMock,
-        mock_breakpoint_service: MagicMock,
-    ) -> None:
-        """Test loading previous milestones."""
-        runner = WorkflowRunner(
-            mock_session,
-            ws_manager=mock_ws_manager,
-            cache=mock_cache,
-            event_bus=mock_event_bus,
-            breakpoint_service=mock_breakpoint_service,
-        )
-
-        mock_milestone = MagicMock()
-        mock_milestone.id = uuid4()
-        mock_milestone.description = "Test milestone"
-        mock_milestone.complexity = TaskComplexity.SIMPLE
-        mock_milestone.acceptance_criteria = "Must work"
-        mock_milestone.status = MilestoneStatus.PASSED
-        mock_milestone.selected_llm = "gpt-4"
-        mock_milestone.worker_output = "Done"
-        mock_milestone.qa_result = "OK"
-        mock_milestone.retry_count = 0
-
-        with patch("agent.graph.workflow.MilestoneRepository") as mock_repo:
-            mock_repo.return_value.get_by_session_id = AsyncMock(return_value=[mock_milestone])
-            mock_repo.return_value.get_max_sequence_for_session = AsyncMock(return_value=1)
-
-            milestones, max_seq = await runner._load_previous_milestones(uuid4())
-
-        assert len(milestones) == 1
-        assert milestones[0]["description"] == "Test milestone"
-        assert max_seq == 1
 
 
 class TestCreateNodeWithSession:

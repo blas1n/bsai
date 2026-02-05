@@ -8,35 +8,14 @@ Simplified 7-node workflow:
         -> execution_breakpoint -> advance -> generate_response -> END
 """
 
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
+from typing import NotRequired, TypedDict
 from uuid import UUID
 
-from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.db.models.enums import TaskStatus
 from agent.db.models.project_plan import ProjectPlan
 from agent.llm import ChatMessage
 from agent.llm.schemas import PlanStatus
-
-if TYPE_CHECKING:
-    from agent.services.dependency_graph import DependencyGraph
-    from agent.services.execution_engine import ExecutionStatus
-
-
-class MilestoneData(TypedDict):
-    """Milestone data structure within state.
-
-    Represents a single milestone's complete state during workflow execution.
-    """
-
-    id: UUID
-    description: str
-    complexity: TaskComplexity
-    acceptance_criteria: str
-    status: MilestoneStatus
-    selected_model: str | None
-    generated_prompt: str | None
-    worker_output: str | None
-    qa_feedback: str | None
-    retry_count: int
+from agent.services.dependency_graph import DependencyGraph
 
 
 class AgentState(TypedDict):
@@ -49,13 +28,13 @@ class AgentState(TypedDict):
     State Categories:
     1. Session Context - Identifies the workflow execution (Required)
     2. Task Status - Overall task progress
-    3. Milestones - List of work items with individual progress
-    4. Current Processing - Active milestone state
+    3. Project Plan - Architect output with hierarchical tasks
+    4. Current Processing - Active task state
     5. Context Management - Memory and token tracking
     6. Error Tracking - Failure information
     7. Workflow Control - Execution flow flags
-    8. Project Plan - Architect output and HITL review
-    9. Parallel Execution - Dependency graph and execution status
+    8. Human-in-the-Loop - Plan review and breakpoints
+    9. Parallel Execution - Dependency graph for task ordering
     """
 
     # Session context (Required)
@@ -67,12 +46,12 @@ class AgentState(TypedDict):
     # Task status
     task_status: NotRequired[TaskStatus]
 
-    # Milestones (list of MilestoneData)
-    milestones: NotRequired[list[MilestoneData]]
-    current_milestone_index: NotRequired[int]
+    # Project Plan (Architect agent output)
+    project_plan: NotRequired[ProjectPlan | None]  # Hierarchical project plan
+    plan_status: NotRequired[PlanStatus | None]  # Current plan status
+    current_task_id: NotRequired[str | None]  # Current task ID being executed (e.g., "T1.1.1")
 
-    # Current milestone processing state
-    current_prompt: NotRequired[str | None]
+    # Current task processing state
     current_output: NotRequired[str | None]
     current_qa_decision: NotRequired[str | None]  # "pass", "retry", "fail"
     current_qa_feedback: NotRequired[str | None]
@@ -103,14 +82,6 @@ class AgentState(TypedDict):
     # Observability
     trace_url: NotRequired[str]  # Langfuse trace URL (empty string if disabled)
 
-    # Long-term memory (retrieved from past experiences)
-    relevant_memories: NotRequired[list[dict[str, Any]]]  # Retrieved memories
-    memory_context: NotRequired[str | None]  # Formatted memory context for LLM
-
-    # Project Plan (Architect agent output)
-    project_plan: NotRequired[ProjectPlan | None]  # Hierarchical project plan
-    plan_status: NotRequired[PlanStatus | None]  # Current plan status
-
     # Plan Review (Human-in-the-Loop for Architect)
     waiting_for_plan_review: NotRequired[bool]  # Whether waiting for user review
     revision_requested: NotRequired[bool]  # Whether user requested revision
@@ -123,34 +94,6 @@ class AgentState(TypedDict):
 
     # Parallel execution fields
     dependency_graph: NotRequired[
-        "DependencyGraph | None"
+        DependencyGraph | None
     ]  # Task dependency graph for parallel execution
     ready_tasks: NotRequired[list[str]]  # List of task IDs ready for parallel execution
-    execution_status: NotRequired["ExecutionStatus | None"]  # Current execution engine status
-    current_task_id: NotRequired[str | None]  # Current task ID being executed (project_plan flow)
-
-
-def update_milestone(milestone: MilestoneData, **updates: Any) -> MilestoneData:
-    """Create an updated copy of a milestone with the given changes.
-
-    Args:
-        milestone: Original milestone data
-        **updates: Fields to update
-
-    Returns:
-        New MilestoneData with updates applied
-    """
-    merged: dict[str, Any] = {**milestone, **updates}
-    result: MilestoneData = MilestoneData(
-        id=merged["id"],
-        description=merged["description"],
-        complexity=merged["complexity"],
-        acceptance_criteria=merged["acceptance_criteria"],
-        status=merged["status"],
-        selected_model=merged["selected_model"],
-        generated_prompt=merged["generated_prompt"],
-        worker_output=merged["worker_output"],
-        qa_feedback=merged["qa_feedback"],
-        retry_count=merged["retry_count"],
-    )
-    return result

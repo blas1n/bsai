@@ -123,19 +123,13 @@ export interface MilestoneProgressPayload {
 }
 
 // Agent-specific detail types
-export interface ConductorDetails {
-  milestones: Array<{
-    index: number;
+export interface ArchitectDetails {
+  tasks: Array<{
+    id: string;
     description: string;
     complexity: string;
     acceptance_criteria: string;
   }>;
-}
-
-export interface MetaPrompterDetails {
-  generated_prompt: string;
-  prompt_length: number;
-  milestone_description: string;
 }
 
 export interface ArtifactData {
@@ -168,20 +162,10 @@ export interface QADetails {
   max_retries: number;
 }
 
-export interface SummarizerDetails {
-  summary: string;
-  summary_preview: string;
-  old_message_count: number;
-  new_message_count: number;
-  tokens_saved_estimate: number;
-}
-
 export type AgentDetails =
-  | ConductorDetails
-  | MetaPrompterDetails
+  | ArchitectDetails
   | WorkerDetails
   | QADetails
-  | SummarizerDetails
   | Record<string, unknown>;
 
 export interface LLMChunkPayload {

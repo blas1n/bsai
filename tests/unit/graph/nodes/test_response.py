@@ -1,44 +1,60 @@
-"""Tests for response generation node."""
+"""Tests for response generation node with project_plan."""
 
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from langchain_core.runnables import RunnableConfig
 
 from agent.graph.nodes.response import generate_response_node
-from agent.graph.state import AgentState, MilestoneData
+from agent.graph.state import AgentState
 
 
-def _create_state(
-    session_id: UUID | None = None,
-    task_id: UUID | None = None,
-    user_id: str = "test-user",
-    original_request: str = "Test request",
-    milestones: list[MilestoneData] | list[dict[str, Any]] | None = None,
+def _create_state_with_plan(
+    task_outputs: list[tuple[str, str]] | None = None,
     error: str | None = None,
-    current_milestone_index: int = 0,
-    retry_count: int = 0,
-    final_response: str | None = None,
+    failure_context: dict | None = None,
 ) -> AgentState:
-    """Create a mock agent state."""
-    state: AgentState = {
-        "session_id": session_id or uuid4(),
-        "task_id": task_id or uuid4(),
-        "user_id": user_id,
-        "original_request": original_request,
-        "milestones": milestones or [],  # type: ignore[typeddict-item]
-        "error": error,
-        "current_milestone_index": current_milestone_index,
-        "retry_count": retry_count,
-        "final_response": final_response,
-    }
+    """Create state with project plan.
+
+    Args:
+        task_outputs: List of (description, worker_output) tuples
+        error: Error message if any
+        failure_context: Failure context for failure reports
+    """
+    tasks = []
+    if task_outputs:
+        for i, (desc, output) in enumerate(task_outputs):
+            tasks.append(
+                {
+                    "id": f"T{i+1}",
+                    "description": desc,
+                    "status": "completed",
+                    "worker_output": output,
+                }
+            )
+
+    mock_plan = MagicMock()
+    mock_plan.plan_data = {"tasks": tasks}
+
+    state = AgentState(
+        session_id=uuid4(),
+        task_id=uuid4(),
+        user_id="test-user",
+        original_request="Test request",
+        project_plan=mock_plan,
+    )
+
+    if error:
+        state["error"] = error
+    if failure_context:
+        state["failure_context"] = failure_context
+
     return state
 
 
 @pytest.fixture
-def mock_event_bus():
+def local_mock_event_bus():
     """Create mock event bus."""
     event_bus = MagicMock()
     event_bus.emit = AsyncMock()
@@ -46,7 +62,7 @@ def mock_event_bus():
 
 
 @pytest.fixture
-def mock_container():
+def local_mock_container():
     """Create mock container with dependencies."""
     container = MagicMock()
     container.llm_client = MagicMock()
@@ -56,377 +72,271 @@ def mock_container():
 
 
 @pytest.fixture
-def mock_config(mock_event_bus, mock_container):
+def local_mock_config(local_mock_event_bus, local_mock_container):
     """Create mock runnable config with all required dependencies."""
     return RunnableConfig(
         configurable={
-            "event_bus": mock_event_bus,
-            "container": mock_container,
+            "event_bus": local_mock_event_bus,
+            "container": local_mock_container,
         }
     )
 
 
 @pytest.fixture
-def mock_session():
+def local_mock_session():
     """Create mock database session."""
     return AsyncMock()
 
 
 class TestGenerateResponseNode:
-    """Tests for generate_response_node function."""
+    """Tests for generate_response_node with project_plan."""
 
+    @pytest.mark.asyncio
     async def test_response_with_error_state(
         self,
-        mock_config,
-        mock_session,
-    ):
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+    ) -> None:
         """Test response generation when error exists in state."""
-        state = _create_state(error="Task was cancelled")
+        state = _create_state_with_plan(error="Task was cancelled")
 
-        result = await generate_response_node(state, mock_config, mock_session)
+        result = await generate_response_node(state, local_mock_config, local_mock_session)
 
         assert "final_response" in result
         assert "Task could not be completed" in result["final_response"]
         assert "Task was cancelled" in result["final_response"]
 
+    @pytest.mark.asyncio
     async def test_response_success(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+    ) -> None:
         """Test successful response generation."""
-        state = _create_state(
-            milestones=[{"worker_output": "Here is the code: ```python\nprint('hello')```"}]
+        state = _create_state_with_plan(
+            task_outputs=[("Task 1", "Here is the code: ```python\nprint('hello')```")]
         )
 
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Your code is ready!")
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            result = await generate_response_node(state, mock_config, mock_session)
+            result = await generate_response_node(state, local_mock_config, local_mock_session)
 
         assert result["final_response"] == "Your code is ready!"
 
+    @pytest.mark.asyncio
     async def test_response_with_artifacts(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+    ) -> None:
         """Test response generation detects artifacts."""
-        state = _create_state(
-            milestones=[{"worker_output": "Created file: ```python\nprint('hello')```"}]
+        state = _create_state_with_plan(
+            task_outputs=[("Task 1", "Created file: ```python\nprint('hello')```")]
         )
 
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Generated response")
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            await generate_response_node(state, mock_config, mock_session)
+            await generate_response_node(state, local_mock_config, local_mock_session)
 
         # Verify has_artifacts was True
         call_kwargs = mock_responder.generate_response.call_args.kwargs
         assert call_kwargs.get("has_artifacts") is True
 
-    async def test_response_no_milestones(
+    @pytest.mark.asyncio
+    async def test_response_no_tasks(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
-        """Test response generation with no milestones."""
-        state = _create_state(milestones=[])
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+    ) -> None:
+        """Test response generation with no tasks."""
+        state = _create_state_with_plan(task_outputs=[])
 
         mock_responder = MagicMock()
-        mock_responder.generate_response = AsyncMock(return_value="Response without milestones")
+        mock_responder.generate_response = AsyncMock(return_value="Response without tasks")
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            result = await generate_response_node(state, mock_config, mock_session)
+            result = await generate_response_node(state, local_mock_config, local_mock_session)
 
-        assert result["final_response"] == "Response without milestones"
+        assert result["final_response"] == "Response without tasks"
 
+    @pytest.mark.asyncio
     async def test_response_exception_fallback(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+    ) -> None:
         """Test fallback when responder fails."""
-        state = _create_state(milestones=[{"worker_output": "Fallback output"}])
+        state = _create_state_with_plan(task_outputs=[("Task 1", "Fallback output")])
 
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(side_effect=Exception("LLM error"))
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            result = await generate_response_node(state, mock_config, mock_session)
+            result = await generate_response_node(state, local_mock_config, local_mock_session)
 
-        assert result["final_response"] == "Fallback output"
+        # Fallback contains worker output
+        assert "Task 1" in result["final_response"]
         assert result["error"] == "LLM error"
         assert result["error_node"] == "generate_response"
 
-    async def test_response_exception_no_milestones_fallback(
+    @pytest.mark.asyncio
+    async def test_response_exception_no_tasks_fallback(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
-        """Test fallback when responder fails and no milestones."""
-        state = _create_state(milestones=[])
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+    ) -> None:
+        """Test fallback when responder fails and no tasks."""
+        state = _create_state_with_plan(task_outputs=[])
 
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(side_effect=Exception("LLM error"))
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            result = await generate_response_node(state, mock_config, mock_session)
+            result = await generate_response_node(state, local_mock_config, local_mock_session)
 
         assert result["final_response"] == "Task completed."
 
-    async def test_response_milestone_none_worker_output(
-        self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
-        """Test response when worker_output is None."""
-        state = _create_state(milestones=[{"worker_output": None}])
-
-        mock_responder = MagicMock()
-        mock_responder.generate_response = AsyncMock(return_value="Response generated")
-
-        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            result = await generate_response_node(state, mock_config, mock_session)
-
-        assert result["final_response"] == "Response generated"
-
+    @pytest.mark.asyncio
     async def test_broadcasts_agent_events(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-        mock_event_bus,
-    ):
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+        local_mock_event_bus: MagicMock,
+    ) -> None:
         """Test that agent started and completed events are broadcast."""
-        state = _create_state(milestones=[{"worker_output": "output"}])
+        state = _create_state_with_plan(task_outputs=[("Task 1", "output")])
 
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Response")
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            await generate_response_node(state, mock_config, mock_session)
+            await generate_response_node(state, local_mock_config, local_mock_session)
 
         # Verify event bus emit was called twice (started + completed)
-        assert mock_event_bus.emit.call_count == 2
+        assert local_mock_event_bus.emit.call_count == 2
 
         # Verify completed event
-        completed_event = mock_event_bus.emit.call_args_list[1][0][0]
+        completed_event = local_mock_event_bus.emit.call_args_list[1][0][0]
         assert completed_event.agent == "responder"
         assert "final_response" in completed_event.details
 
-    async def test_response_uses_task_summary(
+    @pytest.mark.asyncio
+    async def test_response_combines_multiple_task_outputs(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
-        """Test response generation uses task_summary when available."""
-        # State with task_summary from task_summary node
-        state = _create_state(
-            milestones=[
-                {"worker_output": "First milestone output"},
-                {"worker_output": "Second milestone output"},
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+    ) -> None:
+        """Test response generation combines outputs from multiple tasks."""
+        state = _create_state_with_plan(
+            task_outputs=[
+                ("First task", "First task output"),
+                ("Second task", "Second task output"),
             ]
         )
-        state["task_summary"] = {
-            "milestones": [
-                {"description": "First task", "output": "First milestone output"},
-                {"description": "Second task", "output": "Second milestone output"},
-            ],
-            "artifacts": [{"path": "src/app.py", "kind": "python"}],
-        }
 
         mock_responder = MagicMock()
         mock_responder.generate_response = AsyncMock(return_value="Complete response")
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            result = await generate_response_node(state, mock_config, mock_session)
+            await generate_response_node(state, local_mock_config, local_mock_session)
 
-        assert result["final_response"] == "Complete response"
-
-        # Verify worker_output includes all milestones
+        # Verify worker_output includes all tasks
         call_kwargs = mock_responder.generate_response.call_args.kwargs
         worker_output = call_kwargs.get("worker_output", "")
         assert "First task" in worker_output
         assert "Second task" in worker_output
-        assert "First milestone output" in worker_output
-        assert "Second milestone output" in worker_output
+        assert "First task output" in worker_output
+        assert "Second task output" in worker_output
 
-    async def test_response_detects_artifacts_from_task_summary(
+    @pytest.mark.asyncio
+    async def test_response_with_failure_context(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
-        """Test has_artifacts is True when task_summary contains artifacts."""
-        state = _create_state(milestones=[{"worker_output": "output"}])
-        state["task_summary"] = {
-            "milestones": [{"description": "Task", "output": "output"}],
-            "artifacts": [{"path": "main.py", "kind": "python"}],
-        }
-
-        mock_responder = MagicMock()
-        mock_responder.generate_response = AsyncMock(return_value="Response")
-
-        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            await generate_response_node(state, mock_config, mock_session)
-
-        call_kwargs = mock_responder.generate_response.call_args.kwargs
-        assert call_kwargs.get("has_artifacts") is True
-
-    async def test_response_no_artifacts_from_task_summary(
-        self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
-        """Test has_artifacts is False when task_summary has no artifacts."""
-        state = _create_state(milestones=[{"worker_output": "output"}])
-        state["task_summary"] = {
-            "milestones": [{"description": "Task", "output": "output"}],
-            "artifacts": [],  # No artifacts
-        }
-
-        mock_responder = MagicMock()
-        mock_responder.generate_response = AsyncMock(return_value="Response")
-
-        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            await generate_response_node(state, mock_config, mock_session)
-
-        call_kwargs = mock_responder.generate_response.call_args.kwargs
-        assert call_kwargs.get("has_artifacts") is False
-
-    async def test_response_fallback_without_task_summary(
-        self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
-        """Test fallback to last milestone when task_summary is not available."""
-        state = _create_state(
-            milestones=[
-                {"worker_output": "First output"},
-                {"worker_output": "Last milestone output with ```code```"},
-            ]
-        )
-        # No task_summary in state
-
-        mock_responder = MagicMock()
-        mock_responder.generate_response = AsyncMock(return_value="Fallback response")
-
-        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            await generate_response_node(state, mock_config, mock_session)
-
-        # Should use last milestone's worker_output
-        call_kwargs = mock_responder.generate_response.call_args.kwargs
-        worker_output = call_kwargs.get("worker_output", "")
-        assert worker_output == "Last milestone output with ```code```"
-        # Should detect artifacts from code blocks
-        assert call_kwargs.get("has_artifacts") is True
-
-    async def test_response_with_failure_context_success(
-        self,
-        mock_config,
-        mock_session,
-        mock_container,
-        mock_event_bus,
-    ):
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+        local_mock_event_bus: MagicMock,
+    ) -> None:
         """Test response generation with failure context."""
-        state = _create_state(
-            milestones=[{"worker_output": "Partial output", "description": "Step 1"}]
+        state = _create_state_with_plan(
+            task_outputs=[("Step 1", "Partial output")],
+            failure_context={
+                "attempted_milestones": [
+                    {"description": "Step 1", "status": "passed"},
+                    {"description": "Step 2", "status": "failed"},
+                ],
+                "final_error": "Max retries exceeded",
+            },
         )
-        state["failure_context"] = {
-            "attempted_milestones": [
-                {"description": "Step 1", "status": "passed"},
-                {"description": "Step 2", "status": "failed"},
-            ],
-            "final_error": "Max retries exceeded",
-        }
 
         mock_responder = MagicMock()
         mock_responder.generate_failure_report = AsyncMock(return_value="Failure report generated")
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            result = await generate_response_node(state, mock_config, mock_session)
+            result = await generate_response_node(state, local_mock_config, local_mock_session)
 
         assert result["final_response"] == "Failure report generated"
         mock_responder.generate_failure_report.assert_called_once()
 
+    @pytest.mark.asyncio
     async def test_response_failure_context_emits_event(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-        mock_event_bus,
-    ):
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+        local_mock_event_bus: MagicMock,
+    ) -> None:
         """Test that failure report generation emits completed event."""
-        state = _create_state()
-        state["failure_context"] = {
-            "attempted_milestones": [],
-            "final_error": "Error",
-        }
+        state = _create_state_with_plan(
+            failure_context={
+                "attempted_milestones": [],
+                "final_error": "Error",
+            }
+        )
 
         mock_responder = MagicMock()
         mock_responder.generate_failure_report = AsyncMock(return_value="Failure report")
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            await generate_response_node(state, mock_config, mock_session)
+            await generate_response_node(state, local_mock_config, local_mock_session)
 
         # Verify event was emitted
-        assert mock_event_bus.emit.call_count == 1
-        event = mock_event_bus.emit.call_args_list[0][0][0]
+        assert local_mock_event_bus.emit.call_count == 1
+        event = local_mock_event_bus.emit.call_args_list[0][0][0]
         assert event.agent == "responder"
         assert event.details.get("is_failure_report") is True
 
+    @pytest.mark.asyncio
     async def test_response_failure_context_exception(
         self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
+        local_mock_config: RunnableConfig,
+        local_mock_session: AsyncMock,
+        local_mock_container: MagicMock,
+    ) -> None:
         """Test fallback when failure report generation fails."""
-        state = _create_state(error="Original error")
-        state["failure_context"] = {
-            "attempted_milestones": [],
-            "final_error": "Some error",
-        }
+        state = _create_state_with_plan(
+            error="Original error",
+            failure_context={
+                "attempted_milestones": [],
+                "final_error": "Some error",
+            },
+        )
 
         mock_responder = MagicMock()
         mock_responder.generate_failure_report = AsyncMock(side_effect=Exception("LLM failure"))
 
         with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            result = await generate_response_node(state, mock_config, mock_session)
+            result = await generate_response_node(state, local_mock_config, local_mock_session)
 
         assert "Task could not be completed" in result["final_response"]
         assert "Original error" in result["final_response"]
-
-    async def test_response_failure_context_exception_no_error_in_state(
-        self,
-        mock_config,
-        mock_session,
-        mock_container,
-    ):
-        """Test fallback when failure report fails and no error in state."""
-        state = _create_state()  # No error in state
-        state["failure_context"] = {
-            "attempted_milestones": [],
-            "final_error": "Error",
-        }
-
-        mock_responder = MagicMock()
-        mock_responder.generate_failure_report = AsyncMock(side_effect=Exception("LLM failure"))
-
-        with patch("agent.graph.nodes.response.ResponderAgent", return_value=mock_responder):
-            result = await generate_response_node(state, mock_config, mock_session)
-
-        # When error is None, it falls back to 'Unknown error'
-        assert "Task could not be completed" in result["final_response"]

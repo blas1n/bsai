@@ -165,34 +165,32 @@ class TestSessionRepository:
         assert result == Decimal("0.0")
 
     @pytest.mark.asyncio
-    async def test_close_session(self, repository, mock_session):
-        """Test closing a session."""
+    async def test_verify_ownership(self, repository, mock_session):
+        """Test verifying session ownership."""
         session_id = uuid4()
-        mock_session_obj = MagicMock()
+        user_id = "test-user-123"
 
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_session_obj
+        mock_result.scalar_one_or_none.return_value = session_id
         mock_session.execute.return_value = mock_result
 
-        result = await repository.close_session(session_id)
+        result = await repository.verify_ownership(session_id, user_id)
 
-        assert result == mock_session_obj
-        assert mock_session_obj.status == "completed"
+        assert result is True
 
     @pytest.mark.asyncio
-    async def test_pause_session(self, repository, mock_session):
-        """Test pausing a session."""
+    async def test_verify_ownership_not_owner(self, repository, mock_session):
+        """Test verifying ownership when user is not the owner."""
         session_id = uuid4()
-        mock_session_obj = MagicMock()
+        user_id = "test-user-123"
 
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_session_obj
+        mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        result = await repository.pause_session(session_id)
+        result = await repository.verify_ownership(session_id, user_id)
 
-        assert result == mock_session_obj
-        assert mock_session_obj.status == "paused"
+        assert result is False
 
 
 class TestBaseRepositoryOperations:

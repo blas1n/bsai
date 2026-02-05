@@ -59,12 +59,12 @@ async def execution_breakpoint(
     qa_result = state.get("current_qa_decision")
     task_status = "completed" if qa_result == "pass" else "failed"
 
-    # Get plan data
+    # Get plan data from project_plan
     project_plan = state.get("project_plan")
     if project_plan and hasattr(project_plan, "plan_data"):
         plan_data = project_plan.plan_data
     else:
-        plan_data = {"tasks": state.get("milestones", [])}
+        plan_data = {"tasks": []}
 
     # Check if should pause
     should_pause, reason = service.should_pause_after_task(
@@ -111,6 +111,11 @@ def _get_current_task_id(state: AgentState) -> str | None:
     Returns:
         Current task ID or None
     """
+    # Get from current_task_id field first
+    current_task_id = state.get("current_task_id")
+    if current_task_id:
+        return str(current_task_id)
+
     # Try to get from project plan if available
     project_plan = state.get("project_plan")
     if project_plan and hasattr(project_plan, "plan_data"):
@@ -120,13 +125,6 @@ def _get_current_task_id(state: AgentState) -> str | None:
         if tasks and current_index < len(tasks):
             task_id = tasks[current_index].get("id")
             return str(task_id) if task_id is not None else None
-
-    # Fall back to milestone-based tracking
-    milestones = state.get("milestones", [])
-    current_index = state.get("current_milestone_index", 0)
-    if milestones and current_index < len(milestones):
-        milestone = milestones[current_index]
-        return str(milestone.get("id", ""))
 
     return None
 
@@ -246,8 +244,18 @@ def get_current_progress(state: AgentState) -> dict[str, Any]:
     """
     project_plan = state.get("project_plan")
     if not project_plan:
-        # Fall back to milestone-based progress
-        return _get_milestone_progress(state)
+        return {
+            "total_tasks": 0,
+            "completed_tasks": 0,
+            "pending_tasks": 0,
+            "in_progress_tasks": 0,
+            "failed_tasks": 0,
+            "overall_percent": 0,
+            "current_task": None,
+            "breakpoint_reason": state.get("breakpoint_reason"),
+            "feature_progress": [],
+            "epic_progress": [],
+        }
 
     # Handle ProjectPlan object
     if hasattr(project_plan, "plan_data"):
@@ -281,37 +289,6 @@ def get_current_progress(state: AgentState) -> dict[str, Any]:
         "breakpoint_reason": state.get("breakpoint_reason"),
         "feature_progress": feature_progress,
         "epic_progress": epic_progress,
-    }
-
-
-def _get_milestone_progress(state: AgentState) -> dict[str, Any]:
-    """Get progress from milestone-based tracking.
-
-    Args:
-        state: Current workflow state
-
-    Returns:
-        Milestone-based progress summary
-    """
-    milestones = state.get("milestones", [])
-    current_index = state.get("current_milestone_index", 0)
-
-    completed = [m for m in milestones if m.get("status") == "completed"]
-    failed = [m for m in milestones if m.get("status") == "failed"]
-
-    return {
-        "total_tasks": len(milestones),
-        "completed_tasks": len(completed),
-        "pending_tasks": len(milestones) - len(completed) - len(failed),
-        "in_progress_tasks": 1 if current_index < len(milestones) else 0,
-        "failed_tasks": len(failed),
-        "overall_percent": (len(completed) / len(milestones) * 100) if milestones else 0,
-        "current_task": (
-            str(milestones[current_index]["id"]) if current_index < len(milestones) else None
-        ),
-        "breakpoint_reason": state.get("breakpoint_reason"),
-        "feature_progress": [],
-        "epic_progress": [],
     }
 
 

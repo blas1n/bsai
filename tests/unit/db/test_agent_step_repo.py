@@ -1,6 +1,9 @@
-"""Tests for AgentStepRepository."""
+"""Tests for AgentStepRepository.
 
-from datetime import UTC, datetime, timedelta
+Note: Business logic methods (start_step, complete_step) have been moved
+to AgentStepService. This file tests only the pure query methods.
+"""
+
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -11,182 +14,19 @@ from agent.db.repository.agent_step_repo import AgentStepRepository
 
 
 class TestAgentStepRepository:
-    """Tests for AgentStepRepository."""
+    """Tests for AgentStepRepository query methods."""
 
     @pytest.fixture
     def mock_session(self) -> AsyncMock:
         """Create a mock database session."""
         session = AsyncMock()
         session.execute = AsyncMock()
-        session.flush = AsyncMock()
-        session.refresh = AsyncMock()
-        session.add = MagicMock()
         return session
 
     @pytest.fixture
     def repository(self, mock_session: AsyncMock) -> AgentStepRepository:
         """Create repository with mock session."""
         return AgentStepRepository(mock_session)
-
-    @pytest.mark.asyncio
-    async def test_start_step_creates_agent_step(
-        self,
-        repository: AgentStepRepository,
-        mock_session: AsyncMock,
-    ) -> None:
-        """start_step creates a new agent step record."""
-        task_id = uuid4()
-        milestone_id = uuid4()
-        agent_type = "worker"
-        input_summary = "Processing milestone"
-        metadata = {"complexity": "simple"}
-
-        mock_step = MagicMock()
-        mock_step.id = uuid4()
-        mock_step.task_id = task_id
-        mock_step.milestone_id = milestone_id
-        mock_step.agent_type = agent_type
-        mock_step.status = "started"
-
-        mock_session.flush.return_value = None
-        mock_session.refresh.return_value = None
-
-        # Mock the create method behavior
-        def capture_add(obj):
-            obj.id = mock_step.id
-
-        mock_session.add.side_effect = capture_add
-
-        await repository.start_step(
-            task_id=task_id,
-            agent_type=agent_type,
-            milestone_id=milestone_id,
-            input_summary=input_summary,
-            metadata=metadata,
-        )
-
-        mock_session.add.assert_called_once()
-        mock_session.flush.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_start_step_without_milestone(
-        self,
-        repository: AgentStepRepository,
-        mock_session: AsyncMock,
-    ) -> None:
-        """start_step works without milestone_id."""
-        task_id = uuid4()
-        agent_type = "conductor"
-
-        await repository.start_step(
-            task_id=task_id,
-            agent_type=agent_type,
-        )
-
-        mock_session.add.assert_called_once()
-        added_obj = mock_session.add.call_args[0][0]
-        assert added_obj.milestone_id is None
-
-    @pytest.mark.asyncio
-    async def test_start_step_with_metadata(
-        self,
-        repository: AgentStepRepository,
-        mock_session: AsyncMock,
-    ) -> None:
-        """start_step serializes metadata to JSON."""
-        task_id = uuid4()
-        metadata = {"key": "value", "nested": {"a": 1}}
-
-        await repository.start_step(
-            task_id=task_id,
-            agent_type="worker",
-            metadata=metadata,
-        )
-
-        added_obj = mock_session.add.call_args[0][0]
-        assert added_obj.metadata_json is not None
-        assert "key" in added_obj.metadata_json
-
-    @pytest.mark.asyncio
-    async def test_complete_step_updates_step(
-        self,
-        repository: AgentStepRepository,
-        mock_session: AsyncMock,
-    ) -> None:
-        """complete_step updates step with completion data."""
-        step_id = uuid4()
-        started_at = datetime.now(UTC) - timedelta(seconds=2)
-
-        mock_step = MagicMock()
-        mock_step.id = step_id
-        mock_step.started_at = started_at
-        mock_step.status = "started"
-        mock_step.cost_usd = Decimal("0")
-
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_step
-        mock_session.execute.return_value = mock_result
-
-        result = await repository.complete_step(
-            step_id=step_id,
-            output_summary="Task completed successfully",
-            input_tokens=100,
-            output_tokens=50,
-            cost_usd=Decimal("0.005"),
-        )
-
-        assert result is not None
-        assert result.status == "completed"
-        assert result.input_tokens == 100
-        assert result.output_tokens == 50
-        assert result.cost_usd == Decimal("0.005")
-        assert result.duration_ms is not None and result.duration_ms > 0
-
-    @pytest.mark.asyncio
-    async def test_complete_step_marks_failed_on_error(
-        self,
-        repository: AgentStepRepository,
-        mock_session: AsyncMock,
-    ) -> None:
-        """complete_step marks step as failed when error provided."""
-        step_id = uuid4()
-        started_at = datetime.now(UTC) - timedelta(seconds=1)
-
-        mock_step = MagicMock()
-        mock_step.id = step_id
-        mock_step.started_at = started_at
-        mock_step.status = "started"
-        mock_step.cost_usd = Decimal("0")
-
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_step
-        mock_session.execute.return_value = mock_result
-
-        result = await repository.complete_step(
-            step_id=step_id,
-            error_message="LLM call failed",
-        )
-
-        assert result is not None
-        assert result.status == "failed"
-        assert result.error_message == "LLM call failed"
-
-    @pytest.mark.asyncio
-    async def test_complete_step_returns_none_for_missing(
-        self,
-        repository: AgentStepRepository,
-        mock_session: AsyncMock,
-    ) -> None:
-        """complete_step returns None when step not found."""
-        step_id = uuid4()
-
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_session.execute.return_value = mock_result
-
-        result = await repository.complete_step(step_id=step_id)
-
-        assert result is None
 
     @pytest.mark.asyncio
     async def test_get_steps_by_task_returns_ordered_list(
@@ -198,7 +38,7 @@ class TestAgentStepRepository:
         task_id = uuid4()
 
         mock_steps = [
-            MagicMock(id=uuid4(), agent_type="conductor", status="completed"),
+            MagicMock(id=uuid4(), agent_type="architect", status="completed"),
             MagicMock(id=uuid4(), agent_type="worker", status="completed"),
             MagicMock(id=uuid4(), agent_type="qa", status="completed"),
         ]
@@ -232,7 +72,6 @@ class TestAgentStepRepository:
         result = await repository.get_steps_by_task(task_id, include_completed=False)
 
         assert len(result) == 1
-        # The query should filter out completed steps
         mock_session.execute.assert_called_once()
 
     @pytest.mark.asyncio
@@ -292,6 +131,22 @@ class TestAgentStepRepository:
 
         assert result == []
 
+
+class TestAgentStepRepositoryCostBreakdown:
+    """Tests for cost breakdown functionality."""
+
+    @pytest.fixture
+    def mock_session(self) -> AsyncMock:
+        """Create a mock database session."""
+        session = AsyncMock()
+        session.execute = AsyncMock()
+        return session
+
+    @pytest.fixture
+    def repository(self, mock_session: AsyncMock) -> AgentStepRepository:
+        """Create repository with mock session."""
+        return AgentStepRepository(mock_session)
+
     @pytest.mark.asyncio
     async def test_get_cost_breakdown_by_agent_aggregates_correctly(
         self,
@@ -304,7 +159,7 @@ class TestAgentStepRepository:
         # Create mock steps with different agent types
         mock_steps = [
             MagicMock(
-                agent_type="conductor",
+                agent_type="architect",
                 cost_usd=Decimal("0.001"),
                 input_tokens=50,
                 output_tokens=25,
@@ -339,15 +194,15 @@ class TestAgentStepRepository:
 
         result = await repository.get_cost_breakdown_by_agent(task_id)
 
-        assert "conductor" in result
+        assert "architect" in result
         assert "worker" in result
         assert "qa" in result
 
-        # Check conductor aggregation
-        assert result["conductor"]["total_cost_usd"] == Decimal("0.001")
-        assert result["conductor"]["total_input_tokens"] == 50
-        assert result["conductor"]["total_output_tokens"] == 25
-        assert result["conductor"]["step_count"] == 1
+        # Check architect aggregation
+        assert result["architect"]["total_cost_usd"] == Decimal("0.001")
+        assert result["architect"]["total_input_tokens"] == 50
+        assert result["architect"]["total_output_tokens"] == 25
+        assert result["architect"]["step_count"] == 1
 
         # Check worker aggregation (2 steps)
         assert result["worker"]["total_cost_usd"] == Decimal("0.025")
@@ -403,67 +258,3 @@ class TestAgentStepRepository:
         result = await repository.get_cost_breakdown_by_agent(task_id)
 
         assert result == {}
-
-
-class TestAgentStepRepositoryIntegration:
-    """Integration-style tests for repository behavior."""
-
-    @pytest.fixture
-    def mock_session(self) -> AsyncMock:
-        """Create a mock database session."""
-        session = AsyncMock()
-        session.execute = AsyncMock()
-        session.flush = AsyncMock()
-        session.refresh = AsyncMock()
-        session.add = MagicMock()
-        return session
-
-    @pytest.fixture
-    def repository(self, mock_session: AsyncMock) -> AgentStepRepository:
-        """Create repository with mock session."""
-        return AgentStepRepository(mock_session)
-
-    @pytest.mark.asyncio
-    async def test_complete_step_calculates_duration(
-        self,
-        repository: AgentStepRepository,
-        mock_session: AsyncMock,
-    ) -> None:
-        """complete_step correctly calculates duration in milliseconds."""
-        step_id = uuid4()
-        # Step started 5 seconds ago
-        started_at = datetime.now(UTC) - timedelta(seconds=5)
-
-        mock_step = MagicMock()
-        mock_step.id = step_id
-        mock_step.started_at = started_at
-        mock_step.status = "started"
-
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_step
-        mock_session.execute.return_value = mock_result
-
-        result = await repository.complete_step(step_id=step_id)
-
-        # Duration should be approximately 5000ms (with some tolerance)
-        assert result is not None
-        assert result.duration_ms is not None
-        assert result.duration_ms >= 4000  # At least 4 seconds
-        assert result.duration_ms <= 6000  # At most 6 seconds
-
-    @pytest.mark.asyncio
-    async def test_start_step_sets_correct_status(
-        self,
-        repository: AgentStepRepository,
-        mock_session: AsyncMock,
-    ) -> None:
-        """start_step sets status to 'started'."""
-        task_id = uuid4()
-
-        await repository.start_step(
-            task_id=task_id,
-            agent_type="worker",
-        )
-
-        added_obj = mock_session.add.call_args[0][0]
-        assert added_obj.status == "started"

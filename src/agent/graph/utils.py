@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent.db.models.project_plan import ProjectPlan
-    from agent.graph.state import MilestoneData
 
 
 def get_task_by_id(tasks: list[dict[str, Any]], task_id: str) -> dict[str, Any] | None:
@@ -26,29 +25,6 @@ def get_task_by_id(tasks: list[dict[str, Any]], task_id: str) -> dict[str, Any] 
     for task in tasks:
         if task.get("id") == task_id:
             return task
-    return None
-
-
-def find_next_pending_task(tasks: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Find next task that can be executed.
-
-    Considers dependencies - returns task with all dependencies completed.
-    Tasks are processed in order, respecting dependency constraints.
-
-    Args:
-        tasks: List of task dictionaries from plan_data
-
-    Returns:
-        Next executable task dict or None if all done/blocked
-    """
-    completed_ids = {t["id"] for t in tasks if t.get("status") == "completed"}
-
-    for task in tasks:
-        if task.get("status") == "pending":
-            deps = task.get("dependencies", [])
-            if all(dep in completed_ids for dep in deps):
-                return task
-
     return None
 
 
@@ -83,63 +59,6 @@ def get_tasks_from_plan(project_plan: ProjectPlan) -> list[dict[str, Any]]:
     return tasks
 
 
-def convert_plan_to_milestones(project_plan: ProjectPlan) -> list[MilestoneData]:
-    """Convert project plan tasks to legacy milestone format.
-
-    Provides backward compatibility by converting new project plan
-    task structure to the existing MilestoneData format.
-
-    Args:
-        project_plan: ProjectPlan model instance
-
-    Returns:
-        List of MilestoneData dicts for legacy compatibility
-    """
-    from uuid import uuid4
-
-    from agent.db.models.enums import MilestoneStatus, TaskComplexity
-
-    from .state import MilestoneData as MilestoneDataType
-
-    tasks = get_tasks_from_plan(project_plan)
-    milestones: list[MilestoneDataType] = []
-
-    for task in tasks:
-        # Map task complexity string to enum
-        complexity_str = task.get("complexity", "MODERATE")
-        try:
-            complexity = TaskComplexity[complexity_str]
-        except KeyError:
-            complexity = TaskComplexity.MODERATE
-
-        # Map task status to milestone status
-        task_status = task.get("status", "pending")
-        if task_status == "completed":
-            status = MilestoneStatus.PASSED
-        elif task_status == "in_progress":
-            status = MilestoneStatus.IN_PROGRESS
-        elif task_status == "failed":
-            status = MilestoneStatus.FAILED
-        else:
-            status = MilestoneStatus.PENDING
-
-        milestone: MilestoneDataType = {
-            "id": uuid4(),  # Generate new ID for milestone
-            "description": task.get("description", ""),
-            "complexity": complexity,
-            "acceptance_criteria": task.get("acceptance_criteria", ""),
-            "status": status,
-            "selected_model": None,
-            "generated_prompt": None,
-            "worker_output": None,
-            "qa_feedback": None,
-            "retry_count": 0,
-        }
-        milestones.append(milestone)
-
-    return milestones
-
-
 def update_task_status(
     plan_data: dict[str, Any],
     task_id: str,
@@ -170,56 +89,9 @@ def update_task_status(
     return {**plan_data, "tasks": updated_tasks}
 
 
-def apply_task_modifications(
-    plan_data: dict[str, Any],
-    modifications: list[Any],
-) -> dict[str, Any]:
-    """Apply task modifications from Architect replan output.
-
-    Supports add, update, and remove operations on tasks.
-
-    Args:
-        plan_data: Original plan_data dict
-        modifications: List of PlanTaskModification objects
-
-    Returns:
-        New plan_data dict with modifications applied
-    """
-    tasks = list(plan_data.get("tasks", []))
-
-    for mod in modifications:
-        action = mod.action if hasattr(mod, "action") else mod.get("action")
-        task_id = mod.task_id if hasattr(mod, "task_id") else mod.get("task_id")
-
-        if action == "add" and hasattr(mod, "task") and mod.task:
-            # Add new task
-            new_task = mod.task.model_dump() if hasattr(mod.task, "model_dump") else mod.task
-            new_task["status"] = "pending"
-            tasks.append(new_task)
-
-        elif action == "update" and hasattr(mod, "task") and mod.task:
-            # Update existing task
-            updated_task = mod.task.model_dump() if hasattr(mod.task, "model_dump") else mod.task
-            for i, task in enumerate(tasks):
-                if task.get("id") == task_id:
-                    # Preserve status during update
-                    updated_task["status"] = task.get("status", "pending")
-                    tasks[i] = updated_task
-                    break
-
-        elif action == "remove":
-            # Remove task
-            tasks = [t for t in tasks if t.get("id") != task_id]
-
-    return {**plan_data, "tasks": tasks}
-
-
 __all__ = [
     "get_task_by_id",
-    "find_next_pending_task",
     "get_task_index",
     "get_tasks_from_plan",
-    "convert_plan_to_milestones",
     "update_task_status",
-    "apply_task_modifications",
 ]

@@ -106,9 +106,12 @@ class MilestoneDetailResponse(MilestoneResponse):
 
 
 class TaskDetailResponse(TaskResponse):
-    """Detailed task response with milestones and agent steps."""
+    """Detailed task response with project plan and agent steps."""
 
-    milestones: list[MilestoneResponse] = []
+    project_plan: dict[str, Any] | None = Field(
+        default=None,
+        description="Project plan with hierarchical tasks",
+    )
     agent_steps: list[AgentStepResponse] = []
     progress: float = Field(
         default=0.0,

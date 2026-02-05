@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agent.prompts.keys import ConductorPrompts, MetaPrompterPrompts
+from agent.prompts.keys import ArchitectPrompts, WorkerPrompts
 from agent.prompts.manager import PromptManager
 
 
@@ -17,20 +17,20 @@ def temp_prompts_dir() -> Generator[Path, None, None]:
     with tempfile.TemporaryDirectory() as tmpdir:
         prompts_dir = Path(tmpdir)
 
-        # Create test YAML files
-        conductor_prompts = {
-            "analysis_prompt": "Analyze: ${original_request}",
+        # Create test YAML files using active prompt keys
+        architect_prompts = {
+            "planning_prompt": "Plan: ${original_request}",
         }
-        (prompts_dir / "conductor.yaml").write_text(yaml.dump(conductor_prompts))
+        (prompts_dir / "architect.yaml").write_text(yaml.dump(architect_prompts))
 
-        meta_prompter_prompts = {
-            "meta_prompt": "Task: ${task}\nComplexity: ${complexity}",
+        worker_prompts = {
+            "system_prompt": "Task: ${task}\nComplexity: ${complexity}",
             "strategies": {
                 "TRIVIAL": "Simple strategy",
                 "MODERATE": "Moderate strategy",
             },
         }
-        (prompts_dir / "meta_prompter.yaml").write_text(yaml.dump(meta_prompter_prompts))
+        (prompts_dir / "worker.yaml").write_text(yaml.dump(worker_prompts))
 
         yield prompts_dir
 
@@ -47,18 +47,18 @@ class TestPromptManager:
     def test_render_with_enum(self, prompt_manager: PromptManager) -> None:
         """Test rendering prompt with enum key."""
         result = prompt_manager.render(
-            "conductor",
-            ConductorPrompts.ANALYSIS_PROMPT,
+            "architect",
+            ArchitectPrompts.PLANNING_PROMPT,
             original_request="Build a web scraper",
         )
 
-        assert result == "Analyze: Build a web scraper"
+        assert result == "Plan: Build a web scraper"
 
     def test_render_with_multiple_variables(self, prompt_manager: PromptManager) -> None:
         """Test rendering with multiple template variables."""
         result = prompt_manager.render(
-            "meta_prompter",
-            MetaPrompterPrompts.META_PROMPT,
+            "worker",
+            WorkerPrompts.SYSTEM_PROMPT,
             task="Write tests",
             complexity="MODERATE",
         )
@@ -70,29 +70,29 @@ class TestPromptManager:
         """Test that templates are cached."""
         # Render twice
         result1 = prompt_manager.render(
-            "conductor",
-            ConductorPrompts.ANALYSIS_PROMPT,
+            "architect",
+            ArchitectPrompts.PLANNING_PROMPT,
             original_request="Test 1",
         )
         result2 = prompt_manager.render(
-            "conductor",
-            ConductorPrompts.ANALYSIS_PROMPT,
+            "architect",
+            ArchitectPrompts.PLANNING_PROMPT,
             original_request="Test 2",
         )
 
         # Results should be different (different variables)
-        assert result1 == "Analyze: Test 1"
-        assert result2 == "Analyze: Test 2"
+        assert result1 == "Plan: Test 1"
+        assert result2 == "Plan: Test 2"
 
         # But cache should have the template
-        assert "conductor:analysis_prompt" in prompt_manager._template_cache
+        assert "architect:planning_prompt" in prompt_manager._template_cache
 
     def test_render_missing_file_raises_error(self, prompt_manager: PromptManager) -> None:
         """Test error when YAML file doesn't exist."""
         with pytest.raises(FileNotFoundError, match="Prompt file not found"):
             prompt_manager.render(
                 "nonexistent",
-                ConductorPrompts.ANALYSIS_PROMPT,
+                ArchitectPrompts.PLANNING_PROMPT,
                 test="value",
             )
 
@@ -105,17 +105,22 @@ class TestPromptManager:
             WRONG_KEY = "wrong_key"
 
         with pytest.raises(KeyError, match="not found"):
-            prompt_manager.render("conductor", FakePrompts.WRONG_KEY, test="value")
+            prompt_manager.render("architect", FakePrompts.WRONG_KEY, test="value")
 
     def test_render_missing_variable_raises_error(self, prompt_manager: PromptManager) -> None:
         """Test error when template variable is missing."""
         with pytest.raises(ValueError, match="Failed to render template"):
             # Missing 'original_request' variable
-            prompt_manager.render("conductor", ConductorPrompts.ANALYSIS_PROMPT)
+            prompt_manager.render("architect", ArchitectPrompts.PLANNING_PROMPT)
 
     def test_get_data_with_enum(self, prompt_manager: PromptManager) -> None:
         """Test getting raw data with enum key."""
-        strategies = prompt_manager.get_data("meta_prompter", MetaPrompterPrompts.STRATEGIES)
+        from enum import Enum
+
+        class TestPrompts(str, Enum):
+            STRATEGIES = "strategies"
+
+        strategies = prompt_manager.get_data("worker", TestPrompts.STRATEGIES)
 
         assert isinstance(strategies, dict)
         assert "TRIVIAL" in strategies
@@ -130,7 +135,7 @@ class TestPromptManager:
             WRONG_KEY = "wrong_key"
 
         with pytest.raises(KeyError, match="not found"):
-            prompt_manager.get_data("conductor", FakePrompts.WRONG_KEY)
+            prompt_manager.get_data("architect", FakePrompts.WRONG_KEY)
 
     def test_render_template_direct(self, prompt_manager: PromptManager) -> None:
         """Test rendering template string directly."""
@@ -165,7 +170,7 @@ class TestPromptManager:
         """Test cache clearing."""
         # Load some data to populate cache
         prompt_manager.render(
-            "conductor", ConductorPrompts.ANALYSIS_PROMPT, original_request="Test"
+            "architect", ArchitectPrompts.PLANNING_PROMPT, original_request="Test"
         )
 
         # Cache should have data
@@ -187,7 +192,7 @@ class TestPromptManager:
         manager = PromptManager(prompts_dir=temp_prompts_dir)
 
         with pytest.raises(yaml.YAMLError):
-            manager.render("invalid", ConductorPrompts.ANALYSIS_PROMPT, test="value")
+            manager.render("invalid", ArchitectPrompts.PLANNING_PROMPT, test="value")
 
     def test_conditional_template(self, temp_prompts_dir: Path) -> None:
         """Test Mako conditional in template."""

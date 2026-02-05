@@ -17,8 +17,8 @@ import {
 import { MilestoneStatus, TaskComplexity } from '@/types/session';
 import {
   AgentDetails,
+  ArchitectDetails,
   BreakpointHitPayload,
-  ConductorDetails,
   LLMChunkPayload,
   LLMCompletePayload,
   McpApprovalRequestPayload,
@@ -296,16 +296,16 @@ export function handleMilestoneProgress(
     return [...prev, activity];
   });
 
-  // Handle conductor completion with milestones
-  if (agentType === 'conductor' && (isCompletion || hasDetails) && payload.details) {
-    const conductorDetails = payload.details as ConductorDetails;
-    if (conductorDetails.milestones && conductorDetails.milestones.length > 0) {
-      const plannedMilestones: MilestoneInfo[] = conductorDetails.milestones.map((m) => ({
-        id: `planned-${m.index}`,
-        sequenceNumber: m.index,
-        title: m.description,
-        description: m.acceptance_criteria,
-        complexity: m.complexity as TaskComplexity,
+  // Handle architect completion with tasks (project plan)
+  if (agentType === 'architect' && (isCompletion || hasDetails) && payload.details) {
+    const architectDetails = payload.details as ArchitectDetails;
+    if (architectDetails.tasks && architectDetails.tasks.length > 0) {
+      const plannedMilestones: MilestoneInfo[] = architectDetails.tasks.map((t, index) => ({
+        id: t.id || `planned-${index}`,
+        sequenceNumber: index + 1,
+        title: t.description,
+        description: t.acceptance_criteria,
+        complexity: t.complexity as TaskComplexity,
         status: 'pending' as MilestoneStatus,
       }));
 
@@ -349,7 +349,7 @@ export function handleMilestoneProgress(
       setStreaming((prev) => ({
         ...prev,
         isStreaming: true,
-        totalMilestones: conductorDetails.milestones.length,
+        totalMilestones: architectDetails.tasks.length,
       }));
       return; // Skip default message update
     }

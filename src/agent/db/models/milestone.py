@@ -16,7 +16,6 @@ from .enums import MilestoneStatus
 if TYPE_CHECKING:
     from .agent_step import AgentStep
     from .artifact import Artifact
-    from .generated_prompt import GeneratedPrompt
     from .llm_usage_log import LLMUsageLog
     from .task import Task
 
@@ -75,9 +74,6 @@ class Milestone(Base):
     # Relationships
     task: Mapped[Task] = relationship(back_populates="milestones")
     llm_usage_logs: Mapped[list[LLMUsageLog]] = relationship(
-        back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
-    )
-    generated_prompts: Mapped[list[GeneratedPrompt]] = relationship(
         back_populates="milestone", lazy="selectin", cascade="all, delete-orphan"
     )
     artifacts: Mapped[list[Artifact]] = relationship(
