@@ -6,6 +6,14 @@ All updates should return new dicts, not mutate existing state.
 Simplified 7-node workflow:
     architect -> plan_review -> execute_worker -> verify_qa
         -> execution_breakpoint -> advance -> generate_response -> END
+
+Field Groups:
+    1. Session Context - Required identifiers for workflow execution
+    2. Project Plan - Architect output with hierarchical task structure
+    3. Task Processing - Current task execution state and QA results
+    4. Context Management - Conversation history and token tracking
+    5. Workflow Control - Execution flow flags and error state
+    6. Human-in-the-Loop - Plan review and breakpoint configuration
 """
 
 from typing import NotRequired, TypedDict
@@ -15,7 +23,6 @@ from agent.db.models.enums import TaskStatus
 from agent.db.models.project_plan import ProjectPlan
 from agent.llm import ChatMessage
 from agent.llm.schemas import PlanStatus
-from agent.services.dependency_graph import DependencyGraph
 
 
 class AgentState(TypedDict):
@@ -24,76 +31,116 @@ class AgentState(TypedDict):
     All updates should return new dicts, not mutate existing state.
     Required fields are always present, NotRequired fields may be omitted
     in partial updates from node functions.
-
-    State Categories:
-    1. Session Context - Identifies the workflow execution (Required)
-    2. Task Status - Overall task progress
-    3. Project Plan - Architect output with hierarchical tasks
-    4. Current Processing - Active task state
-    5. Context Management - Memory and token tracking
-    6. Error Tracking - Failure information
-    7. Workflow Control - Execution flow flags
-    8. Human-in-the-Loop - Plan review and breakpoints
-    9. Parallel Execution - Dependency graph for task ordering
     """
 
-    # Session context (Required)
+    # =========================================================================
+    # 1. SESSION CONTEXT (Required)
+    # =========================================================================
     session_id: UUID
     task_id: UUID
     user_id: str
     original_request: str
 
-    # Task status
+    # =========================================================================
+    # 2. PROJECT PLAN (Architect agent output)
+    # =========================================================================
+    project_plan: NotRequired[ProjectPlan | None]
+    """Hierarchical project plan created by Architect agent."""
+
+    plan_status: NotRequired[PlanStatus | None]
+    """Current plan status (DRAFT, APPROVED, REJECTED)."""
+
+    current_task_id: NotRequired[str | None]
+    """Current task ID being executed (e.g., "T1.1.1")."""
+
+    current_milestone_index: NotRequired[int]
+    """Index of current task in the flattened task list."""
+
+    # =========================================================================
+    # 3. TASK PROCESSING (Worker and QA state)
+    # =========================================================================
     task_status: NotRequired[TaskStatus]
+    """Overall task status (PENDING, IN_PROGRESS, COMPLETED, FAILED)."""
 
-    # Project Plan (Architect agent output)
-    project_plan: NotRequired[ProjectPlan | None]  # Hierarchical project plan
-    plan_status: NotRequired[PlanStatus | None]  # Current plan status
-    current_task_id: NotRequired[str | None]  # Current task ID being executed (e.g., "T1.1.1")
-
-    # Current task processing state
     current_output: NotRequired[str | None]
-    current_qa_decision: NotRequired[str | None]  # "pass", "retry", "fail"
+    """Latest output from Worker agent."""
+
+    current_prompt: NotRequired[str | None]
+    """Current prompt being processed."""
+
+    current_qa_decision: NotRequired[str | None]
+    """QA decision: "pass", "retry", or "fail"."""
+
     current_qa_feedback: NotRequired[str | None]
+    """Structured feedback from QA agent for retry."""
+
     retry_count: NotRequired[int]
+    """Number of retry attempts for current task (max 3)."""
 
-    # Context management
+    # =========================================================================
+    # 4. CONTEXT MANAGEMENT (Memory and tokens)
+    # =========================================================================
     context_messages: NotRequired[list[ChatMessage]]
+    """Conversation history for context."""
+
     context_summary: NotRequired[str | None]
+    """Compressed summary of prior context."""
+
     current_context_tokens: NotRequired[int]
+    """Current token count of context."""
+
     max_context_tokens: NotRequired[int]
+    """Maximum allowed context tokens."""
 
-    # Token and cost tracking
     total_input_tokens: NotRequired[int]
+    """Cumulative input tokens used."""
+
     total_output_tokens: NotRequired[int]
-    total_cost_usd: NotRequired[str]  # Stored as string for JSON serialization
+    """Cumulative output tokens used."""
 
-    # Error tracking
-    error: NotRequired[str | None]
-    error_node: NotRequired[str | None]
+    total_cost_usd: NotRequired[str]
+    """Total cost in USD (string for JSON serialization)."""
 
-    # Workflow control
+    # =========================================================================
+    # 5. WORKFLOW CONTROL (Execution flow and errors)
+    # =========================================================================
     should_continue: NotRequired[bool]
+    """Whether to continue to next task."""
+
     workflow_complete: NotRequired[bool]
+    """Whether all tasks are done or workflow errored."""
 
-    # Final response (from Responder agent)
+    error: NotRequired[str | None]
+    """Error message if workflow failed."""
+
+    error_node: NotRequired[str | None]
+    """Node name where error occurred."""
+
     final_response: NotRequired[str | None]
+    """Final user-facing response from Responder agent."""
 
-    # Observability
-    trace_url: NotRequired[str]  # Langfuse trace URL (empty string if disabled)
+    trace_url: NotRequired[str]
+    """Langfuse trace URL for observability."""
 
-    # Plan Review (Human-in-the-Loop for Architect)
-    waiting_for_plan_review: NotRequired[bool]  # Whether waiting for user review
-    revision_requested: NotRequired[bool]  # Whether user requested revision
-    revision_feedback: NotRequired[str | None]  # User's revision feedback
+    # =========================================================================
+    # 6. HUMAN-IN-THE-LOOP (Plan review and breakpoints)
+    # =========================================================================
+    # Plan Review
+    waiting_for_plan_review: NotRequired[bool]
+    """Whether waiting for user to review plan."""
 
-    # Breakpoint configuration (Human-in-the-Loop)
-    breakpoint_enabled: NotRequired[bool]  # Whether breakpoints are enabled
-    breakpoint_nodes: NotRequired[list[str]]  # List of node names to pause at
-    breakpoint_user_input: NotRequired[str | None]  # User input at breakpoint
+    revision_requested: NotRequired[bool]
+    """Whether user requested plan revision."""
 
-    # Parallel execution fields
-    dependency_graph: NotRequired[
-        DependencyGraph | None
-    ]  # Task dependency graph for parallel execution
-    ready_tasks: NotRequired[list[str]]  # List of task IDs ready for parallel execution
+    revision_feedback: NotRequired[str | None]
+    """User's feedback for plan revision."""
+
+    # Breakpoint Configuration
+    breakpoint_enabled: NotRequired[bool]
+    """Whether breakpoints are enabled for this task."""
+
+    breakpoint_nodes: NotRequired[list[str]]
+    """List of node names where execution should pause."""
+
+    breakpoint_user_input: NotRequired[str | None]
+    """User input provided at a breakpoint."""

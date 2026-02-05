@@ -214,20 +214,34 @@ class NodeContext:
             "workflow_complete": True,
         }
 
-    def error_response(self, node_name: str, error: str | Exception) -> dict:
+    def error_response(
+        self,
+        node_name: str,
+        error: str | Exception,
+        *,
+        workflow_complete: bool = False,
+        task_status: TaskStatus | None = None,
+    ) -> dict:
         """Return standard error response.
 
         Args:
             node_name: Name of the node that errored
             error: Error message or exception
+            workflow_complete: Whether to mark workflow as complete
+            task_status: Optional task status to set (e.g., TaskStatus.FAILED)
 
         Returns:
             Standard error state update
         """
-        return {
+        result: dict = {
             "error": str(error),
             "error_node": node_name,
         }
+        if workflow_complete:
+            result["workflow_complete"] = True
+        if task_status is not None:
+            result["task_status"] = task_status
+        return result
 
 
 class Node(StrEnum):

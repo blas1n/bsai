@@ -28,7 +28,13 @@ class QARoute(StrEnum):
 
 
 class AdvanceRoute(StrEnum):
-    """Milestone advance routing options."""
+    """Advance node routing options.
+
+    Both NEXT_MILESTONE and RETRY_MILESTONE route to execute_worker,
+    but with different state:
+    - NEXT_MILESTONE: New task (current_task_id updated, retry_count=0)
+    - RETRY_MILESTONE: Same task retry (keeps qa_feedback, retry_count incremented)
+    """
 
     NEXT_MILESTONE = "next_milestone"
     COMPLETE = "complete"
