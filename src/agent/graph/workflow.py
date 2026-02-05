@@ -403,7 +403,7 @@ class WorkflowRunner:
     ) -> str | None:
         """Load handover context from the previous completed task.
 
-        This provides Conductor with context about what was done in the
+        This provides Architect with context about what was done in the
         previous task, including milestones completed and artifacts created.
 
         Args:
@@ -487,7 +487,7 @@ class WorkflowRunner:
         # Load handover context from previous completed task (if any)
         previous_task_handover = await self._load_previous_task_handover(session_id)
         if previous_task_handover:
-            # Prepend handover context for Conductor to reference
+            # Prepend handover context for Architect to reference
             handover_message = ChatMessage(
                 role="system",
                 content=f"Context from previous task in this session:\n{previous_task_handover}",
@@ -530,7 +530,7 @@ class WorkflowRunner:
             "workflow_complete": False,
             "should_continue": True,
             "breakpoint_enabled": breakpoint_enabled,
-            "breakpoint_nodes": breakpoint_nodes or ["qa_breakpoint"],
+            "breakpoint_nodes": breakpoint_nodes or ["plan_review"],
         }
 
         logger.info(

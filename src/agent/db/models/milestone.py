@@ -32,7 +32,7 @@ class Milestone(Base):
         description: Detailed milestone description
         complexity: Task complexity level (trivial, simple, moderate, complex, context_heavy)
         acceptance_criteria: Criteria for milestone completion
-        selected_llm: LLM model selected by Conductor
+        selected_llm: LLM model selected by Architect
         status: Milestone status (pending, in_progress, passed, failed)
         worker_output: Worker agent output
         qa_result: QA agent feedback/result

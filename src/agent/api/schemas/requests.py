@@ -56,8 +56,8 @@ class TaskCreate(BaseModel):
         description="Enable breakpoints for human-in-the-loop workflow",
     )
     breakpoint_nodes: list[str] = Field(
-        default_factory=lambda: ["qa_breakpoint"],
-        description="List of node names to pause at. Use 'all' to pause at all breakpoints.",
+        default_factory=lambda: ["plan_review"],
+        description="List of node names to pause at: plan_review, execution_breakpoint. Use 'all' for all.",
     )
     breakpoint_config: BreakpointConfig | None = Field(
         default=None,

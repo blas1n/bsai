@@ -141,24 +141,6 @@ async def verify_qa_node(
                 status=new_status,
             )
 
-        # Check for plan viability issues (ReAct replanning trigger)
-        needs_replan = False
-        replan_reason = None
-        plan_confidence = qa_output.confidence
-
-        if qa_output.plan_viability in ("NEEDS_REVISION", "BLOCKED"):
-            needs_replan = True
-            replan_reason = (
-                qa_output.plan_viability_reason or f"Plan viability: {qa_output.plan_viability}"
-            )
-            logger.info(
-                "qa_triggered_replan",
-                milestone_id=str(milestone["id"]),
-                plan_viability=qa_output.plan_viability,
-                reason=replan_reason,
-                confidence=plan_confidence,
-            )
-
         logger.info(
             "qa_verified",
             milestone_index=idx,
@@ -218,17 +200,11 @@ async def verify_qa_node(
         result: dict[str, Any] = {
             "current_qa_decision": decision.value,
             "current_qa_feedback": feedback,
-            "plan_confidence": plan_confidence,
         }
 
         # Include milestones only for legacy flow
         if updated_milestones:
             result["milestones"] = updated_milestones
-
-        # Add replan trigger fields if plan viability is compromised
-        if needs_replan:
-            result["needs_replan"] = True
-            result["replan_reason"] = replan_reason
 
         return result
 

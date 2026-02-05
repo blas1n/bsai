@@ -36,28 +36,6 @@ class LLMRequest(BaseModel):
 # =============================================================================
 
 
-class MilestoneSchema(BaseModel):
-    """Schema for a single milestone in Conductor output."""
-
-    model_config = {"extra": "forbid"}
-
-    description: str = Field(..., description="Brief description of what needs to be done")
-    complexity: Literal["TRIVIAL", "SIMPLE", "MODERATE", "COMPLEX", "CONTEXT_HEAVY"] = Field(
-        ..., description="Task complexity level"
-    )
-    acceptance_criteria: str = Field(..., description="Criteria to validate completion")
-
-
-class ConductorOutput(BaseModel):
-    """Structured output schema for Conductor agent."""
-
-    model_config = {"extra": "forbid"}
-
-    milestones: list[MilestoneSchema] = Field(
-        ..., description="List of milestones to complete the task"
-    )
-
-
 class QAOutput(BaseModel):
     """Structured output schema for QA agent validation."""
 
@@ -165,48 +143,6 @@ class LLMResponse(BaseModel):
     usage: UsageInfo
     model: str
     finish_reason: str | None = None
-
-
-# =============================================================================
-# ReAct Replanning Schemas
-# =============================================================================
-
-
-class MilestoneModification(BaseModel):
-    """Schema for a single milestone modification during replanning."""
-
-    model_config = {"extra": "forbid"}
-
-    action: Literal["ADD", "MODIFY", "REMOVE", "REORDER"] = Field(
-        ..., description="Type of modification"
-    )
-    target_index: int | None = Field(
-        default=None,
-        description="Index of milestone to modify/remove (None for ADD)",
-    )
-    new_milestone: MilestoneSchema | None = Field(
-        default=None,
-        description="New milestone data (for ADD/MODIFY)",
-    )
-    reason: str = Field(..., description="Reason for this modification")
-
-
-class ConductorReplanOutput(BaseModel):
-    """Structured output for Conductor replanning based on execution observations."""
-
-    model_config = {"extra": "forbid"}
-
-    analysis: str = Field(..., description="Analysis of current situation and why replan is needed")
-    modifications: list[MilestoneModification] = Field(
-        ..., description="List of plan modifications to apply"
-    )
-    confidence: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Confidence in the revised plan (0.0-1.0)",
-    )
-    reasoning: str = Field(..., description="Reasoning for the plan changes")
 
 
 # =============================================================================

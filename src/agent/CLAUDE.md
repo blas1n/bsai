@@ -382,18 +382,18 @@ my_new_prompt: |
 
 2. **Add enum key** in `keys.py`:
 ```python
-class ConductorPrompts(str, Enum):
-    ANALYSIS_PROMPT = "analysis_prompt"
+class ArchitectPrompts(str, Enum):
+    PLANNING_PROMPT = "planning_prompt"
     MY_NEW_PROMPT = "my_new_prompt"  # Must match YAML key
 ```
 
 3. **Use in code**:
 ```python
-from agent.prompts import PromptManager, ConductorPrompts
+from agent.prompts import PromptManager, ArchitectPrompts
 
 prompt = self.prompt_manager.render(
-    "conductor",  # YAML filename without extension
-    ConductorPrompts.MY_NEW_PROMPT,
+    "architect",  # YAML filename without extension
+    ArchitectPrompts.MY_NEW_PROMPT,
     variable_name="value",
 )
 ```

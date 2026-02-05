@@ -157,7 +157,7 @@ class LLMChunkPayload(BaseModel):
     milestone_id: UUID
     chunk: str
     chunk_index: int
-    agent: str = Field(description="Agent name: worker, qa, meta_prompter")
+    agent: str = Field(description="Agent name: architect, worker, qa, responder")
 
 
 class LLMCompletePayload(BaseModel):

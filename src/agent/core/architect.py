@@ -112,7 +112,7 @@ class ArchitectAgent:
         request = LLMRequest(
             model=model.name,
             messages=messages,
-            temperature=settings.conductor_temperature,  # Reuse conductor temp for consistency
+            temperature=settings.architect_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
             response_format={
@@ -214,7 +214,7 @@ class ArchitectAgent:
         request = LLMRequest(
             model=model.name,
             messages=messages,
-            temperature=settings.conductor_temperature,
+            temperature=settings.architect_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
             response_format={
@@ -327,7 +327,7 @@ class ArchitectAgent:
         request = LLMRequest(
             model=model.name,
             messages=messages,
-            temperature=settings.conductor_replan_temperature,
+            temperature=settings.architect_temperature,
             api_base=model.api_base,
             api_key=model.api_key,
             response_format={

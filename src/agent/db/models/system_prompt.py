@@ -21,7 +21,7 @@ class SystemPrompt(Base):
     Attributes:
         id: Primary key (UUID)
         name: Prompt name/title
-        agent_type: Agent type (conductor, meta_prompter, worker, qa, summarizer)
+        agent_type: Agent type (architect, worker, qa, responder)
         version: Version number (incremental)
         template: Prompt template content (Jinja2 format)
         is_active: Whether this version is active

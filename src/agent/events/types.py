@@ -74,7 +74,7 @@ class EventType(StrEnum):
     BREAKPOINT_RESUMED = "breakpoint.resumed"
     BREAKPOINT_REJECTED = "breakpoint.rejected"
 
-    # Plan modification (ReAct dynamic replanning)
+    # Plan modification (Architect replanning)
     PLAN_MODIFIED = "plan.modified"
 
 
@@ -191,7 +191,7 @@ class AgentActivityEvent(Event):
     type: EventType = EventType.AGENT_STARTED  # or AGENT_COMPLETED
     milestone_id: UUID
     sequence_number: int
-    agent: str  # conductor, meta_prompter, worker, qa, summarizer, responder
+    agent: str  # architect, worker, qa, responder
     status: AgentStatus  # started, completed, failed
     message: str
     details: dict[str, Any] | None = None
@@ -270,8 +270,8 @@ class BreakpointResumedEvent(Event):
 class PlanModificationEvent(Event):
     """Emitted when the plan is dynamically modified during execution.
 
-    Triggered by the replan_node when QA detects that the current plan
-    needs revision based on observations from Worker execution.
+    Triggered when Architect detects that the current plan needs
+    revision based on observations from Worker execution.
     """
 
     type: EventType = EventType.PLAN_MODIFIED

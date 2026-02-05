@@ -22,7 +22,7 @@ class SystemPromptRepository(BaseRepository[SystemPrompt]):
         """Get the active prompt for an agent type and name.
 
         Args:
-            agent_type: Agent type (conductor, meta_prompter, worker, qa, summarizer)
+            agent_type: Agent type (architect, worker, qa, responder)
             name: Prompt name
 
         Returns:

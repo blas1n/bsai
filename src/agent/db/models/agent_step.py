@@ -27,7 +27,7 @@ class AgentStep(Base):
         id: Primary key (UUID)
         task_id: Foreign key to tasks table
         milestone_id: Foreign key to milestones table (optional for task-level agents)
-        agent_type: Type of agent (conductor, meta_prompter, worker, qa, summarizer)
+        agent_type: Type of agent (architect, worker, qa, responder)
         status: Execution status (started, completed, failed)
         started_at: When the agent started execution
         ended_at: When the agent finished execution

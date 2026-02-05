@@ -58,7 +58,7 @@ class LLMUsageLogRepository(BaseRepository[LLMUsageLog]):
         """Get LLM usage logs by agent type for analysis.
 
         Args:
-            agent_type: Agent type (conductor, meta_prompter, worker, qa, summarizer)
+            agent_type: Agent type (architect, worker, qa, responder)
             limit: Maximum number of logs to return
 
         Returns:

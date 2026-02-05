@@ -94,7 +94,7 @@ class TaskRepository(BaseRepository[Task]):
         return list(result.scalars().all())
 
     async def save_handover_context(self, task_id: UUID, handover_context: str) -> Task | None:
-        """Save handover context for next task's Conductor.
+        """Save handover context for next task's Architect.
 
         Args:
             task_id: Task UUID

@@ -252,15 +252,13 @@ class Node(StrEnum):
     GENERATE_RESPONSE = "generate_response"
 
     # Deprecated nodes (kept for backward compatibility with checkpoints)
-    # TODO: Remove after migration period
+    # Deprecated nodes (kept for backward compatibility with old snapshots)
     SELECT_LLM = "select_llm"
     GENERATE_PROMPT = "generate_prompt"
     QA_BREAKPOINT = "qa_breakpoint"
     CHECK_CONTEXT = "check_context"
     SUMMARIZE = "summarize"
     TASK_SUMMARY = "task_summary"
-    REPLAN = "replan"
-    RECOVERY = "recovery"
 
 
 def get_breakpoint_service(config: RunnableConfig) -> BreakpointService:

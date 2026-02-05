@@ -3,14 +3,6 @@
 from enum import Enum
 
 
-class ConductorPrompts(str, Enum):
-    """Prompt keys for Conductor agent."""
-
-    ANALYSIS_PROMPT = "analysis_prompt"
-    REPLAN_PROMPT = "replan_prompt"
-    RETHINK_STRATEGY_PROMPT = "rethink_strategy_prompt"
-
-
 class WorkerPrompts(str, Enum):
     """Prompt keys for Worker agent."""
 
