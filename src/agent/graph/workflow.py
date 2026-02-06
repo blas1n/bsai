@@ -1,7 +1,11 @@
 """LangGraph StateGraph composition and compilation.
 
-Builds and compiles the multi-agent workflow graph that orchestrates
-the 8 specialized agents for task execution.
+Builds and compiles the simplified 7-node workflow graph that orchestrates
+task execution with Architect planning and Human-in-the-Loop review.
+
+Simplified Workflow (7 nodes):
+    architect -> plan_review -> execute_worker -> verify_qa
+        -> execution_breakpoint -> advance -> generate_response -> END
 """
 
 from __future__ import annotations
@@ -20,9 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.api.websocket.manager import ConnectionManager
 from agent.cache import SessionCache
 from agent.container import lifespan
-from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.db.models.enums import TaskStatus
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
-from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
 from agent.db.repository.task_repo import TaskRepository
 from agent.events import EventBus
@@ -33,29 +36,24 @@ from agent.tracing import get_langfuse_callback, get_langfuse_tracer
 from .checkpointer import get_checkpointer
 from .edges import (
     AdvanceRoute,
-    CompressionRoute,
-    PromptRoute,
     QARoute,
-    RecoveryRoute,
     route_advance,
     route_qa_decision,
-    route_recovery,
-    should_compress_context,
-    should_use_meta_prompter,
 )
 from .nodes import Node
 from .nodes.advance import advance_node
 from .nodes.analyze import analyze_task_node
-from .nodes.breakpoint import qa_breakpoint_node
-from .nodes.context import check_context_node, summarize_node
 from .nodes.execute import execute_worker_node
-from .nodes.llm import generate_prompt_node, select_llm_node
+from .nodes.execution_breakpoint import (
+    execution_breakpoint as execution_breakpoint_node,
+)
+from .nodes.execution_breakpoint import (
+    execution_breakpoint_router,
+)
+from .nodes.plan_review import plan_review_breakpoint, plan_review_router
 from .nodes.qa import verify_qa_node
-from .nodes.recovery import recovery_node
-from .nodes.replan import replan_node
 from .nodes.response import generate_response_node
-from .nodes.task_summary import task_summary_node
-from .state import AgentState, MilestoneData
+from .state import AgentState
 
 if TYPE_CHECKING:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -107,20 +105,26 @@ def _create_node_with_session(
 def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     """Build the agent orchestration workflow graph.
 
-    Flow:
-        Entry -> analyze_task -> select_llm -> [generate_prompt?]
-             -> execute_worker -> verify_qa -> [retry/fail/next/replan]
-             -> [replan -> select_llm]  (ReAct dynamic replanning)
-             -> check_context -> [summarize?]
-             -> advance -> [next_milestone/task_summary/retry]
-             -> task_summary -> generate_response -> END
+    Simplified 7-node workflow:
+        Entry -> architect (analyze_task) -> plan_review -> [router]
+             -> execute_worker -> verify_qa -> [retry/complete]
+             -> execution_breakpoint -> [pause/continue]
+             -> advance -> [next_task/complete/retry]
+             -> generate_response -> END
 
-    The task_summary node generates a summary of all milestones for:
-    - Responder to create a complete user response
-    - Next task's Conductor to understand previous work
+    Plan Review Router:
+        - execute_worker: Plan approved, continue to execution
+        - architect: Revision requested, regenerate plan
+        - END: Plan rejected or workflow should end
 
-    The replan node enables dynamic plan modification based on
-    observations from Worker execution and plan viability assessments.
+    Execution Breakpoint Router:
+        - advance: Continue to advance flow
+        - END: Pause execution and wait for resume via API
+
+    QA Router:
+        - NEXT: Proceed to execution_breakpoint
+        - RETRY: Go back to execute_worker
+        - FAIL: Go to generate_response with error
 
     Args:
         session: Database session for node operations
@@ -131,107 +135,85 @@ def build_workflow(session: AsyncSession) -> StateGraph[AgentState]:
     # Create graph with AgentState
     graph: StateGraph[AgentState] = StateGraph(AgentState)
 
-    # Node function mapping
+    # Node function mapping - simplified 7-node workflow
+    # Removed: select_llm, generate_prompt, qa_breakpoint, check_context, summarize, task_summary, replan, recovery
     node_functions = {
-        Node.ANALYZE_TASK: analyze_task_node,
-        Node.SELECT_LLM: select_llm_node,
-        Node.GENERATE_PROMPT: generate_prompt_node,
+        Node.ANALYZE_TASK: analyze_task_node,  # Architect: creates project plan
+        Node.PLAN_REVIEW: plan_review_breakpoint,  # Human-in-the-Loop plan review
         Node.EXECUTE_WORKER: execute_worker_node,
-        Node.QA_BREAKPOINT: qa_breakpoint_node,
         Node.VERIFY_QA: verify_qa_node,
-        Node.CHECK_CONTEXT: check_context_node,
-        Node.SUMMARIZE: summarize_node,
+        Node.EXECUTION_BREAKPOINT: execution_breakpoint_node,  # Execution breakpoint for task-level pausing
         Node.ADVANCE: advance_node,
-        Node.TASK_SUMMARY: task_summary_node,
         Node.GENERATE_RESPONSE: generate_response_node,
-        Node.REPLAN: replan_node,
-        Node.RECOVERY: recovery_node,
     }
 
     # Add all nodes with session bound
     for node, func in node_functions.items():
         graph.add_node(node, _create_node_with_session(func, session))
 
-    # Set entry point
+    # Set entry point: architect (analyze_task) creates the project plan
     graph.set_entry_point(Node.ANALYZE_TASK)
 
-    # Add edges from analyze_task
-    graph.add_edge(Node.ANALYZE_TASK, Node.SELECT_LLM)
+    # architect -> plan_review (Human-in-the-Loop breakpoint)
+    graph.add_edge(Node.ANALYZE_TASK, Node.PLAN_REVIEW)
 
-    # Add conditional edge for MetaPrompter (skip for TRIVIAL/SIMPLE)
+    # plan_review -> conditional routing based on user action
+    # - execute_worker: Plan approved, continue to execution directly
+    # - architect: Revision requested, regenerate plan
+    # - END: Plan rejected
     graph.add_conditional_edges(
-        Node.SELECT_LLM,
-        should_use_meta_prompter,
+        Node.PLAN_REVIEW,
+        plan_review_router,
         {
-            PromptRoute.GENERATE: Node.GENERATE_PROMPT,
-            PromptRoute.SKIP: Node.EXECUTE_WORKER,
+            "execute_worker": Node.EXECUTE_WORKER,  # Approved: continue directly to worker
+            "architect": Node.ANALYZE_TASK,  # Revision: go back to architect
+            END: END,  # Rejected: end workflow
         },
     )
 
-    # Edge from generate_prompt to execute_worker
-    graph.add_edge(Node.GENERATE_PROMPT, Node.EXECUTE_WORKER)
-
-    # Edge from execute_worker to qa_breakpoint (Human-in-the-Loop checkpoint)
-    graph.add_edge(Node.EXECUTE_WORKER, Node.QA_BREAKPOINT)
-
-    # Edge from qa_breakpoint to verify_qa
-    graph.add_edge(Node.QA_BREAKPOINT, Node.VERIFY_QA)
+    # Edge from execute_worker to verify_qa (direct, no qa_breakpoint)
+    graph.add_edge(Node.EXECUTE_WORKER, Node.VERIFY_QA)
 
     # Conditional edges from verify_qa based on QA decision
-    # NOTE: RETRY also goes to ADVANCE first to increment retry_count
-    # then ADVANCE routes back to EXECUTE_WORKER via RETRY_MILESTONE
-    # REPLAN triggers dynamic plan modification when QA detects plan viability issues
-    # FAIL now routes to RECOVERY for graceful failure handling
+    # - NEXT: Proceed to execution_breakpoint for task-level pause control
+    # - RETRY: Go to advance to handle retry logic
+    # - FAIL: Go directly to generate_response (simplified error handling)
     graph.add_conditional_edges(
         Node.VERIFY_QA,
         route_qa_decision,
         {
-            QARoute.NEXT: Node.CHECK_CONTEXT,
+            QARoute.NEXT: Node.EXECUTION_BREAKPOINT,
             QARoute.RETRY: Node.ADVANCE,
-            QARoute.FAIL: Node.RECOVERY,
-            QARoute.REPLAN: Node.REPLAN,
+            QARoute.FAIL: Node.GENERATE_RESPONSE,
         },
     )
 
-    graph.add_edge(Node.REPLAN, Node.SELECT_LLM)
-
-    # Conditional edges from recovery node
-    # - STRATEGY_RETRY: Try a completely different approach (back to select_llm)
-    # - FAILURE_REPORT: Generate detailed failure report (to task_summary -> response)
+    # execution_breakpoint -> conditional routing
+    # - advance: Continue to advance flow
+    # - END: Pause execution and wait for resume via API
     graph.add_conditional_edges(
-        Node.RECOVERY,
-        route_recovery,
+        Node.EXECUTION_BREAKPOINT,
+        execution_breakpoint_router,
         {
-            RecoveryRoute.STRATEGY_RETRY: Node.SELECT_LLM,
-            RecoveryRoute.FAILURE_REPORT: Node.TASK_SUMMARY,
+            "advance": Node.ADVANCE,
+            END: END,
         },
     )
-
-    # Conditional edges for context compression
-    graph.add_conditional_edges(
-        Node.CHECK_CONTEXT,
-        should_compress_context,
-        {
-            CompressionRoute.SUMMARIZE: Node.SUMMARIZE,
-            CompressionRoute.SKIP: Node.ADVANCE,
-        },
-    )
-
-    # Edge from summarize to advance
-    graph.add_edge(Node.SUMMARIZE, Node.ADVANCE)
 
     # Conditional edges from advance
+    # - NEXT_MILESTONE: Loop back to execute_worker for next task
+    # - COMPLETE: All tasks done, go to generate_response
+    # - RETRY_MILESTONE: QA retry, go back to execute_worker
     graph.add_conditional_edges(
         Node.ADVANCE,
         route_advance,
         {
-            AdvanceRoute.NEXT_MILESTONE: Node.SELECT_LLM,
-            AdvanceRoute.COMPLETE: Node.TASK_SUMMARY,
+            AdvanceRoute.NEXT_MILESTONE: Node.EXECUTE_WORKER,
+            AdvanceRoute.COMPLETE: Node.GENERATE_RESPONSE,
             AdvanceRoute.RETRY_MILESTONE: Node.EXECUTE_WORKER,
         },
     )
 
-    graph.add_edge(Node.TASK_SUMMARY, Node.GENERATE_RESPONSE)
     graph.add_edge(Node.GENERATE_RESPONSE, END)
 
     logger.info("workflow_graph_built")
@@ -297,67 +279,6 @@ class WorkflowRunner:
         self.breakpoint_service = breakpoint_service
         self._tracer = get_langfuse_tracer()
 
-    async def _load_previous_milestones(
-        self,
-        session_id: UUID,
-    ) -> tuple[list[MilestoneData], int]:
-        """Load previous milestones from session for continuity.
-
-        Args:
-            session_id: Session UUID
-
-        Returns:
-            Tuple of (milestones_data, next_sequence_number)
-        """
-        # Map QADecision values to MilestoneStatus
-        status_mapping = {
-            "pass": MilestoneStatus.PASSED,
-            "retry": MilestoneStatus.IN_PROGRESS,
-            "fail": MilestoneStatus.FAILED,
-        }
-
-        milestone_repo = MilestoneRepository(self.session)
-        db_milestones = await milestone_repo.get_by_session_id(session_id)
-
-        milestones: list[MilestoneData] = []
-        for m in db_milestones:
-            # Convert DB model to MilestoneData
-            complexity = m.complexity
-            if isinstance(complexity, str):
-                complexity = TaskComplexity(complexity)
-
-            status = m.status
-            if isinstance(status, str):
-                # Try mapping from QADecision values first, then MilestoneStatus
-                status = status_mapping.get(status) or MilestoneStatus(status)
-
-            milestones.append(
-                MilestoneData(
-                    id=m.id,
-                    description=m.description,
-                    complexity=complexity,
-                    acceptance_criteria=m.acceptance_criteria or "",
-                    status=status,
-                    selected_model=m.selected_llm or None,
-                    generated_prompt=None,
-                    worker_output=m.worker_output,
-                    qa_feedback=m.qa_result,
-                    retry_count=m.retry_count,
-                )
-            )
-
-        # Get max sequence number for next milestone numbering
-        max_seq = await milestone_repo.get_max_sequence_for_session(session_id)
-
-        logger.info(
-            "previous_milestones_loaded",
-            session_id=str(session_id),
-            milestone_count=len(milestones),
-            max_sequence=max_seq,
-        )
-
-        return milestones, max_seq
-
     async def _load_previous_context(
         self,
         session_id: UUID,
@@ -420,7 +341,7 @@ class WorkflowRunner:
     ) -> str | None:
         """Load handover context from the previous completed task.
 
-        This provides Conductor with context about what was done in the
+        This provides Architect with context about what was done in the
         previous task, including milestones completed and artifacts created.
 
         Args:
@@ -495,16 +416,15 @@ class WorkflowRunner:
             raise ValueError(f"Session {session_id} not found")
         user_id = session.user_id or "unknown"
 
-        # Load previous context and milestones from same session
+        # Load previous context from same session
         context_messages, context_summary, context_tokens = await self._load_previous_context(
             session_id
         )
-        previous_milestones, max_sequence = await self._load_previous_milestones(session_id)
 
         # Load handover context from previous completed task (if any)
         previous_task_handover = await self._load_previous_task_handover(session_id)
         if previous_task_handover:
-            # Prepend handover context for Conductor to reference
+            # Prepend handover context for Architect to reference
             handover_message = ChatMessage(
                 role="system",
                 content=f"Context from previous task in this session:\n{previous_task_handover}",
@@ -519,22 +439,18 @@ class WorkflowRunner:
             trace_name=f"task-{task_id}",
             metadata={
                 "original_request": original_request[:500],
-                "previous_milestone_count": len(previous_milestones),
             },
             tags=["bsai", "langgraph", "multi-agent"],
         )
         trace_url = self.get_trace_url(task_id)
 
-        # Build initial state with previous context and milestones
+        # Build initial state with previous context
         initial_state: AgentState = {
             "session_id": session_id,
             "task_id": task_id,
             "user_id": user_id,
             "original_request": original_request,
             "task_status": TaskStatus.PENDING,
-            "milestones": previous_milestones,
-            "current_milestone_index": len(previous_milestones),
-            "milestone_sequence_offset": max_sequence,
             "retry_count": 0,
             "context_messages": context_messages,
             "context_summary": context_summary,
@@ -543,11 +459,10 @@ class WorkflowRunner:
             "total_input_tokens": 0,
             "total_output_tokens": 0,
             "total_cost_usd": "0",
-            "needs_compression": False,
             "workflow_complete": False,
             "should_continue": True,
             "breakpoint_enabled": breakpoint_enabled,
-            "breakpoint_nodes": breakpoint_nodes or ["qa_breakpoint"],
+            "breakpoint_nodes": breakpoint_nodes or ["plan_review"],
         }
 
         logger.info(
@@ -555,7 +470,6 @@ class WorkflowRunner:
             session_id=str(session_id),
             task_id=str(task_id),
             has_previous_context=len(context_messages) > 0,
-            previous_milestone_count=len(previous_milestones),
             has_handover_context=previous_task_handover is not None,
             trace_url=trace_url,
             tracing_enabled=langfuse_callback is not None,

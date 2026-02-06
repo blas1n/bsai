@@ -1,27 +1,24 @@
 """Core agent implementations.
 
-Six specialized agents for LLM orchestration:
-- Conductor: Request analysis and milestone breakdown
-- Meta Prompter: Optimized prompt generation
-- Worker: Task execution
+Simplified 7-node workflow agents:
+- Architect: Hierarchical project planning and task breakdown
+- Worker: Task execution with MCP tools
 - QA Agent: Output validation
-- Summarizer: Context compression
 - Responder: Final user-facing response generation
+
+Workflow: architect -> plan_review -> execute_worker -> verify_qa
+    -> execution_breakpoint -> advance -> generate_response -> END
 """
 
-from .conductor import ConductorAgent
-from .meta_prompter import MetaPrompterAgent
+from .architect import ArchitectAgent
 from .qa_agent import QAAgent, QADecision
 from .responder import ResponderAgent
-from .summarizer import SummarizerAgent
 from .worker import WorkerAgent
 
 __all__ = [
-    "ConductorAgent",
-    "MetaPrompterAgent",
+    "ArchitectAgent",
     "WorkerAgent",
     "QAAgent",
     "QADecision",
-    "SummarizerAgent",
     "ResponderAgent",
 ]

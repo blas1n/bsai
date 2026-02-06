@@ -7,9 +7,9 @@ from uuid import uuid4
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
+from agent.db.models.enums import TaskStatus
 from agent.events.bus import EventBus
-from agent.graph.state import AgentState, MilestoneData
+from agent.graph.state import AgentState
 from agent.llm import LLMModel
 from agent.services import BreakpointService
 
@@ -94,6 +94,28 @@ def mock_session() -> AsyncMock:
 
 
 @pytest.fixture
+def mock_project_plan() -> MagicMock:
+    """Create mock project plan."""
+    plan = MagicMock()
+    plan.id = uuid4()
+    plan.plan_data = {
+        "tasks": [
+            {
+                "id": "T1",
+                "description": "Setup project",
+                "complexity": "SIMPLE",
+                "acceptance_criteria": "Project initialized",
+                "status": "pending",
+            }
+        ]
+    }
+    plan.total_tasks = 1
+    plan.completed_tasks = 0
+    plan.structure_type = "flat"
+    return plan
+
+
+@pytest.fixture
 def base_state() -> AgentState:
     """Create base state for tests."""
     return AgentState(
@@ -102,46 +124,30 @@ def base_state() -> AgentState:
         user_id="test-user-123",
         original_request="Build a web scraper",
         task_status=TaskStatus.PENDING,
-        milestones=[],
-        current_milestone_index=0,
         retry_count=0,
         context_messages=[],
         current_context_tokens=0,
         max_context_tokens=100000,
-        needs_compression=False,
         workflow_complete=False,
         should_continue=True,
     )
 
 
 @pytest.fixture
-def state_with_milestone(base_state: AgentState) -> AgentState:
-    """Create state with a milestone."""
-    milestone = MilestoneData(
-        id=uuid4(),
-        description="Setup project",
-        complexity=TaskComplexity.SIMPLE,
-        acceptance_criteria="Project initialized",
-        status=MilestoneStatus.PENDING,
-        selected_model=None,
-        generated_prompt=None,
-        worker_output=None,
-        qa_feedback=None,
-        retry_count=0,
-    )
+def state_with_project_plan(base_state: AgentState, mock_project_plan: MagicMock) -> AgentState:
+    """Create state with a project plan."""
     return AgentState(
         session_id=base_state["session_id"],
         task_id=base_state["task_id"],
         user_id=base_state["user_id"],
         original_request=base_state["original_request"],
         task_status=base_state.get("task_status", TaskStatus.PENDING),
-        milestones=[milestone],
-        current_milestone_index=base_state.get("current_milestone_index", 0),
+        project_plan=mock_project_plan,
+        current_task_id="T1",
         retry_count=base_state.get("retry_count", 0),
         context_messages=base_state.get("context_messages", []),
         current_context_tokens=base_state.get("current_context_tokens", 0),
         max_context_tokens=base_state.get("max_context_tokens", 100000),
-        needs_compression=base_state.get("needs_compression", False),
         workflow_complete=base_state.get("workflow_complete", False),
         should_continue=base_state.get("should_continue", True),
     )

@@ -16,10 +16,8 @@ import {
   Brain,
   FileCheck,
   MessageSquare,
-  Minimize2,
   PauseCircle,
   PlayCircle,
-  Terminal,
   Eye,
 } from 'lucide-react';
 import { AgentActivity, AgentType, MilestoneInfo } from '@/types/chat';
@@ -52,16 +50,12 @@ const formatDuration = (startedAt?: string, completedAt?: string): string => {
 
 const getAgentIcon = (agentType: string) => {
   switch (agentType) {
-    case 'conductor':
+    case 'architect':
       return <Brain className="h-4 w-4" />;
-    case 'meta_prompter':
-      return <MessageSquare className="h-4 w-4" />;
     case 'worker':
       return <Zap className="h-4 w-4" />;
     case 'qa':
       return <FileCheck className="h-4 w-4" />;
-    case 'summarizer':
-      return <Minimize2 className="h-4 w-4" />;
     case 'responder':
       return <MessageSquare className="h-4 w-4" />;
     default:
@@ -71,18 +65,14 @@ const getAgentIcon = (agentType: string) => {
 
 const getAgentColor = (agentType: string): string => {
   switch (agentType) {
-    case 'conductor':
-      return 'bg-purple-500';
-    case 'meta_prompter':
+    case 'architect':
       return 'bg-blue-500';
     case 'worker':
       return 'bg-green-500';
     case 'qa':
       return 'bg-orange-500';
-    case 'summarizer':
-      return 'bg-cyan-500';
     case 'responder':
-      return 'bg-pink-500';
+      return 'bg-teal-500';
     default:
       return 'bg-gray-500';
   }

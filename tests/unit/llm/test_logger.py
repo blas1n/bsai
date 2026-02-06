@@ -60,7 +60,7 @@ class TestLogUsage:
 
             result = await logger.log_usage(
                 session_id=session_id,
-                agent_type=AgentType.CONDUCTOR,
+                agent_type=AgentType.ARCHITECT,
                 model=sample_model,
                 input_tokens=100,
                 output_tokens=50,
@@ -140,12 +140,12 @@ class TestLogUsage:
         """Works with all agent types."""
         session_id = uuid4()
 
+        # Simplified 4-agent workflow
         agent_types = [
-            AgentType.CONDUCTOR,
-            AgentType.META_PROMPTER,
+            AgentType.ARCHITECT,
             AgentType.WORKER,
             AgentType.QA,
-            AgentType.SUMMARIZER,
+            AgentType.RESPONDER,
         ]
 
         for agent_type in agent_types:

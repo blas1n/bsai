@@ -127,20 +127,18 @@ class AgentSettings(BaseSettings):
 
     Lower temperature values produce more consistent, deterministic outputs.
     Higher values produce more creative but variable outputs.
+
+    Simplified 7-node workflow:
+        architect -> plan_review -> execute_worker -> verify_qa
+            -> execution_breakpoint -> advance -> generate_response -> END
     """
 
     # Temperature settings (0.0-2.0, lower = more consistent)
-    conductor_temperature: float = Field(
+    architect_temperature: float = Field(
         default=0.2,
         ge=0.0,
         le=2.0,
-        description="Conductor agent temperature for task analysis",
-    )
-    meta_prompter_temperature: float = Field(
-        default=0.3,
-        ge=0.0,
-        le=2.0,
-        description="Meta Prompter temperature for prompt generation",
+        description="Architect agent temperature for project planning",
     )
     worker_temperature: float = Field(
         default=0.3,
@@ -160,11 +158,11 @@ class AgentSettings(BaseSettings):
         le=2.0,
         description="QA agent temperature for validation decisions",
     )
-    summarizer_temperature: float = Field(
-        default=0.2,
+    responder_temperature: float = Field(
+        default=0.3,
         ge=0.0,
         le=2.0,
-        description="Summarizer temperature for context compression",
+        description="Responder agent temperature for user response generation",
     )
 
     # Workflow control settings
@@ -179,30 +177,6 @@ class AgentSettings(BaseSettings):
         ge=1,
         le=50,
         description="Maximum tool calling iterations in LLM completion",
-    )
-
-    # ReAct dynamic replanning settings
-    max_replan_iterations: int = Field(
-        default=3,
-        ge=1,
-        le=10,
-        description="Maximum replan iterations per task (prevents infinite loops)",
-    )
-    replan_confidence_threshold: float = Field(
-        default=0.3,
-        ge=0.0,
-        le=1.0,
-        description="Minimum plan confidence threshold below which replanning may trigger",
-    )
-    enable_react_observations: bool = Field(
-        default=True,
-        description="Enable ReAct observation extraction from Worker output",
-    )
-    conductor_replan_temperature: float = Field(
-        default=0.3,
-        ge=0.0,
-        le=2.0,
-        description="Temperature for Conductor replanning decisions",
     )
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="AGENT_", extra="ignore")

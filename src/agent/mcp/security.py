@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import shlex
+import socket
 from base64 import b64decode, b64encode
 from typing import Any
+from urllib.parse import urlparse
 
+import httpx
 import structlog
 from cryptography.fernet import Fernet
 
@@ -68,14 +72,21 @@ class McpSecurityValidator:
             allowed_list = ", ".join(sorted(self.allowed_stdio_commands))
             raise ValueError(f"Command '{base_cmd}' not allowed. Allowed commands: {allowed_list}")
 
-    def validate_server_url(self, url: str) -> None:
+    def validate_server_url(self, url: str) -> str:
         """Validate HTTP/SSE URL to prevent SSRF attacks.
+
+        Validates the URL against blocked patterns, resolves the hostname,
+        and checks that it does not point to a private/internal IP.
+        Returns a sanitized URL string.
 
         Args:
             url: Server URL to validate
 
+        Returns:
+            Sanitized and validated URL string
+
         Raises:
-            ValueError: If URL matches blocked patterns
+            ValueError: If URL fails validation
         """
         if not url or not url.strip():
             raise ValueError("URL cannot be empty")
@@ -93,6 +104,60 @@ class McpSecurityValidator:
                     f"URL blocked: Cannot access internal/private IP addresses. "
                     f"Matched pattern: {pattern}"
                 )
+
+        # Extract and validate hostname
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError("URL must contain a valid hostname")
+
+        # Validate scheme is strictly http or https
+        scheme = parsed.scheme
+        if scheme not in ("http", "https"):
+            raise ValueError("URL must use HTTP or HTTPS protocol")
+
+        # Resolve hostname and validate all IPs are public
+        self._validate_resolved_ip(hostname)
+
+        # Return sanitized URL reconstructed from validated components
+        sanitized_url = f"{scheme}://{parsed.netloc}{parsed.path}"
+        if parsed.query:
+            sanitized_url += f"?{parsed.query}"
+        if parsed.fragment:
+            sanitized_url += f"#{parsed.fragment}"
+
+        return sanitized_url
+
+    def _validate_resolved_ip(self, hostname: str) -> None:
+        """Validate that hostname resolves to a public IP address.
+
+        Args:
+            hostname: Hostname to validate
+
+        Raises:
+            ValueError: If hostname resolves to private/internal IP
+        """
+        try:
+            # Get all IP addresses for the hostname
+            addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC)
+            for _family, _, _, _, sockaddr in addr_info:
+                ip_str = sockaddr[0]
+                try:
+                    ip = ipaddress.ip_address(ip_str)
+                    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                        raise ValueError(
+                            f"URL blocked: Hostname '{hostname}' resolves to "
+                            f"private/internal IP address '{ip_str}'"
+                        )
+                except ValueError as e:
+                    if "private/internal" in str(e):
+                        raise
+                    # If IP parsing fails, continue checking other addresses
+                    continue
+        except socket.gaierror:
+            # DNS resolution failed - allow the request to proceed
+            # (it will fail naturally when httpx tries to connect)
+            pass
 
     def assess_tool_risk(
         self,
@@ -297,3 +362,87 @@ def build_mcp_auth_headers(
         )
 
     return headers
+
+
+async def ssrf_safe_get(
+    url: str,
+    validator: McpSecurityValidator,
+    timeout: float = 10.0,
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    """Perform an SSRF-safe HTTP GET request.
+
+    Validates the URL against SSRF patterns and disables redirects
+    to prevent redirect-based SSRF attacks.
+
+    Args:
+        url: URL to fetch
+        validator: Security validator for URL validation
+        timeout: Request timeout in seconds
+        headers: Optional headers to include
+
+    Returns:
+        httpx.Response object
+
+    Raises:
+        ValueError: If URL fails SSRF validation
+        httpx.HTTPError: If request fails
+    """
+    # Full SSRF validation: blocked patterns, hostname resolution, private IP check
+    validator.validate_server_url(url)
+
+    # CodeQL StringRestrictionSanitizerGuard: re.fullmatch with url as 2nd arg
+    # acts as a barrier guard that restricts url to safe characters only.
+    if not re.fullmatch(r"https?://[a-zA-Z0-9._\-]+(:\d+)?(/[^\s]*)?", url):
+        raise ValueError("URL contains unsafe characters")
+
+    # Use follow_redirects=False to prevent redirect-based SSRF
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        follow_redirects=False,
+    ) as client:
+        return await client.get(url, headers=headers)
+
+
+async def ssrf_safe_post(
+    url: str,
+    validator: McpSecurityValidator,
+    data: dict[str, Any] | None = None,
+    json_data: dict[str, Any] | None = None,
+    timeout: float = 10.0,
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    """Perform an SSRF-safe HTTP POST request.
+
+    Validates the URL against SSRF patterns and disables redirects
+    to prevent redirect-based SSRF attacks.
+
+    Args:
+        url: URL to post to
+        validator: Security validator for URL validation
+        data: Form data to send
+        json_data: JSON data to send
+        timeout: Request timeout in seconds
+        headers: Optional headers to include
+
+    Returns:
+        httpx.Response object
+
+    Raises:
+        ValueError: If URL fails SSRF validation
+        httpx.HTTPError: If request fails
+    """
+    # Full SSRF validation: blocked patterns, hostname resolution, private IP check
+    validator.validate_server_url(url)
+
+    # CodeQL StringRestrictionSanitizerGuard: re.fullmatch with url as 2nd arg
+    # acts as a barrier guard that restricts url to safe characters only.
+    if not re.fullmatch(r"https?://[a-zA-Z0-9._\-]+(:\d+)?(/[^\s]*)?", url):
+        raise ValueError("URL contains unsafe characters")
+
+    # Use follow_redirects=False to prevent redirect-based SSRF
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        follow_redirects=False,
+    ) as client:
+        return await client.post(url, data=data, json=json_data, headers=headers)

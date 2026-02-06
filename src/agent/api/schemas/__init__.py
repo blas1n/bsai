@@ -11,6 +11,7 @@ from .memory import (
 )
 from .requests import (
     BulkSessionAction,
+    QAConfigRequest,
     SessionCreate,
     SnapshotCreate,
     TaskCreate,
@@ -18,17 +19,26 @@ from .requests import (
     TaskResume,
 )
 from .responses import (
+    ActionResponse,
     AgentStepResponse,
     ArtifactResponse,
+    BuildResultResponse,
+    EpicProgress,
     ErrorResponse,
+    FeatureProgress,
+    LintResultResponse,
     MilestoneDetailResponse,
     MilestoneResponse,
     PaginatedResponse,
+    ProgressResponse,
+    QAResultResponse,
     SessionDetailResponse,
     SessionResponse,
     SnapshotResponse,
     TaskDetailResponse,
     TaskResponse,
+    TestResultResponse,
+    TypecheckResultResponse,
 )
 from .websocket import (
     BreakpointCurrentState,
@@ -53,7 +63,9 @@ __all__ = [
     "TaskReject",
     "SnapshotCreate",
     "BulkSessionAction",
+    "QAConfigRequest",
     # Responses
+    "ActionResponse",
     "AgentStepResponse",
     "SessionResponse",
     "SessionDetailResponse",
@@ -64,7 +76,16 @@ __all__ = [
     "SnapshotResponse",
     "ArtifactResponse",
     "PaginatedResponse",
+    "ProgressResponse",
+    "FeatureProgress",
+    "EpicProgress",
     "ErrorResponse",
+    # QA Results
+    "QAResultResponse",
+    "LintResultResponse",
+    "TypecheckResultResponse",
+    "TestResultResponse",
+    "BuildResultResponse",
     # Memory
     "MemoryResponse",
     "MemoryDetailResponse",

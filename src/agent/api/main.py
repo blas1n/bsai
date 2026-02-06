@@ -25,7 +25,7 @@ from .routers import (
     health_router,
     mcp_router,
     memories_router,
-    milestones_router,
+    plan_router,
     sessions_router,
     snapshots_router,
     tasks_router,
@@ -103,7 +103,7 @@ def create_app() -> FastAPI:
             {"name": "health", "description": "Health check endpoints"},
             {"name": "sessions", "description": "Session management"},
             {"name": "tasks", "description": "Task execution and management"},
-            {"name": "milestones", "description": "Session milestone tracking"},
+            {"name": "plan", "description": "Project plan management"},
             {"name": "snapshots", "description": "Memory snapshot management"},
             {"name": "mcp", "description": "MCP server configuration and tool logs"},
             {"name": "memories", "description": "Long-term episodic memory management"},
@@ -138,7 +138,17 @@ def create_app() -> FastAPI:
         )
 
     # CORS middleware - added AFTER Keycloak so it runs FIRST (handles OPTIONS preflight)
-    if settings.cors_origins:
+    if settings.debug:
+        # Development: allow all localhost origins regardless of port
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=r"https?://localhost(:\d+)?",
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    elif settings.cors_origins:
+        # Production: explicit origins only
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors_origins,
@@ -159,11 +169,11 @@ def create_app() -> FastAPI:
     # API routes
     app.include_router(sessions_router, prefix=api_prefix)
     app.include_router(tasks_router, prefix=api_prefix)
-    app.include_router(milestones_router, prefix=api_prefix)
     app.include_router(snapshots_router, prefix=api_prefix)
     app.include_router(artifacts_router, prefix=api_prefix)
     app.include_router(mcp_router, prefix=api_prefix)
     app.include_router(memories_router, prefix=api_prefix)
+    app.include_router(plan_router, prefix=api_prefix)
 
     # WebSocket (under api prefix)
     app.include_router(websocket_router, prefix=api_prefix)

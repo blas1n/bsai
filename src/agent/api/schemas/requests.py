@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from agent.llm.schemas import BreakpointConfig, QAConfig
+
 
 class SessionCreate(BaseModel):
     """Request schema for creating a new session."""
@@ -54,8 +56,16 @@ class TaskCreate(BaseModel):
         description="Enable breakpoints for human-in-the-loop workflow",
     )
     breakpoint_nodes: list[str] = Field(
-        default_factory=lambda: ["qa_breakpoint"],
-        description="List of node names to pause at. Use 'all' to pause at all breakpoints.",
+        default_factory=lambda: ["plan_review"],
+        description="List of node names to pause at: plan_review, execution_breakpoint. Use 'all' for all.",
+    )
+    breakpoint_config: BreakpointConfig | None = Field(
+        default=None,
+        description="Breakpoint configuration for execution control",
+    )
+    qa_config: QAConfig | None = Field(
+        default=None,
+        description="QA configuration for validation settings",
     )
 
 
@@ -90,4 +100,23 @@ class TaskReject(BaseModel):
         default=None,
         max_length=1000,
         description="Optional reason for rejecting the task",
+    )
+
+
+class QAConfigRequest(BaseModel):
+    """QA configuration update request."""
+
+    validations: list[Literal["static", "lint", "typecheck", "test", "build"]] = Field(
+        default=["static"],
+        description="Validation types to enable",
+    )
+    test_command: str | None = Field(default=None, description="Custom test command")
+    lint_command: str | None = Field(default=None, description="Custom lint command")
+    typecheck_command: str | None = Field(default=None, description="Custom typecheck command")
+    build_command: str | None = Field(default=None, description="Custom build command")
+    allow_lint_warnings: bool = Field(
+        default=True, description="Whether to allow lint warnings without failing"
+    )
+    require_all_tests_pass: bool = Field(
+        default=True, description="Whether all tests must pass for QA to pass"
     )

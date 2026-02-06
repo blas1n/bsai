@@ -1,7 +1,9 @@
-"""Repository for agent step operations."""
+"""Repository for agent step operations.
 
-import json
-from datetime import UTC, datetime
+Provides pure data access methods for agent steps.
+Business logic (status determination, duration calculation) is in AgentStepService.
+"""
+
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -16,8 +18,11 @@ from .base import BaseRepository
 class AgentStepRepository(BaseRepository[AgentStep]):
     """Repository for managing agent execution steps.
 
-    Provides methods for tracking individual agent executions
+    Provides pure query methods for tracking individual agent executions
     within tasks and milestones.
+
+    Note: Business logic methods (start_step, complete_step) have been moved
+    to AgentStepService. Use the service for creating and completing steps.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -27,77 +32,6 @@ class AgentStepRepository(BaseRepository[AgentStep]):
             session: Database session
         """
         super().__init__(AgentStep, session)
-
-    async def start_step(
-        self,
-        task_id: UUID,
-        agent_type: str,
-        milestone_id: UUID | None = None,
-        input_summary: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> AgentStep:
-        """Record start of an agent execution step.
-
-        Args:
-            task_id: Task UUID
-            agent_type: Type of agent (conductor, worker, qa, etc.)
-            milestone_id: Optional milestone UUID
-            input_summary: Brief summary of input
-            metadata: Additional metadata
-
-        Returns:
-            Created AgentStep instance
-        """
-        return await self.create(
-            task_id=task_id,
-            milestone_id=milestone_id,
-            agent_type=agent_type,
-            status="started",
-            input_summary=input_summary,
-            metadata_json=json.dumps(metadata) if metadata else None,
-        )
-
-    async def complete_step(
-        self,
-        step_id: UUID,
-        output_summary: str | None = None,
-        input_tokens: int = 0,
-        output_tokens: int = 0,
-        cost_usd: Decimal = Decimal("0"),
-        error_message: str | None = None,
-    ) -> AgentStep | None:
-        """Record completion of an agent execution step.
-
-        Args:
-            step_id: AgentStep UUID
-            output_summary: Brief summary of output
-            input_tokens: Tokens consumed for input
-            output_tokens: Tokens generated
-            cost_usd: Cost in USD
-            error_message: Error message if failed
-
-        Returns:
-            Updated AgentStep instance or None if not found
-        """
-        step = await self.get_by_id(step_id)
-        if step is None:
-            return None
-
-        now = datetime.now(UTC)
-        duration_ms = int((now - step.started_at).total_seconds() * 1000)
-
-        step.status = "failed" if error_message else "completed"
-        step.ended_at = now
-        step.duration_ms = duration_ms
-        step.output_summary = output_summary
-        step.input_tokens = input_tokens
-        step.output_tokens = output_tokens
-        step.cost_usd = cost_usd
-        step.error_message = error_message
-
-        await self.session.flush()
-        await self.session.refresh(step)
-        return step
 
     async def get_steps_by_task(
         self,

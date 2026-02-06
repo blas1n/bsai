@@ -1,6 +1,5 @@
-"""Tests for execute worker node."""
+"""Tests for execute worker node with project_plan."""
 
-from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -8,32 +7,70 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 
 from agent.core.artifact_extractor import ExtractionResult
-from agent.db.models.enums import MilestoneStatus, TaskComplexity
 from agent.graph.nodes.execute import (
     _build_artifacts_context_message,
-    _extract_react_observations,
     _get_artifact_key,
     _prepare_worker_prompt,
     execute_worker_node,
 )
-from agent.graph.state import AgentState, MilestoneData
+from agent.graph.state import AgentState
 from agent.llm import LLMResponse, UsageInfo
 
 
+def _create_state_with_plan(
+    worker_output: str | None = None,
+    retry_count: int = 0,
+    current_qa_feedback: str | None = None,
+) -> tuple[AgentState, MagicMock]:
+    """Create state with project plan."""
+    mock_plan = MagicMock()
+    mock_plan.id = uuid4()
+    mock_plan.plan_data = {
+        "tasks": [
+            {
+                "id": "T1",
+                "description": "Task description",
+                "complexity": "SIMPLE",
+                "acceptance_criteria": "Must be done",
+                "status": "pending",
+                "worker_output": worker_output,
+            }
+        ]
+    }
+
+    state = AgentState(
+        session_id=uuid4(),
+        task_id=uuid4(),
+        user_id="test-user-123",
+        original_request="Test request",
+        project_plan=mock_plan,
+        current_task_id="T1",
+        retry_count=retry_count,
+        context_messages=[],
+        current_context_tokens=0,
+    )
+
+    if current_qa_feedback:
+        state["current_qa_feedback"] = current_qa_feedback
+
+    return state, mock_plan
+
+
 class TestExecuteWorkerNode:
-    """Tests for execute_worker_node."""
+    """Tests for execute_worker_node with project_plan."""
 
     @pytest.mark.asyncio
     async def test_success(
         self,
         mock_config: RunnableConfig,
         mock_session: AsyncMock,
-        state_with_milestone: AgentState,
     ) -> None:
         """Test successful worker execution."""
+        state, mock_plan = _create_state_with_plan()
+
         with (
             patch("agent.graph.nodes.execute.WorkerAgent") as MockWorker,
-            patch("agent.graph.nodes.execute.MilestoneRepository") as MockMilestoneRepo,
+            patch("agent.graph.nodes.execute.ProjectPlanRepository") as MockPlanRepo,
             patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
             patch(
                 "agent.graph.nodes.execute.extract_artifacts",
@@ -55,21 +92,18 @@ class TestExecuteWorkerNode:
             MockWorker.return_value = mock_worker
 
             # Setup mock repos
-            mock_milestone_repo = MagicMock()
-            mock_milestone_repo.update_llm_usage = AsyncMock()
-            mock_milestone_repo.update = AsyncMock()
-            mock_milestone_repo.get_by_id = AsyncMock(return_value=MagicMock())  # Milestone exists
-            MockMilestoneRepo.return_value = mock_milestone_repo
+            mock_plan_repo = MagicMock()
+            mock_plan_repo.update = AsyncMock()
+            MockPlanRepo.return_value = mock_plan_repo
 
             mock_artifact_repo = MagicMock()
             mock_artifact_repo.get_by_task_id = AsyncMock(return_value=[])
             mock_artifact_repo.get_latest_snapshot = AsyncMock(return_value=[])
             MockArtifactRepo.return_value = mock_artifact_repo
 
-            result = await execute_worker_node(state_with_milestone, mock_config, mock_session)
+            result = await execute_worker_node(state, mock_config, mock_session)
 
             assert result["current_output"] == "Task completed successfully"
-            assert result["milestones"][0]["worker_output"] == "Task completed successfully"
             assert len(result["context_messages"]) == 2  # user + assistant
             assert result["current_context_tokens"] == 150
 
@@ -80,35 +114,15 @@ class TestExecuteWorkerNode:
         mock_session: AsyncMock,
     ) -> None:
         """Test worker retry with QA feedback."""
-        milestone = MilestoneData(
-            id=uuid4(),
-            description="Task",
-            complexity=TaskComplexity.SIMPLE,
-            acceptance_criteria="Done",
-            status=MilestoneStatus.IN_PROGRESS,
-            selected_model="gpt-4o-mini",
-            generated_prompt=None,
+        state, mock_plan = _create_state_with_plan(
             worker_output="Previous output",
-            qa_feedback=None,
-            retry_count=0,
-        )
-
-        state = AgentState(
-            session_id=uuid4(),
-            task_id=uuid4(),
-            user_id="test-user-123",
-            original_request="Test",
-            milestones=[milestone],
-            current_milestone_index=0,
             retry_count=1,
             current_qa_feedback="Please fix the error",
-            context_messages=[],
-            current_context_tokens=0,
         )
 
         with (
             patch("agent.graph.nodes.execute.WorkerAgent") as MockWorker,
-            patch("agent.graph.nodes.execute.MilestoneRepository") as MockMilestoneRepo,
+            patch("agent.graph.nodes.execute.ProjectPlanRepository") as MockPlanRepo,
             patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
             patch(
                 "agent.graph.nodes.execute.extract_artifacts",
@@ -130,11 +144,9 @@ class TestExecuteWorkerNode:
             MockWorker.return_value = mock_worker
 
             # Setup mock repos
-            mock_milestone_repo = MagicMock()
-            mock_milestone_repo.update_llm_usage = AsyncMock()
-            mock_milestone_repo.update = AsyncMock()
-            mock_milestone_repo.get_by_id = AsyncMock(return_value=MagicMock())  # Milestone exists
-            MockMilestoneRepo.return_value = mock_milestone_repo
+            mock_plan_repo = MagicMock()
+            mock_plan_repo.update = AsyncMock()
+            MockPlanRepo.return_value = mock_plan_repo
 
             mock_artifact_repo = MagicMock()
             mock_artifact_repo.get_by_task_id = AsyncMock(return_value=[])
@@ -145,6 +157,30 @@ class TestExecuteWorkerNode:
 
             mock_worker.retry_with_feedback.assert_called_once()
             assert result["current_output"] == "Fixed output"
+
+    @pytest.mark.asyncio
+    async def test_no_project_plan_returns_error(
+        self,
+        mock_config: RunnableConfig,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Test error handling when no project plan exists."""
+        state = AgentState(
+            session_id=uuid4(),
+            task_id=uuid4(),
+            user_id="test-user",
+            original_request="Test",
+        )
+
+        with patch(
+            "agent.graph.nodes.execute.check_task_cancelled",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            result = await execute_worker_node(state, mock_config, mock_session)
+
+            assert result["error"] == "No project_plan available"
+            assert result["error_node"] == "execute_worker"
 
 
 class TestHelperFunctions:
@@ -221,163 +257,34 @@ class TestHelperFunctions:
 
     def test_prepare_worker_prompt_with_original_request(self) -> None:
         """Test prompt preparation includes original request."""
-        state = cast(
-            AgentState,
-            {
-                "current_prompt": None,
-                "original_request": "Build a calculator app",
-            },
-        )
-        milestone = cast(
-            MilestoneData,
-            {
-                "description": "Implement add function",
-            },
-        )
+        state: AgentState = {
+            "session_id": uuid4(),
+            "task_id": uuid4(),
+            "user_id": "test",
+            "original_request": "Build a calculator app",
+        }
+        task = {"description": "Implement add function"}
 
-        prompt = _prepare_worker_prompt(state, milestone)
+        prompt = _prepare_worker_prompt(state, task)
 
         assert "Build a calculator app" in prompt
         assert "Implement add function" in prompt
         assert "Original user request:" in prompt
 
-    def test_prepare_worker_prompt_uses_current_prompt(self) -> None:
-        """Test prompt uses current_prompt over milestone description."""
-        state = cast(
-            AgentState,
-            {
-                "current_prompt": "Enhanced prompt from MetaPrompter",
-                "original_request": "Short request",
-            },
-        )
-        milestone = cast(
-            MilestoneData,
-            {
-                "description": "Basic description",
-            },
-        )
+    def test_prepare_worker_prompt_with_acceptance_criteria(self) -> None:
+        """Test prompt includes acceptance criteria."""
+        state: AgentState = {
+            "session_id": uuid4(),
+            "task_id": uuid4(),
+            "user_id": "test",
+            "original_request": "Request",
+        }
+        task = {
+            "description": "Task description",
+            "acceptance_criteria": "Must pass all tests",
+        }
 
-        prompt = _prepare_worker_prompt(state, milestone)
+        prompt = _prepare_worker_prompt(state, task)
 
-        assert "Enhanced prompt from MetaPrompter" in prompt
-        assert "Short request" in prompt
-
-    def test_prepare_worker_prompt_already_contains_request(self) -> None:
-        """Test prompt doesn't duplicate when already containing request."""
-        original = "Build a calculator"
-        state = cast(
-            AgentState,
-            {
-                "current_prompt": "Task: Build a calculator - enhanced version",
-                "original_request": original,
-            },
-        )
-        milestone = cast(
-            MilestoneData,
-            {
-                "description": "Basic",
-            },
-        )
-
-        prompt = _prepare_worker_prompt(state, milestone)
-
-        # Should not have "Original user request:" prefix since it's already included
-        assert "Original user request:" not in prompt
-        assert "Build a calculator" in prompt
-
-
-class TestExtractReactObservations:
-    """Tests for _extract_react_observations helper function."""
-
-    def test_extract_valid_react_output(self) -> None:
-        """Test extraction from valid WorkerReActOutput JSON."""
-        worker_output = """{
-            "explanation": "Task completed",
-            "files": [],
-            "deleted_files": [],
-            "observations": ["Found existing config", "API is rate limited"],
-            "discovered_issues": ["Memory leak detected"],
-            "suggested_plan_changes": []
-        }"""
-
-        result = _extract_react_observations(worker_output)
-
-        assert len(result) == 3
-        assert "Found existing config" in result
-        assert "API is rate limited" in result
-        assert "Memory leak detected" in result
-
-    def test_extract_empty_observations(self) -> None:
-        """Test extraction with empty observations and issues."""
-        worker_output = """{
-            "explanation": "Simple task",
-            "files": [],
-            "deleted_files": [],
-            "observations": [],
-            "discovered_issues": [],
-            "suggested_plan_changes": []
-        }"""
-
-        result = _extract_react_observations(worker_output)
-
-        assert result == []
-
-    def test_extract_only_observations(self) -> None:
-        """Test extraction with only observations, no issues."""
-        worker_output = """{
-            "explanation": "Analysis done",
-            "files": [],
-            "deleted_files": [],
-            "observations": ["Pattern found"],
-            "discovered_issues": [],
-            "suggested_plan_changes": []
-        }"""
-
-        result = _extract_react_observations(worker_output)
-
-        assert result == ["Pattern found"]
-
-    def test_extract_only_discovered_issues(self) -> None:
-        """Test extraction with only discovered issues."""
-        worker_output = """{
-            "explanation": "Found problems",
-            "files": [],
-            "deleted_files": [],
-            "observations": [],
-            "discovered_issues": ["Bug in module A"],
-            "suggested_plan_changes": []
-        }"""
-
-        result = _extract_react_observations(worker_output)
-
-        assert result == ["Bug in module A"]
-
-    def test_extract_invalid_json(self) -> None:
-        """Test extraction with invalid JSON returns empty list."""
-        worker_output = "This is not JSON, just plain text output"
-
-        result = _extract_react_observations(worker_output)
-
-        assert result == []
-
-    def test_extract_regular_worker_output(self) -> None:
-        """Test extraction with regular (non-ReAct) worker output."""
-        # Regular worker output doesn't have observations/discovered_issues
-        worker_output = """{
-            "explanation": "Done",
-            "files": [{"path": "test.py", "content": "print(1)", "kind": "py"}],
-            "deleted_files": []
-        }"""
-
-        result = _extract_react_observations(worker_output)
-
-        # Should return empty since default values are empty lists
-        assert result == []
-
-    def test_extract_malformed_json(self) -> None:
-        """Test extraction with malformed JSON."""
-        worker_output = '{"explanation": "incomplete'
-
-        result = _extract_react_observations(worker_output)
-
-        assert result == []
+        assert "Must pass all tests" in prompt
+        assert "Acceptance criteria:" in prompt

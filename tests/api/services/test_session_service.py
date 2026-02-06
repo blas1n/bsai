@@ -254,12 +254,12 @@ class TestPauseSession:
             ) as mock_get,
             patch.object(
                 session_service.session_repo,
-                "pause_session",
+                "update",
                 new_callable=AsyncMock,
-            ) as mock_pause,
+            ) as mock_update,
         ):
             mock_get.return_value = mock_session
-            mock_pause.return_value = mock_updated
+            mock_update.return_value = mock_updated
 
             result = await session_service.pause_session(session_id, user_id)
 
@@ -409,12 +409,12 @@ class TestCompleteSession:
             ) as mock_get,
             patch.object(
                 session_service.session_repo,
-                "close_session",
+                "update",
                 new_callable=AsyncMock,
-            ) as mock_close,
+            ) as mock_update,
         ):
             mock_get.return_value = mock_session
-            mock_close.return_value = mock_completed
+            mock_update.return_value = mock_completed
 
             result = await session_service.complete_session(session_id, user_id)
 

@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import structlog
 from fastapi import WebSocketDisconnect
 
-from ..schemas import WSMessage
+from ..schemas.websocket import WSMessage
 
 
 class WebSocketProtocol(Protocol):

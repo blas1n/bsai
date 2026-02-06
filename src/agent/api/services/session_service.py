@@ -9,8 +9,6 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.cache import SessionCache
-from agent.container import lifespan
-from agent.core import SummarizerAgent
 from agent.db.models import Session
 from agent.db.models.enums import SessionStatus, TaskStatus
 from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
@@ -230,8 +228,10 @@ class SessionService:
         if context_messages:
             await self._create_pause_snapshot(session_id, context_messages)
 
-        # Update session status
-        updated_session = await self.session_repo.pause_session(session_id)
+        # Business logic: mark session as paused
+        updated_session = await self.session_repo.update(
+            session_id, status=SessionStatus.PAUSED.value
+        )
         if updated_session is None:
             raise NotFoundError("Session", session_id)
         await self.db.commit()
@@ -351,7 +351,10 @@ class SessionService:
                 action="completed",
             )
 
-        closed_session = await self.session_repo.close_session(session_id)
+        # Business logic: mark session as completed
+        closed_session = await self.session_repo.update(
+            session_id, status=SessionStatus.COMPLETED.value
+        )
         if closed_session is None:
             raise NotFoundError("Session", session_id)
         await self.db.commit()
@@ -420,6 +423,9 @@ class SessionService:
     ) -> SnapshotResponse:
         """Create a manual memory snapshot.
 
+        Note: SummarizerAgent has been removed in the simplified workflow.
+        This method now raises NotImplementedError.
+
         Args:
             session_id: Session ID
             user_id: User ID
@@ -427,67 +433,18 @@ class SessionService:
 
         Returns:
             Created snapshot response
+
+        Raises:
+            NotImplementedError: SummarizerAgent has been removed
         """
-        session = await self._get_session_for_user(session_id, user_id)
+        # Validate session access
+        await self._get_session_for_user(session_id, user_id)
 
-        if session.status != SessionStatus.ACTIVE.value:
-            raise InvalidStateError(
-                resource="Session",
-                current_state=session.status,
-                action="snapshot",
-            )
-
-        # Get active task for snapshot
-        tasks = await self.task_repo.get_by_session_id(session_id, limit=1)
-        if not tasks:
-            raise InvalidStateError(
-                resource="Session",
-                current_state="no active task",
-                action="snapshot",
-            )
-
-        task = tasks[0]
-
-        # Create snapshot using summarizer
-        async with lifespan(self.db) as container:
-            summarizer = SummarizerAgent(
-                llm_client=container.llm_client,
-                router=container.router,
-                prompt_manager=container.prompt_manager,
-                session=self.db,
-            )
-
-            # Get context from cache
-            cached_context = await self.cache.get_cached_context(session_id)
-            context_messages: list[ChatMessage] = []
-            if cached_context and "messages" in cached_context:
-                context_messages = cached_context["messages"]
-
-            # Create snapshot (returns summary string)
-            await summarizer.create_manual_snapshot(
-                session_id=session_id,
-                task_id=task.id,
-                conversation_history=context_messages,
-                reason=reason,
-            )
-
-        # Get the latest snapshot that was just created
-        created_snapshot = await self.snapshot_repo.get_latest_snapshot(session_id)
-        if created_snapshot is None:
-            raise InvalidStateError(
-                resource="Snapshot",
-                current_state="not created",
-                action="retrieve",
-            )
-
-        logger.info(
-            "snapshot_created",
-            session_id=str(session_id),
-            snapshot_id=str(created_snapshot.id),
-            reason=reason,
+        # SummarizerAgent has been removed in the simplified workflow
+        raise NotImplementedError(
+            "Manual snapshot creation is not supported in the simplified workflow. "
+            "SummarizerAgent has been removed."
         )
-
-        return SnapshotResponse.model_validate(created_snapshot)
 
     async def get_snapshot(
         self,
@@ -576,28 +533,18 @@ class SessionService:
     ) -> None:
         """Create snapshot for session pause.
 
+        Note: SummarizerAgent has been removed in the simplified workflow.
+        This method now logs a warning and returns without creating a snapshot.
+
         Args:
             session_id: Session ID
             context_messages: Context messages to snapshot
         """
-        # Get active task
-        tasks = await self.task_repo.get_by_session_id(session_id, limit=1)
-        if not tasks:
-            return
-
-        task_id = tasks[0].id
-
-        async with lifespan(self.db) as container:
-            summarizer = SummarizerAgent(
-                llm_client=container.llm_client,
-                router=container.router,
-                prompt_manager=container.prompt_manager,
-                session=self.db,
-            )
-
-            await summarizer.create_manual_snapshot(
-                session_id=session_id,
-                task_id=task_id,
-                conversation_history=context_messages,
-                reason="Session paused",
-            )
+        # SummarizerAgent has been removed in the simplified workflow
+        # Log warning and skip snapshot creation
+        logger.warning(
+            "snapshot_creation_skipped",
+            session_id=str(session_id),
+            reason="SummarizerAgent removed in simplified workflow",
+            message_count=len(context_messages),
+        )

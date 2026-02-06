@@ -106,6 +106,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          pip install --upgrade pip>=26.0
           pip install pip-audit
           pip install -e ".[dev]"
 

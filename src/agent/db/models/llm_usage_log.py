@@ -24,7 +24,7 @@ class LLMUsageLog(Base):
         id: Primary key (UUID)
         session_id: Foreign key to sessions table
         milestone_id: Foreign key to milestones table (optional)
-        agent_type: Agent that made the call (conductor, meta_prompter, worker, qa, summarizer)
+        agent_type: Agent that made the call (architect, worker, qa, responder)
         llm_provider: LLM provider (openai, anthropic, google)
         llm_model: Specific model name
         input_tokens: Input token count

@@ -3,27 +3,19 @@
 import { cn } from '@/lib/utils';
 import { AgentType } from '@/types/chat';
 import {
-  ConductorDetails,
-  MetaPrompterDetails,
+  ArchitectDetails,
   WorkerDetails,
   QADetails,
-  SummarizerDetails,
 } from '@/types/websocket';
 import { COMPLEXITY_COLORS } from '@/lib/agentConstants';
 
 // Type guards for agent details
-export function isConductorDetails(d: unknown): d is ConductorDetails {
+export function isArchitectDetails(d: unknown): d is ArchitectDetails {
   if (!d || typeof d !== 'object') return false;
   const obj = d as Record<string, unknown>;
-  if (!Array.isArray(obj.milestones) || obj.milestones.length === 0) return false;
-  const first = obj.milestones[0] as Record<string, unknown>;
-  return typeof first?.index === 'number' && typeof first?.description === 'string';
-}
-
-export function isMetaPrompterDetails(d: unknown): d is MetaPrompterDetails {
-  if (!d || typeof d !== 'object') return false;
-  const obj = d as Record<string, unknown>;
-  return typeof obj.generated_prompt === 'string' && obj.generated_prompt.length > 0;
+  if (!Array.isArray(obj.tasks) || obj.tasks.length === 0) return false;
+  const first = obj.tasks[0] as Record<string, unknown>;
+  return typeof first?.id === 'string' && typeof first?.description === 'string';
 }
 
 export function isWorkerDetails(d: unknown): d is WorkerDetails {
@@ -38,12 +30,6 @@ export function isQADetails(d: unknown): d is QADetails {
   return typeof obj.decision === 'string' && typeof obj.attempt_number === 'number';
 }
 
-export function isSummarizerDetails(d: unknown): d is SummarizerDetails {
-  if (!d || typeof d !== 'object') return false;
-  const obj = d as Record<string, unknown>;
-  return typeof obj.summary_preview === 'string' && typeof obj.old_message_count === 'number';
-}
-
 interface AgentDetailsPanelProps {
   agent: AgentType;
   details: unknown;
@@ -53,42 +39,25 @@ export function AgentDetailsPanel({ agent, details }: AgentDetailsPanelProps) {
   if (!details || typeof details !== 'object') return null;
 
   switch (agent) {
-    case 'conductor': {
-      if (!isConductorDetails(details)) return null;
+    case 'architect': {
+      if (!isArchitectDetails(details)) return null;
       const d = details;
       return (
         <div className="mt-2 pl-2 border-l-2 border-blue-500/30">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Created Milestones:</p>
+          <p className="text-xs font-medium text-muted-foreground mb-1">Created Tasks:</p>
           <ul className="space-y-1">
-            {d.milestones.map((m) => (
-              <li key={m.index} className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{m.index}.</span> {m.description}
+            {d.tasks.map((t) => (
+              <li key={t.id} className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{t.id}.</span> {t.description}
                 <span className={cn(
                   'ml-1 px-1 py-0.5 rounded text-[10px]',
-                  COMPLEXITY_COLORS[m.complexity],
+                  COMPLEXITY_COLORS[t.complexity],
                 )}>
-                  {m.complexity}
+                  {t.complexity}
                 </span>
               </li>
             ))}
           </ul>
-        </div>
-      );
-    }
-    case 'meta_prompter': {
-      if (!isMetaPrompterDetails(details)) return null;
-      const d = details;
-      return (
-        <div className="mt-2 pl-2 border-l-2 border-purple-500/30">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Generated Prompt:</p>
-          <div className="bg-muted/50 rounded p-2 max-h-32 overflow-y-auto">
-            <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-words font-mono">
-              {d.generated_prompt.length > 500
-                ? d.generated_prompt.substring(0, 500) + '...'
-                : d.generated_prompt}
-            </pre>
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-1">{d.prompt_length} characters</p>
         </div>
       );
     }
@@ -137,21 +106,6 @@ export function AgentDetailsPanel({ agent, details }: AgentDetailsPanelProps) {
               {d.feedback}
             </p>
           )}
-        </div>
-      );
-    }
-    case 'summarizer': {
-      if (!isSummarizerDetails(details)) return null;
-      const d = details;
-      return (
-        <div className="mt-2 pl-2 border-l-2 border-gray-500/30">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Context Summary:</p>
-          <div className="bg-muted/50 rounded p-2 max-h-24 overflow-y-auto">
-            <p className="text-xs text-muted-foreground">{d.summary_preview}</p>
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
-            Compressed {d.old_message_count} → {d.new_message_count} messages
-          </p>
         </div>
       );
     }

@@ -1,41 +1,47 @@
-"""Worker execution node."""
+"""Worker execution node.
+
+Executes tasks from project_plan using the Worker agent.
+"""
 
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, TypedDict
 from uuid import UUID
 
 import structlog
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.api.config import get_agent_settings
 from agent.core import WorkerAgent
 from agent.core.artifact_extractor import ExtractionResult, extract_artifacts
 from agent.db.models.artifact import Artifact
-from agent.db.models.enums import TaskStatus
+from agent.db.models.enums import TaskComplexity, TaskStatus
 from agent.db.repository.artifact_repo import ArtifactRepository
-from agent.db.repository.milestone_repo import MilestoneRepository
+from agent.db.repository.project_plan_repo import ProjectPlanRepository
 from agent.events import AgentActivityEvent, AgentStatus, EventType
+from agent.graph.utils import get_task_by_id, get_tasks_from_plan, update_task_status
 from agent.llm import ChatMessage
-from agent.llm.schemas import WorkerReActOutput
 
-from ..state import AgentState, MilestoneData, update_milestone
+from ..state import AgentState
 from . import check_task_cancelled, get_container, get_event_bus, get_ws_manager_optional
 
 logger = structlog.get_logger()
 
 
+class TaskData(TypedDict):
+    """Task data structure for Worker execution."""
+
+    id: str
+    description: str
+    complexity: TaskComplexity
+    acceptance_criteria: str
+    worker_output: str | None
+    retry_count: int
+
+
 def _get_artifact_key(artifact: Artifact) -> str:
-    """Generate consistent key for artifact deduplication.
-
-    Args:
-        artifact: Artifact model instance
-
-    Returns:
-        Normalized path key for deduplication
-    """
+    """Generate consistent key for artifact deduplication."""
     path = artifact.path.strip("/") if artifact.path else ""
     return f"{path}/{artifact.filename}" if path else artifact.filename
 
@@ -45,23 +51,10 @@ async def _load_artifacts_for_context(
     task_id: UUID,
     session_id: UUID,
 ) -> tuple[list[Artifact], list[Artifact], list[Artifact]]:
-    """Load and merge artifacts for Worker context.
-
-    Loads current task artifacts and previous snapshot, then merges them
-    with current task taking precedence.
-
-    Args:
-        artifact_repo: Artifact repository instance
-        task_id: Current task UUID
-        session_id: Session UUID
-
-    Returns:
-        Tuple of (current_task_artifacts, previous_snapshot, merged_artifacts)
-    """
+    """Load and merge artifacts for Worker context."""
     current_task_artifacts = await artifact_repo.get_by_task_id(task_id)
     previous_snapshot = await artifact_repo.get_latest_snapshot(session_id)
 
-    # Merge: current task artifacts override previous snapshot
     artifact_map: dict[str, Artifact] = {}
     for artifact in previous_snapshot:
         key = _get_artifact_key(artifact)
@@ -75,17 +68,7 @@ async def _load_artifacts_for_context(
 
 
 def _build_artifacts_context_message(artifacts: list[Artifact]) -> ChatMessage | None:
-    """Build context message with artifact file list.
-
-    Creates a lightweight file list instead of full content to save tokens.
-    Worker can use read_artifact tool to fetch full content when needed.
-
-    Args:
-        artifacts: List of artifacts to include in context
-
-    Returns:
-        ChatMessage with artifact list, or None if no artifacts
-    """
+    """Build context message with artifact file list."""
     if not artifacts:
         return None
 
@@ -109,16 +92,7 @@ async def _copy_previous_snapshot_to_task(
     task_id: UUID,
     previous_snapshot: list[Artifact],
 ) -> None:
-    """Copy previous task's artifacts as baseline for new task.
-
-    This ensures files not modified in this task are preserved.
-
-    Args:
-        artifact_repo: Artifact repository instance
-        session_id: Session UUID
-        task_id: Current task UUID
-        previous_snapshot: Artifacts from previous task
-    """
+    """Copy previous task's artifacts as baseline for new task."""
     baseline_artifacts = [
         {
             "artifact_type": a.artifact_type,
@@ -133,7 +107,7 @@ async def _copy_previous_snapshot_to_task(
     await artifact_repo.save_task_snapshot(
         session_id=session_id,
         task_id=task_id,
-        milestone_id=None,  # No milestone for baseline copy
+        milestone_id=None,
         artifacts=baseline_artifacts,
     )
     logger.info(
@@ -143,45 +117,15 @@ async def _copy_previous_snapshot_to_task(
     )
 
 
-async def _save_milestone_artifacts(
+async def _save_task_artifacts(
     artifact_repo: ArtifactRepository,
     session_id: UUID,
     task_id: UUID,
-    milestone_id: UUID,
     extraction_result: ExtractionResult,
     previous_snapshot: list[Artifact],
-    milestone_repo: MilestoneRepository | None = None,
 ) -> list[dict[str, Any]]:
-    """Save artifacts from milestone extraction result.
-
-    Handles baseline copy, deletions, and new artifacts.
-
-    Args:
-        artifact_repo: Artifact repository instance
-        session_id: Session UUID
-        task_id: Current task UUID
-        milestone_id: Current milestone UUID
-        extraction_result: Extracted artifacts and deletion paths
-        previous_snapshot: Previous task's artifacts for baseline copy
-        milestone_repo: Optional milestone repository for validation
-
-    Returns:
-        List of artifact dicts for broadcast
-    """
-    # Validate milestone exists before using its ID for FK constraint
-    validated_milestone_id: UUID | None = milestone_id
-    if milestone_repo is not None:
-        milestone = await milestone_repo.get_by_id(milestone_id)
-        if milestone is None:
-            logger.warning(
-                "milestone_not_found_for_artifacts",
-                milestone_id=str(milestone_id),
-                task_id=str(task_id),
-                message="Milestone not found in DB, saving artifacts without milestone_id",
-            )
-            validated_milestone_id = None
-
-    # On first milestone, copy previous task's artifacts as baseline
+    """Save artifacts from task extraction result."""
+    # On first execution, copy previous task's artifacts as baseline
     current_task_artifact_count = len(await artifact_repo.get_by_task_id(task_id))
     if current_task_artifact_count == 0 and previous_snapshot:
         await _copy_previous_snapshot_to_task(artifact_repo, session_id, task_id, previous_snapshot)
@@ -195,7 +139,6 @@ async def _save_milestone_artifacts(
         logger.info(
             "artifacts_deleted",
             task_id=str(task_id),
-            milestone_id=str(milestone_id),
             deleted_paths=extraction_result.deleted_paths,
             count=deleted_count,
         )
@@ -217,13 +160,12 @@ async def _save_milestone_artifacts(
         await artifact_repo.save_task_snapshot(
             session_id=session_id,
             task_id=task_id,
-            milestone_id=validated_milestone_id,
+            milestone_id=None,
             artifacts=artifacts_data,
         )
 
         logger.info(
-            "artifacts_saved_for_milestone",
-            milestone_id=str(validated_milestone_id),
+            "artifacts_saved_for_task",
             task_id=str(task_id),
             count=len(extraction_result.artifacts),
         )
@@ -236,7 +178,7 @@ async def _save_milestone_artifacts(
             "type": a.artifact_type,
             "filename": a.filename,
             "kind": a.kind,
-            "language": a.kind,  # Frontend expects 'language' field
+            "language": a.kind,
             "content": a.content,
             "path": a.path,
         }
@@ -246,46 +188,41 @@ async def _save_milestone_artifacts(
 
 def _prepare_worker_prompt(
     state: AgentState,
-    milestone: MilestoneData,
+    task: dict[str, Any],
 ) -> str:
-    """Prepare prompt for Worker execution.
-
-    Args:
-        state: Current workflow state
-        milestone: Current milestone data
-
-    Returns:
-        Prepared prompt string
-    """
-    base_prompt = state.get("current_prompt") or milestone["description"]
+    """Prepare prompt for Worker execution from project plan task."""
+    base_prompt = task.get("description", "")
     original_request = state.get("original_request", "")
+    acceptance_criteria = task.get("acceptance_criteria", "")
 
-    # Prepend original request if not already included
+    prompt_parts = []
+
     if original_request and original_request not in base_prompt:
-        return f"Original user request:\n{original_request}\n\nCurrent task:\n{base_prompt}"
-    return base_prompt
+        prompt_parts.append(f"Original user request:\n{original_request}")
+
+    prompt_parts.append(f"Current task:\n{base_prompt}")
+
+    if acceptance_criteria:
+        prompt_parts.append(f"Acceptance criteria:\n{acceptance_criteria}")
+
+    return "\n\n".join(prompt_parts)
 
 
-def _extract_react_observations(worker_output: str) -> list[str]:
-    """Extract ReAct observations from worker output.
-
-    Attempts to parse output as WorkerReActOutput to extract observations
-    and discovered issues. Falls back to empty list if parsing fails.
-
-    Args:
-        worker_output: Raw worker output string
-
-    Returns:
-        List of observations (combined observations and discovered_issues)
-    """
+def _get_complexity_from_task(task: dict[str, Any]) -> TaskComplexity:
+    """Extract complexity from task dict."""
+    complexity_str = task.get("complexity", "MODERATE")
     try:
-        react_output = WorkerReActOutput.model_validate_json(worker_output)
-        observations = list(react_output.observations)
-        observations.extend(react_output.discovered_issues)
-        return observations
-    except Exception:
-        # Not a ReAct output format, return empty list
-        return []
+        return TaskComplexity[complexity_str]
+    except KeyError:
+        return TaskComplexity.MODERATE
+
+
+def _get_task_index(tasks: list[dict[str, Any]], task_id: str) -> int:
+    """Get index of task in list."""
+    for i, task in enumerate(tasks):
+        if task.get("id") == task_id:
+            return i
+    return 0
 
 
 async def execute_worker_node(
@@ -293,7 +230,7 @@ async def execute_worker_node(
     config: RunnableConfig,
     session: AsyncSession,
 ) -> dict[str, Any]:
-    """Execute milestone via Worker agent.
+    """Execute task via Worker agent.
 
     Handles both fresh execution and retry scenarios,
     passing QA feedback for retries.
@@ -321,21 +258,31 @@ async def execute_worker_node(
         }
 
     try:
-        milestones = state.get("milestones")
-        idx = state.get("current_milestone_index")
+        project_plan = state.get("project_plan")
+        if not project_plan:
+            return {"error": "No project_plan available", "error_node": "execute_worker"}
+
+        current_task_id = state.get("current_task_id")
+        tasks = get_tasks_from_plan(project_plan)
+        task = get_task_by_id(tasks, current_task_id) if current_task_id else None
+
+        if task is None:
+            return {
+                "error": "No task available in project plan",
+                "error_node": "execute_worker",
+            }
+
+        task_complexity = _get_complexity_from_task(task)
+        task_idx = _get_task_index(tasks, current_task_id) if current_task_id else 0
+        retry_count = state.get("retry_count", 0)
 
         logger.debug(
             "execute_worker_context",
             user_id=state["user_id"],
             session_id=str(state["session_id"]),
             task_id=str(state["task_id"]),
+            current_task_id=current_task_id,
         )
-
-        if milestones is None or idx is None:
-            return {"error": "No milestones available", "error_node": "execute_worker"}
-
-        milestone = milestones[idx]
-        retry_count = state.get("retry_count", 0)
 
         # Emit worker started event
         message = (
@@ -346,8 +293,8 @@ async def execute_worker_node(
                 type=EventType.AGENT_STARTED,
                 session_id=state["session_id"],
                 task_id=state["task_id"],
-                milestone_id=milestone["id"],
-                sequence_number=idx + 1,
+                milestone_id=state["task_id"],
+                sequence_number=task_idx + 1,
                 agent="worker",
                 status=AgentStatus.STARTED,
                 message=message,
@@ -373,7 +320,6 @@ async def execute_worker_node(
         context_messages = list(state.get("context_messages", []))
         artifacts_context = _build_artifacts_context_message(merged_artifacts)
         if artifacts_context:
-            # Remove any previous artifact context
             context_messages = [
                 msg
                 for msg in context_messages
@@ -389,36 +335,46 @@ async def execute_worker_node(
             )
 
         # Prepare prompt and execute
-        prompt = _prepare_worker_prompt(state, milestone)
-        previous_output = milestone.get("worker_output")
+        prompt = _prepare_worker_prompt(state, task)
+        previous_output = task.get("worker_output")
         qa_feedback = state.get("current_qa_feedback")
 
         if retry_count > 0 and previous_output and qa_feedback:
             response = await worker.retry_with_feedback(
-                milestone_id=milestone["id"],
+                milestone_id=state["task_id"],
                 original_prompt=prompt,
                 previous_output=previous_output,
                 qa_feedback=qa_feedback,
-                complexity=milestone["complexity"],
+                complexity=task_complexity,
                 user_id=state["user_id"],
                 session_id=state["session_id"],
                 task_id=state["task_id"],
             )
         else:
             response = await worker.execute_milestone(
-                milestone_id=milestone["id"],
+                milestone_id=state["task_id"],
                 prompt=prompt,
-                complexity=milestone["complexity"],
+                complexity=task_complexity,
                 user_id=state["user_id"],
                 session_id=state["session_id"],
                 task_id=state["task_id"],
-                preferred_model=milestone.get("selected_model"),
+                preferred_model=None,
                 context_messages=context_messages,
             )
 
-        # Update milestone with output
-        updated_milestones = list(milestones)
-        updated_milestones[idx] = update_milestone(milestone, worker_output=response.content)
+        # Update project_plan task status
+        if current_task_id:
+            updated_plan_data = update_task_status(
+                project_plan.plan_data,
+                current_task_id,
+                "in_progress",
+            )
+            # Store worker output in task
+            for t in updated_plan_data.get("tasks", []):
+                if t.get("id") == current_task_id:
+                    t["worker_output"] = response.content
+                    break
+            project_plan.plan_data = updated_plan_data
 
         # Update context with new exchange
         context_messages = list(state.get("context_messages", []))
@@ -430,10 +386,7 @@ async def execute_worker_node(
         total_input = state.get("total_input_tokens", 0) + response.usage.input_tokens
         total_output = state.get("total_output_tokens", 0) + response.usage.output_tokens
 
-        model = container.router.select_model(
-            complexity=milestone["complexity"],
-            preferred_model=milestone.get("selected_model"),
-        )
+        model = container.router.select_model(complexity=task_complexity)
         call_cost = container.router.calculate_cost(
             model=model,
             input_tokens=response.usage.input_tokens,
@@ -443,7 +396,7 @@ async def execute_worker_node(
 
         logger.info(
             "worker_executed",
-            milestone_index=idx,
+            task_index=task_idx,
             output_length=len(response.content),
             tokens=response.usage.total_tokens,
             cost_usd=float(call_cost),
@@ -455,30 +408,21 @@ async def execute_worker_node(
         if response.finish_reason == "length":
             logger.error(
                 "worker_response_truncated",
-                milestone_id=str(milestone["id"]),
+                task_id=str(state["task_id"]),
                 output_length=len(response.content),
                 message="Worker response was cut off due to token limit",
             )
             return {
                 "error": "Worker response was truncated due to token limit.",
                 "error_node": "execute_worker",
-                "milestones": updated_milestones,
                 "current_output": response.content,
+                "project_plan": project_plan,
             }
 
-        # Update milestone in DB
-        milestone_repo = MilestoneRepository(session)
-        await milestone_repo.update_llm_usage(
-            milestone_id=milestone["id"],
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            cost=call_cost,
-        )
-        await milestone_repo.update(
-            milestone["id"],
-            selected_llm=model.name,
-            worker_output=response.content,
-        )
+        # Persist plan data update
+        plan_repo = ProjectPlanRepository(session)
+        await plan_repo.update(project_plan.id, plan_data=project_plan.plan_data)
+        await session.commit()
 
         # Extract and save artifacts
         extraction_result = extract_artifacts(response.content)
@@ -486,19 +430,17 @@ async def execute_worker_node(
         if not extraction_result.artifacts and response.content.strip().startswith("{"):
             logger.warning(
                 "artifact_extraction_empty",
-                milestone_id=str(milestone["id"]),
+                task_id=str(state["task_id"]),
                 content_length=len(response.content),
                 message="No artifacts extracted, JSON parsing may have failed",
             )
 
-        artifacts_for_broadcast = await _save_milestone_artifacts(
+        artifacts_for_broadcast = await _save_task_artifacts(
             artifact_repo=artifact_repo,
             session_id=state["session_id"],
             task_id=state["task_id"],
-            milestone_id=milestone["id"],
             extraction_result=extraction_result,
             previous_snapshot=previous_snapshot,
-            milestone_repo=milestone_repo,
         )
 
         # Build and emit worker completed event
@@ -523,8 +465,8 @@ async def execute_worker_node(
                 type=EventType.AGENT_COMPLETED,
                 session_id=state["session_id"],
                 task_id=state["task_id"],
-                milestone_id=milestone["id"],
-                sequence_number=idx + 1,
+                milestone_id=state["task_id"],
+                sequence_number=task_idx + 1,
                 agent="worker",
                 status=AgentStatus.COMPLETED,
                 message=f"Task executed ({response.usage.total_tokens} tokens)",
@@ -532,28 +474,14 @@ async def execute_worker_node(
             )
         )
 
-        # Extract ReAct observations for potential replanning (if enabled)
-        settings = get_agent_settings()
-        current_observations = state.get("current_observations", [])
-        if settings.enable_react_observations:
-            observations = _extract_react_observations(response.content)
-            if observations:
-                current_observations = [*current_observations, *observations]
-                logger.info(
-                    "react_observations_extracted",
-                    milestone_id=str(milestone["id"]),
-                    observation_count=len(observations),
-                )
-
         return {
-            "milestones": updated_milestones,
             "current_output": response.content,
             "context_messages": context_messages,
             "current_context_tokens": current_tokens,
             "total_input_tokens": total_input,
             "total_output_tokens": total_output,
             "total_cost_usd": str(total_cost),
-            "current_observations": current_observations,
+            "project_plan": project_plan,
         }
 
     except Exception as e:
@@ -562,3 +490,8 @@ async def execute_worker_node(
             "error": str(e),
             "error_node": "execute_worker",
         }
+
+
+__all__ = [
+    "execute_worker_node",
+]

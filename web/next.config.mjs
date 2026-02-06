@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -12,8 +13,8 @@ const nextConfig = {
     // API URL empty to use Next.js rewrites proxy (avoids CORS issues)
     // Only set NEXT_PUBLIC_API_URL in production to point to actual backend
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
-    // WebSocket URL still needs direct connection (rewrites don't support WS)
-    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18000',
+    // WebSocket URL - injected from docker-compose environment
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || '',
   },
   async rewrites() {
     return [

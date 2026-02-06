@@ -1,52 +1,31 @@
 """Prompt key enums for type-safe prompt management."""
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ConductorPrompts(str, Enum):
-    """Prompt keys for Conductor agent."""
-
-    ANALYSIS_PROMPT = "analysis_prompt"
-    REPLAN_PROMPT = "replan_prompt"
-    RETHINK_STRATEGY_PROMPT = "rethink_strategy_prompt"
-
-
-class MetaPrompterPrompts(str, Enum):
-    """Prompt keys for Meta Prompter agent."""
-
-    META_PROMPT = "meta_prompt"
-    STRATEGIES = "strategies"
-
-
-class WorkerPrompts(str, Enum):
+class WorkerPrompts(StrEnum):
     """Prompt keys for Worker agent."""
 
     SYSTEM_PROMPT = "system_prompt"
     RETRY_PROMPT = "retry_prompt"
 
 
-class QAAgentPrompts(str, Enum):
+class QAAgentPrompts(StrEnum):
     """Prompt keys for QA Agent."""
 
     VALIDATION_PROMPT = "validation_prompt"
 
 
-class SummarizerPrompts(str, Enum):
-    """Prompt keys for Summarizer agent."""
-
-    SUMMARY_PROMPT = "summary_prompt"
-    CHECKPOINT_PROMPT = "checkpoint_prompt"
-
-
-class ResponderPrompts(str, Enum):
+class ResponderPrompts(StrEnum):
     """Prompt keys for Responder agent."""
 
     SYSTEM_PROMPT = "system_prompt"
     GENERATE_RESPONSE = "generate_response"
+    GENERATE_RESPONSE_WITH_SUMMARY = "generate_response_with_summary"
     FAILURE_REPORT_PROMPT = "failure_report_prompt"
 
 
-class MemoryPrompts(str, Enum):
+class MemoryPrompts(StrEnum):
     """Prompt keys for Memory content templates."""
 
     TASK_RESULT_CONTENT = "task_result_content"
@@ -54,3 +33,11 @@ class MemoryPrompts(str, Enum):
     ERROR_CONTENT = "error_content"
     CONTEXT_HEADER = "context_header"
     CONTEXT_MEMORY_ITEM = "context_memory_item"
+
+
+class ArchitectPrompts(StrEnum):
+    """Prompt keys for Architect agent."""
+
+    PLANNING_PROMPT = "planning_prompt"
+    REVISE_PROMPT = "revise_prompt"
+    REPLAN_PROMPT = "replan_prompt"

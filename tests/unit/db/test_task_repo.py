@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -126,6 +126,47 @@ class TestGetWithMilestones:
         assert result is None
 
 
+class TestGetWithSession:
+    """Tests for get_with_session method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_task_with_session(
+        self,
+        task_repo: TaskRepository,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Returns task with eagerly loaded session."""
+        task_id = uuid4()
+
+        mock_task = MagicMock()
+        mock_task.session = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_task
+        mock_session.execute.return_value = mock_result
+
+        result = await task_repo.get_with_session(task_id)
+
+        assert result is not None
+        assert result.session is not None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_found(
+        self,
+        task_repo: TaskRepository,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Returns None when task not found."""
+        task_id = uuid4()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = mock_result
+
+        result = await task_repo.get_with_session(task_id)
+
+        assert result is None
+
+
 class TestGetPendingTasks:
     """Tests for get_pending_tasks method."""
 
@@ -165,84 +206,81 @@ class TestGetPendingTasks:
         mock_session.execute.assert_called_once()
 
 
-class TestUpdateStatus:
-    """Tests for update_status method."""
+class TestSaveHandoverContext:
+    """Tests for save_handover_context method."""
 
     @pytest.mark.asyncio
-    async def test_updates_task_status(
+    async def test_saves_handover_context(
         self,
         task_repo: TaskRepository,
+        mock_session: AsyncMock,
     ) -> None:
-        """Updates task status."""
+        """Saves handover context for task."""
         task_id = uuid4()
+        handover = "Summary of completed work"
 
-        with patch.object(
-            task_repo,
-            "update",
-            new_callable=AsyncMock,
-        ) as mock_update:
-            mock_task = MagicMock()
-            mock_update.return_value = mock_task
+        mock_task = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_task
+        mock_session.execute.return_value = mock_result
 
-            result = await task_repo.update_status(task_id, "in_progress")
+        result = await task_repo.save_handover_context(task_id, handover)
 
-            assert result is mock_task
-            mock_update.assert_called_once_with(task_id, status="in_progress")
-
-
-class TestCompleteTask:
-    """Tests for complete_task method."""
+        assert result is not None
+        assert mock_task.handover_context == handover
 
     @pytest.mark.asyncio
-    async def test_marks_task_completed(
+    async def test_returns_none_when_not_found(
         self,
         task_repo: TaskRepository,
+        mock_session: AsyncMock,
     ) -> None:
-        """Marks task as completed with result."""
+        """Returns None when task not found."""
         task_id = uuid4()
 
-        with patch.object(
-            task_repo,
-            "update",
-            new_callable=AsyncMock,
-        ) as mock_update:
-            mock_task = MagicMock()
-            mock_update.return_value = mock_task
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = mock_result
 
-            result = await task_repo.complete_task(task_id, "Task completed successfully")
+        result = await task_repo.save_handover_context(task_id, "context")
 
-            assert result is mock_task
-            mock_update.assert_called_once_with(
-                task_id,
-                status="completed",
-                final_result="Task completed successfully",
-            )
+        assert result is None
 
 
-class TestFailTask:
-    """Tests for fail_task method."""
+class TestGetPreviousTaskHandover:
+    """Tests for get_previous_task_handover method."""
 
     @pytest.mark.asyncio
-    async def test_marks_task_failed(
+    async def test_returns_handover_from_previous_task(
         self,
         task_repo: TaskRepository,
+        mock_session: AsyncMock,
     ) -> None:
-        """Marks task as failed with error message."""
-        task_id = uuid4()
+        """Returns handover context from previous completed task."""
+        session_id = uuid4()
+        expected_handover = "Previous task summary"
 
-        with patch.object(
-            task_repo,
-            "update",
-            new_callable=AsyncMock,
-        ) as mock_update:
-            mock_task = MagicMock()
-            mock_update.return_value = mock_task
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = expected_handover
+        mock_session.execute.return_value = mock_result
 
-            result = await task_repo.fail_task(task_id, "Something went wrong")
+        result = await task_repo.get_previous_task_handover(session_id)
 
-            assert result is mock_task
-            mock_update.assert_called_once_with(
-                task_id,
-                status="failed",
-                final_result="Something went wrong",
-            )
+        assert result == expected_handover
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_previous_task(
+        self,
+        task_repo: TaskRepository,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Returns None when no previous completed task."""
+        session_id = uuid4()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = mock_result
+
+        result = await task_repo.get_previous_task_handover(session_id)
+
+        assert result is None

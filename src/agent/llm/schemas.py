@@ -3,6 +3,9 @@
 Type-safe Pydantic models for LLM interactions.
 """
 
+from __future__ import annotations
+
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -31,28 +34,6 @@ class LLMRequest(BaseModel):
 # =============================================================================
 # Structured Output Schemas
 # =============================================================================
-
-
-class MilestoneSchema(BaseModel):
-    """Schema for a single milestone in Conductor output."""
-
-    model_config = {"extra": "forbid"}
-
-    description: str = Field(..., description="Brief description of what needs to be done")
-    complexity: Literal["TRIVIAL", "SIMPLE", "MODERATE", "COMPLEX", "CONTEXT_HEAVY"] = Field(
-        ..., description="Task complexity level"
-    )
-    acceptance_criteria: str = Field(..., description="Criteria to validate completion")
-
-
-class ConductorOutput(BaseModel):
-    """Structured output schema for Conductor agent."""
-
-    model_config = {"extra": "forbid"}
-
-    milestones: list[MilestoneSchema] = Field(
-        ..., description="List of milestones to complete the task"
-    )
 
 
 class QAOutput(BaseModel):
@@ -165,42 +146,266 @@ class LLMResponse(BaseModel):
 
 
 # =============================================================================
-# ReAct Replanning Schemas
+# Project Plan Schemas
 # =============================================================================
 
 
-class MilestoneModification(BaseModel):
-    """Schema for a single milestone modification during replanning."""
+class StructureType(StrEnum):
+    """Project plan structure type."""
+
+    FLAT = "flat"
+    GROUPED = "grouped"
+    HIERARCHICAL = "hierarchical"
+
+
+class PlanStatus(StrEnum):
+    """Project plan status."""
+
+    DRAFT = "draft"
+    APPROVED = "approved"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+
+
+class PauseLevel(StrEnum):
+    """Breakpoint pause level."""
+
+    NONE = "none"
+    TASK = "task"
+    FEATURE = "feature"
+    EPIC = "epic"
+
+
+class QAValidationType(StrEnum):
+    """QA validation type."""
+
+    STATIC = "static"
+    LINT = "lint"
+    TYPECHECK = "typecheck"
+    TEST = "test"
+    BUILD = "build"
+
+
+# =============================================================================
+# Hierarchy Models
+# =============================================================================
+
+
+class PlanTask(BaseModel):
+    """Execution unit task."""
 
     model_config = {"extra": "forbid"}
 
-    action: Literal["ADD", "MODIFY", "REMOVE", "REORDER"] = Field(
-        ..., description="Type of modification"
+    id: str = Field(..., description="Task ID (e.g., T1.1.1)")
+    description: str
+    complexity: Literal["TRIVIAL", "SIMPLE", "MODERATE", "COMPLEX", "CONTEXT_HEAVY"]
+    acceptance_criteria: str
+    dependencies: list[str] = Field(default_factory=list)
+    parent_feature_id: str | None = None
+    parent_epic_id: str | None = None
+
+
+class Feature(BaseModel):
+    """Feature (mid-level grouping)."""
+
+    model_config = {"extra": "forbid"}
+
+    id: str = Field(..., description="Feature ID (e.g., F1.1)")
+    title: str
+    description: str
+    tasks: list[PlanTask] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+
+
+class Epic(BaseModel):
+    """Epic (top-level grouping)."""
+
+    model_config = {"extra": "forbid"}
+
+    id: str = Field(..., description="Epic ID (e.g., E1)")
+    title: str
+    description: str
+    features: list[Feature] = Field(default_factory=list)
+
+
+class ProjectPlanOutput(BaseModel):
+    """Structured output for Architect agent."""
+
+    model_config = {"extra": "forbid"}
+
+    title: str
+    overview: str
+    tech_stack: list[str] = Field(default_factory=list)
+    structure_type: Literal["flat", "grouped", "hierarchical"]
+    epics: list[Epic] | None = None
+    features: list[Feature] | None = None
+    tasks: list[PlanTask] = Field(default_factory=list)
+
+
+# =============================================================================
+# Configuration Models
+# =============================================================================
+
+
+class BreakpointConfig(BaseModel):
+    """Breakpoint configuration."""
+
+    model_config = {"extra": "forbid"}
+
+    pause_on_plan_review: bool = True
+    pause_level: Literal["none", "task", "feature", "epic"] = "none"
+    pause_on_task_ids: list[str] = Field(default_factory=list)
+    pause_on_failure: bool = True
+
+
+class QAConfig(BaseModel):
+    """QA configuration."""
+
+    model_config = {"extra": "forbid"}
+
+    validations: list[Literal["static", "lint", "typecheck", "test", "build"]] = Field(
+        default=["static"]
     )
-    target_index: int | None = Field(
+    test_command: str | None = None
+    lint_command: str | None = None
+    typecheck_command: str | None = None
+    build_command: str | None = None
+    allow_lint_warnings: bool = True
+    require_all_tests_pass: bool = True
+
+
+# =============================================================================
+# QA Result Models
+# =============================================================================
+
+
+class TestResult(BaseModel):
+    """Test execution result."""
+
+    model_config = {"extra": "forbid"}
+
+    success: bool
+    passed: int
+    failed: int
+    skipped: int
+    total: int
+    coverage: float | None = None
+    failed_tests: list[str] = Field(default_factory=list)
+    output: str
+
+
+class LintResult(BaseModel):
+    """Lint result."""
+
+    model_config = {"extra": "forbid"}
+
+    success: bool
+    errors: int
+    warnings: int
+    issues: list[str] = Field(default_factory=list)
+    output: str
+
+
+class TypecheckResult(BaseModel):
+    """Type check result."""
+
+    model_config = {"extra": "forbid"}
+
+    success: bool
+    errors: int
+    issues: list[str] = Field(default_factory=list)
+    output: str
+
+
+class BuildResult(BaseModel):
+    """Build result."""
+
+    model_config = {"extra": "forbid"}
+
+    success: bool
+    output: str
+    error_message: str | None = None
+
+
+class ExtendedQAOutput(BaseModel):
+    """Extended QA output with dynamic validation."""
+
+    model_config = {"extra": "forbid"}
+
+    decision: Literal["PASS", "RETRY"]
+    feedback: str
+    issues: list[str]
+    suggestions: list[str]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+    # Dynamic validation results (optional)
+    lint_result: LintResult | None = None
+    typecheck_result: TypecheckResult | None = None
+    test_result: TestResult | None = None
+    build_result: BuildResult | None = None
+
+
+class QAResult(BaseModel):
+    """Comprehensive QA validation result."""
+
+    model_config = {"extra": "forbid"}
+
+    decision: Literal["PASS", "RETRY"]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+    # Static analysis
+    static_issues: list[str] = Field(default_factory=list)
+    static_suggestions: list[str] = Field(default_factory=list)
+
+    # Dynamic validation results
+    lint_result: LintResult | None = None
+    typecheck_result: TypecheckResult | None = None
+    test_result: TestResult | None = None
+    build_result: BuildResult | None = None
+
+    # Summary
+    summary: str = ""
+
+
+# =============================================================================
+# Architect Replanning Schemas
+# =============================================================================
+
+
+class PlanTaskModification(BaseModel):
+    """Schema for a single task modification during Architect replanning."""
+
+    model_config = {"extra": "forbid"}
+
+    action: Literal["add", "update", "remove"] = Field(..., description="Type of modification")
+    task_id: str = Field(..., description="Task ID to modify (existing) or new task ID (for add)")
+    task: PlanTask | None = Field(
         default=None,
-        description="Index of milestone to modify/remove (None for ADD)",
-    )
-    new_milestone: MilestoneSchema | None = Field(
-        default=None,
-        description="New milestone data (for ADD/MODIFY)",
+        description="Full task object for add/update, null for remove",
     )
     reason: str = Field(..., description="Reason for this modification")
 
 
-class ConductorReplanOutput(BaseModel):
-    """Structured output for Conductor replanning based on execution observations."""
+class ArchitectReplanOutput(BaseModel):
+    """Structured output for Architect replanning based on execution observations."""
 
     model_config = {"extra": "forbid"}
 
-    analysis: str = Field(..., description="Analysis of current situation and why replan is needed")
-    modifications: list[MilestoneModification] = Field(
-        ..., description="List of plan modifications to apply"
+    analysis: str = Field(
+        ..., description="Detailed analysis of what happened and why replanning is needed"
     )
+    action: Literal["continue", "modify", "abort"] = Field(
+        ..., description="Action to take: continue (no changes), modify (update plan), abort (stop)"
+    )
+    modifications: list[PlanTaskModification] | None = Field(
+        default=None,
+        description="List of task modifications to apply (empty for continue/abort)",
+    )
+    reasoning: str = Field(..., description="Overall reasoning for the decision")
     confidence: float = Field(
         ...,
         ge=0.0,
         le=1.0,
         description="Confidence in the revised plan (0.0-1.0)",
     )
-    reasoning: str = Field(..., description="Reasoning for the plan changes")

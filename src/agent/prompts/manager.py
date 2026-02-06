@@ -149,11 +149,11 @@ class PromptManager:
             ValueError: If template rendering fails
 
         Example:
-            >>> from agent.prompts.keys import ConductorPrompts
+            >>> from agent.prompts.keys import ArchitectPrompts
             >>> manager = PromptManager()
             >>> prompt = manager.render(
-            ...     "conductor",
-            ...     ConductorPrompts.ANALYSIS_PROMPT,
+            ...     "architect",
+            ...     ArchitectPrompts.PLANNING_PROMPT,
             ...     original_request="Build a web scraper"
             ... )
         """
@@ -211,9 +211,9 @@ class PromptManager:
             KeyError: If key doesn't exist in YAML
 
         Example:
-            >>> from agent.prompts.keys import MetaPrompterPrompts
+            >>> from agent.prompts.keys import WorkerPrompts
             >>> manager = PromptManager()
-            >>> strategies = manager.get_data("meta_prompter", MetaPrompterPrompts.STRATEGIES)
+            >>> data = manager.get_data("worker", WorkerPrompts.SYSTEM_PROMPT)
         """
         # Convert enum to string
         key_str = key.value

@@ -117,28 +117,6 @@ class SessionRepository(BaseRepository[Session]):
         total = result.scalar_one_or_none()
         return total if total is not None else Decimal("0.0")
 
-    async def close_session(self, session_id: UUID) -> Session | None:
-        """Mark session as completed.
-
-        Args:
-            session_id: Session UUID
-
-        Returns:
-            Updated session or None if not found
-        """
-        return await self.update(session_id, status="completed")
-
-    async def pause_session(self, session_id: UUID) -> Session | None:
-        """Mark session as paused.
-
-        Args:
-            session_id: Session UUID
-
-        Returns:
-            Updated session or None if not found
-        """
-        return await self.update(session_id, status="paused")
-
     async def verify_ownership(self, session_id: UUID, user_id: str) -> bool:
         """Verify that a user owns a session.
 

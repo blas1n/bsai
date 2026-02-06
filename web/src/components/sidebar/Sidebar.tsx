@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Plus, MessageSquare, BarChart3, ChevronLeft, ChevronRight, Settings, Brain } from 'lucide-react';
+import { Plus, MessageSquare, ChevronLeft, ChevronRight, Settings, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from './ConversationList';
 import { SessionStats } from './SessionStats';
@@ -90,15 +90,6 @@ export function Sidebar({ currentSessionId, onNewChat, stats }: SidebarProps) {
 
       {/* Navigation Links */}
       <div className="border-t p-2 space-y-1">
-        <Link href="/monitoring">
-          <Button
-            variant={pathname === '/monitoring' ? 'secondary' : 'ghost'}
-            className={cn('w-full justify-start gap-2', isCollapsed && 'justify-center px-2')}
-          >
-            <BarChart3 className="h-4 w-4" />
-            {!isCollapsed && <span>Monitoring</span>}
-          </Button>
-        </Link>
         <Link href="/sessions">
           <Button
             variant={pathname === '/sessions' ? 'secondary' : 'ghost'}
