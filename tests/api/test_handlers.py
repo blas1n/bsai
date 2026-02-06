@@ -9,13 +9,13 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from agent.api.exceptions import (
+from bsai.api.exceptions import (
     AccessDeniedError,
     InvalidStateError,
     NotFoundError,
 )
-from agent.api.handlers import register_exception_handlers
-from agent.api.middleware import RequestIDMiddleware
+from bsai.api.handlers import register_exception_handlers
+from bsai.api.middleware import RequestIDMiddleware
 
 if TYPE_CHECKING:
     pass
@@ -193,7 +193,7 @@ class TestUnhandledExceptionHandler:
         async def test_endpoint() -> None:
             raise ValueError("Something went wrong")
 
-        with patch("agent.api.handlers.logger") as mock_logger:
+        with patch("bsai.api.handlers.logger") as mock_logger:
             client = TestClient(app_with_handlers, raise_server_exceptions=False)
             response = client.get("/test")
 
@@ -211,7 +211,7 @@ class TestUnhandledExceptionHandler:
         async def test_endpoint() -> None:
             raise RuntimeError("Critical error")
 
-        with patch("agent.api.handlers.logger") as mock_logger:
+        with patch("bsai.api.handlers.logger") as mock_logger:
             client = TestClient(app_with_handlers, raise_server_exceptions=False)
             client.get("/test")
 

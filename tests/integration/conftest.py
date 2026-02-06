@@ -6,9 +6,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from agent.api.auth import get_current_user_id
-from agent.api.dependencies import get_db
-from agent.api.handlers import register_exception_handlers
+from bsai.api.auth import get_current_user_id
+from bsai.api.dependencies import get_db
+from bsai.api.handlers import register_exception_handlers
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def db_session() -> AsyncMock:
 @pytest.fixture
 def app(db_session: AsyncMock) -> FastAPI:
     """Create test FastAPI app for integration tests."""
-    from agent.api.routers.mcp import router as mcp_router
+    from bsai.api.routers.mcp import router as mcp_router
 
     app = FastAPI()
     register_exception_handlers(app)

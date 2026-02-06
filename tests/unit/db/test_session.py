@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.db.session import (
+import bsai.db.session as session_module
+from bsai.db.session import (
     DatabaseSessionManager,
     close_db,
     get_db_session,
@@ -16,7 +17,6 @@ from agent.db.session import (
 @pytest.fixture(autouse=True)
 def reset_session_manager():
     """Reset global session manager before and after each test."""
-    import agent.db.session as session_module
 
     original = session_module.session_manager
     session_module.session_manager = None
@@ -29,7 +29,7 @@ class TestDatabaseSessionManager:
 
     def test_init(self) -> None:
         """Test DatabaseSessionManager initialization."""
-        with patch("agent.db.session.create_async_engine") as mock_engine:
+        with patch("bsai.db.session.create_async_engine") as mock_engine:
             mock_engine.return_value = MagicMock()
 
             manager = DatabaseSessionManager(
@@ -44,7 +44,7 @@ class TestDatabaseSessionManager:
 
     async def test_close(self) -> None:
         """Test closing database engine."""
-        with patch("agent.db.session.create_async_engine") as mock_create_engine:
+        with patch("bsai.db.session.create_async_engine") as mock_create_engine:
             mock_engine = AsyncMock()
             mock_create_engine.return_value = mock_engine
 
@@ -58,7 +58,7 @@ class TestDatabaseSessionManager:
 
     async def test_get_session(self) -> None:
         """Test getting database session."""
-        with patch("agent.db.session.create_async_engine") as mock_create_engine:
+        with patch("bsai.db.session.create_async_engine") as mock_create_engine:
             mock_engine = MagicMock()
             mock_create_engine.return_value = mock_engine
 
@@ -80,7 +80,7 @@ class TestDatabaseSessionManager:
 
     async def test_create_all(self) -> None:
         """Test creating all tables."""
-        with patch("agent.db.session.create_async_engine") as mock_create_engine:
+        with patch("bsai.db.session.create_async_engine") as mock_create_engine:
             mock_engine = MagicMock()
             mock_conn = AsyncMock()
             mock_engine.begin = MagicMock(
@@ -101,7 +101,7 @@ class TestDatabaseSessionManager:
 
     async def test_drop_all(self) -> None:
         """Test dropping all tables."""
-        with patch("agent.db.session.create_async_engine") as mock_create_engine:
+        with patch("bsai.db.session.create_async_engine") as mock_create_engine:
             mock_engine = MagicMock()
             mock_conn = AsyncMock()
             mock_engine.begin = MagicMock(
@@ -126,7 +126,7 @@ class TestInitDb:
 
     def test_init_db_success(self) -> None:
         """Test successful database initialization."""
-        with patch("agent.db.session.DatabaseSessionManager") as MockManager:
+        with patch("bsai.db.session.DatabaseSessionManager") as MockManager:
             mock_manager = MagicMock()
             MockManager.return_value = mock_manager
 
@@ -137,7 +137,7 @@ class TestInitDb:
     def test_init_db_already_initialized(self) -> None:
         """Test error when already initialized."""
 
-        with patch("agent.db.session.DatabaseSessionManager") as MockManager:
+        with patch("bsai.db.session.DatabaseSessionManager") as MockManager:
             mock_manager = MagicMock()
             MockManager.return_value = mock_manager
 
@@ -152,7 +152,6 @@ class TestCloseDb:
 
     async def test_close_db_success(self) -> None:
         """Test successful database close."""
-        import agent.db.session as session_module
 
         mock_manager = AsyncMock()
         session_module.session_manager = mock_manager
@@ -164,7 +163,6 @@ class TestCloseDb:
 
     async def test_close_db_not_initialized(self) -> None:
         """Test close when not initialized."""
-        import agent.db.session as session_module
 
         session_module.session_manager = None
 
@@ -177,7 +175,6 @@ class TestGetSessionManager:
 
     def test_get_session_manager_success(self) -> None:
         """Test getting session manager."""
-        import agent.db.session as session_module
 
         mock_manager = MagicMock()
         session_module.session_manager = mock_manager
@@ -197,7 +194,6 @@ class TestGetDbSession:
 
     async def test_get_db_session(self) -> None:
         """Test getting database session via dependency."""
-        import agent.db.session as session_module
 
         mock_session = AsyncMock()
 

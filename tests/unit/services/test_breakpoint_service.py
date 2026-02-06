@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.services.breakpoint_service import BreakpointService
+from bsai.services.breakpoint_service import BreakpointService
 
 
 class TestBreakpointService:

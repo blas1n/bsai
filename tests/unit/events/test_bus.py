@@ -8,8 +8,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent.events.bus import EventBus
-from agent.events.types import (
+from bsai.events.bus import EventBus
+from bsai.events.types import (
     AgentActivityEvent,
     AgentStatus,
     Event,
@@ -125,7 +125,7 @@ class TestEventBusSubscribe:
         """Test subscribing with string event type."""
         handler = AsyncMock()
 
-        event_bus.subscribe("agent.started", handler)
+        event_bus.subscribe("bsai.started", handler)
         await event_bus.emit(sample_event)
 
         handler.assert_called_once_with(sample_event)

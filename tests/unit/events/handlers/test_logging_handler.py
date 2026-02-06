@@ -8,8 +8,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent.events.handlers.logging_handler import LoggingEventHandler
-from agent.events.types import (
+from bsai.events.handlers.logging_handler import LoggingEventHandler
+from bsai.events.types import (
     AgentActivityEvent,
     AgentStatus,
     ContextCompressedEvent,
@@ -223,7 +223,7 @@ class TestExtraFieldExtraction:
 class TestHandleMethod:
     """Tests for the main handle method."""
 
-    @patch("agent.events.handlers.logging_handler.logger")
+    @patch("bsai.events.handlers.logging_handler.logger")
     async def test_logs_with_correct_data(self, mock_logger, handler: LoggingEventHandler) -> None:
         """Test that handle logs with correct structured data."""
         session_id = uuid4()
@@ -245,7 +245,7 @@ class TestHandleMethod:
         assert call_kwargs["task_id"] == str(task_id)
         assert "timestamp" in call_kwargs
 
-    @patch("agent.events.handlers.logging_handler.logger")
+    @patch("bsai.events.handlers.logging_handler.logger")
     async def test_uses_error_level_for_failures(
         self, mock_logger, handler: LoggingEventHandler
     ) -> None:
@@ -262,7 +262,7 @@ class TestHandleMethod:
         mock_logger.debug.assert_not_called()
         mock_logger.info.assert_not_called()
 
-    @patch("agent.events.handlers.logging_handler.logger")
+    @patch("bsai.events.handlers.logging_handler.logger")
     async def test_uses_warning_level_for_retries(
         self, mock_logger, handler: LoggingEventHandler
     ) -> None:
@@ -280,7 +280,7 @@ class TestHandleMethod:
 
         mock_logger.warning.assert_called_once()
 
-    @patch("agent.events.handlers.logging_handler.logger")
+    @patch("bsai.events.handlers.logging_handler.logger")
     async def test_uses_info_level_for_completions(
         self, mock_logger, handler: LoggingEventHandler
     ) -> None:
@@ -299,7 +299,7 @@ class TestHandleMethod:
 
         mock_logger.info.assert_called_once()
 
-    @patch("agent.events.handlers.logging_handler.logger")
+    @patch("bsai.events.handlers.logging_handler.logger")
     async def test_uses_debug_level_for_other_events(
         self, mock_logger, handler: LoggingEventHandler
     ) -> None:
@@ -317,7 +317,7 @@ class TestHandleMethod:
 
         mock_logger.debug.assert_called_once()
 
-    @patch("agent.events.handlers.logging_handler.logger")
+    @patch("bsai.events.handlers.logging_handler.logger")
     async def test_includes_extra_fields_in_log(
         self, mock_logger, handler: LoggingEventHandler
     ) -> None:
@@ -359,7 +359,7 @@ class TestLogLevelConfiguration:
         handler = LoggingEventHandler(log_level="info")
         assert handler.log_level == "info"
 
-    @patch("agent.events.handlers.logging_handler.logger")
+    @patch("bsai.events.handlers.logging_handler.logger")
     async def test_custom_log_level_affects_default_events(self, mock_logger) -> None:
         """Test that custom log level affects default event logging."""
         handler = LoggingEventHandler(log_level="info")
@@ -380,7 +380,7 @@ class TestLogLevelConfiguration:
 class TestEventSpecificLogging:
     """Tests for event-specific logging behavior."""
 
-    @patch("agent.events.handlers.logging_handler.logger")
+    @patch("bsai.events.handlers.logging_handler.logger")
     async def test_milestone_status_changed_logging(
         self, mock_logger, handler: LoggingEventHandler
     ) -> None:
@@ -403,7 +403,7 @@ class TestEventSpecificLogging:
         assert call_kwargs["agent"] == "worker"
         assert call_kwargs["message"] == "Starting milestone"
 
-    @patch("agent.events.handlers.logging_handler.logger")
+    @patch("bsai.events.handlers.logging_handler.logger")
     async def test_context_compressed_logging(
         self, mock_logger, handler: LoggingEventHandler
     ) -> None:

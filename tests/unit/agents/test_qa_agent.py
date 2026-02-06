@@ -7,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent.core.qa_agent import QAAgent, QADecision
-from agent.llm import LLMModel, LLMResponse, UsageInfo
+from bsai.core.qa_agent import QAAgent, QADecision
+from bsai.llm import LLMModel, LLMResponse, UsageInfo
 
 
 @pytest.fixture
@@ -133,7 +133,7 @@ class TestQAAgent:
         assert qa_output.decision == "PASS"
 
         # Check milestone status was updated to "passed" (MilestoneStatus enum value)
-        from agent.db.models.enums import MilestoneStatus
+        from bsai.db.models.enums import MilestoneStatus
 
         mock_repo = cast(MagicMock, qa_agent.milestone_repo)
         mock_repo.update.assert_called_once()
@@ -265,7 +265,7 @@ class TestQAAgent:
         assert qa_output.decision == "RETRY"
 
         # Check milestone status was updated to "in_progress" (MilestoneStatus for RETRY)
-        from agent.db.models.enums import MilestoneStatus
+        from bsai.db.models.enums import MilestoneStatus
 
         mock_repo = cast(MagicMock, qa_agent.milestone_repo)
         mock_repo.update.assert_called()

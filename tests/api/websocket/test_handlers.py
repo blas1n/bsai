@@ -9,8 +9,8 @@ from uuid import uuid4
 import pytest
 from fastapi import WebSocketDisconnect
 
-from agent.api.websocket.handlers import WebSocketHandler
-from agent.api.websocket.manager import Connection
+from bsai.api.websocket.handlers import WebSocketHandler
+from bsai.api.websocket.manager import Connection
 
 if TYPE_CHECKING:
     pass
@@ -71,7 +71,7 @@ class TestHandleConnection:
         mock_connection.websocket.receive_json = AsyncMock(side_effect=WebSocketDisconnect())
 
         with patch(
-            "agent.api.websocket.handlers.authenticate_websocket",
+            "bsai.api.websocket.handlers.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
             mock_auth.return_value = "user-123"
@@ -91,7 +91,7 @@ class TestHandleConnection:
         mock_websocket = AsyncMock()
 
         with patch(
-            "agent.api.websocket.handlers.authenticate_websocket",
+            "bsai.api.websocket.handlers.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
             mock_auth.side_effect = Exception("Invalid token")
@@ -120,7 +120,7 @@ class TestHandleConnection:
         mock_manager.connect.return_value = mock_connection
 
         with patch(
-            "agent.api.websocket.handlers.authenticate_websocket",
+            "bsai.api.websocket.handlers.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
             mock_auth.return_value = "user-123"
@@ -165,9 +165,9 @@ class TestHandleMessage:
             mock_db = AsyncMock()
             yield mock_db
 
-        with patch("agent.api.websocket.handlers.get_db_session", mock_get_db):
+        with patch("bsai.api.websocket.handlers.get_db_session", mock_get_db):
             # Mock SessionRepository.verify_ownership to return True
-            with patch("agent.api.websocket.handlers.SessionRepository") as MockSessionRepo:
+            with patch("bsai.api.websocket.handlers.SessionRepository") as MockSessionRepo:
                 mock_repo = MagicMock()
                 mock_repo.verify_ownership = AsyncMock(return_value=True)
                 MockSessionRepo.return_value = mock_repo
@@ -240,7 +240,7 @@ class TestHandleAuth:
         mock_connection.authenticated = False
 
         with patch(
-            "agent.api.websocket.handlers.authenticate_websocket",
+            "bsai.api.websocket.handlers.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
             mock_auth.return_value = "user-123"
@@ -286,7 +286,7 @@ class TestHandleAuth:
         mock_connection.authenticated = False
 
         with patch(
-            "agent.api.websocket.handlers.authenticate_websocket",
+            "bsai.api.websocket.handlers.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
             mock_auth.side_effect = Exception("Token expired")
@@ -648,8 +648,8 @@ class TestSubscribeUnauthorized:
             mock_db = AsyncMock()
             yield mock_db
 
-        with patch("agent.api.websocket.handlers.get_db_session", mock_get_db):
-            with patch("agent.api.websocket.handlers.SessionRepository") as MockSessionRepo:
+        with patch("bsai.api.websocket.handlers.get_db_session", mock_get_db):
+            with patch("bsai.api.websocket.handlers.SessionRepository") as MockSessionRepo:
                 mock_repo = MagicMock()
                 mock_repo.verify_ownership = AsyncMock(return_value=False)
                 MockSessionRepo.return_value = mock_repo

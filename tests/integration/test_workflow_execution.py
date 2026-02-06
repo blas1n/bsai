@@ -5,9 +5,9 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from agent.db.models.enums import TaskStatus
-from agent.graph.state import AgentState
-from agent.llm import ChatMessage
+from bsai.db.models.enums import TaskStatus
+from bsai.graph.state import AgentState
+from bsai.llm import ChatMessage
 
 
 def create_task_data(

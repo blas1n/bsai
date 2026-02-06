@@ -11,13 +11,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from agent.api.auth import get_current_user_id
-from agent.api.dependencies import get_cache, get_db
-from agent.api.exceptions import NotFoundError
-from agent.api.handlers import register_exception_handlers
-from agent.api.routers.snapshots import router
-from agent.api.schemas import SnapshotResponse
-from agent.db.models.enums import SnapshotType
+from bsai.api.auth import get_current_user_id
+from bsai.api.dependencies import get_cache, get_db
+from bsai.api.exceptions import NotFoundError
+from bsai.api.handlers import register_exception_handlers
+from bsai.api.routers.snapshots import router
+from bsai.api.schemas import SnapshotResponse
+from bsai.db.models.enums import SnapshotType
 
 if TYPE_CHECKING:
     pass
@@ -73,7 +73,7 @@ class TestListSnapshots:
         session_id = uuid4()
         mock_snapshots = [create_mock_snapshot(session_id) for _ in range(3)]
 
-        with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.snapshots.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_snapshots = AsyncMock(return_value=mock_snapshots)
             mock_service_class.return_value = mock_service
@@ -88,7 +88,7 @@ class TestListSnapshots:
         """Returns empty list when session has no snapshots."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.snapshots.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_snapshots = AsyncMock(return_value=[])
             mock_service_class.return_value = mock_service
@@ -102,7 +102,7 @@ class TestListSnapshots:
         """Returns 404 when session not found."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.snapshots.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_snapshots = AsyncMock(
                 side_effect=NotFoundError("Session", session_id)
@@ -122,7 +122,7 @@ class TestCreateSnapshot:
         session_id = uuid4()
         mock_snapshot = create_mock_snapshot(session_id)
 
-        with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.snapshots.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_snapshot = AsyncMock(return_value=mock_snapshot)
             mock_service_class.return_value = mock_service
@@ -140,7 +140,7 @@ class TestCreateSnapshot:
         """Returns 404 when session not found."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.snapshots.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_snapshot = AsyncMock(
                 side_effect=NotFoundError("Session", session_id)
@@ -163,7 +163,7 @@ class TestGetLatestSnapshot:
         session_id = uuid4()
         mock_snapshot = create_mock_snapshot(session_id)
 
-        with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.snapshots.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_latest_snapshot = AsyncMock(return_value=mock_snapshot)
             mock_service_class.return_value = mock_service
@@ -178,7 +178,7 @@ class TestGetLatestSnapshot:
         """Returns 404 when no snapshots exist."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.snapshots.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_latest_snapshot = AsyncMock(
                 side_effect=NotFoundError("Snapshot", "latest")
@@ -207,7 +207,7 @@ class TestGetSnapshot:
             created_at=datetime.now(UTC),
         )
 
-        with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.snapshots.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_snapshot = AsyncMock(return_value=mock_snapshot)
             mock_service_class.return_value = mock_service
@@ -223,7 +223,7 @@ class TestGetSnapshot:
         session_id = uuid4()
         snapshot_id = uuid4()
 
-        with patch("agent.api.routers.snapshots.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.snapshots.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_snapshot = AsyncMock(
                 side_effect=NotFoundError("Snapshot", snapshot_id)

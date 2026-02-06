@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agent.prompts.keys import ArchitectPrompts, WorkerPrompts
-from agent.prompts.manager import PromptManager
+from bsai.prompts.keys import ArchitectPrompts, WorkerPrompts
+from bsai.prompts.manager import PromptManager
 
 
 @pytest.fixture

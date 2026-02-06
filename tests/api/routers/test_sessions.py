@@ -12,17 +12,17 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from agent.api.auth import get_current_user_id
-from agent.api.dependencies import get_cache, get_db
-from agent.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
-from agent.api.handlers import register_exception_handlers
-from agent.api.routers.sessions import router
-from agent.api.schemas import (
+from bsai.api.auth import get_current_user_id
+from bsai.api.dependencies import get_cache, get_db
+from bsai.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
+from bsai.api.handlers import register_exception_handlers
+from bsai.api.routers.sessions import router
+from bsai.api.schemas import (
     PaginatedResponse,
     SessionDetailResponse,
     SessionResponse,
 )
-from agent.db.models.enums import SessionStatus
+from bsai.db.models.enums import SessionStatus
 
 if TYPE_CHECKING:
     pass
@@ -76,7 +76,7 @@ class TestCreateSession:
             context_usage_ratio=0.0,
         )
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_session = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -105,7 +105,7 @@ class TestCreateSession:
             context_usage_ratio=0.0,
         )
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_session = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -142,7 +142,7 @@ class TestListSessions:
             has_more=False,
         )
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_sessions = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -156,7 +156,7 @@ class TestListSessions:
 
     def test_filters_by_status(self, client: TestClient) -> None:
         """Filters sessions by status."""
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_sessions = AsyncMock(
                 return_value=PaginatedResponse(
@@ -191,7 +191,7 @@ class TestGetSession:
             active_task=None,
         )
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_session = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -206,7 +206,7 @@ class TestGetSession:
         """Returns 404 when session not found."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_session = AsyncMock(side_effect=NotFoundError("Session", session_id))
             mock_service_class.return_value = mock_service
@@ -234,7 +234,7 @@ class TestPauseSession:
             context_usage_ratio=0.0,
         )
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.pause_session = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -248,7 +248,7 @@ class TestPauseSession:
         """Returns 400 when session cannot be paused."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.pause_session = AsyncMock(
                 side_effect=InvalidStateError(
@@ -282,7 +282,7 @@ class TestResumeSession:
             context_usage_ratio=0.0,
         )
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.resume_session = AsyncMock(return_value=(mock_response, None))
             mock_service_class.return_value = mock_service
@@ -311,7 +311,7 @@ class TestCompleteSession:
             context_usage_ratio=0.5,
         )
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.complete_session = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -329,7 +329,7 @@ class TestDeleteSession:
         """Deletes a completed session."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.delete_session = AsyncMock(return_value=None)
             mock_service_class.return_value = mock_service
@@ -342,7 +342,7 @@ class TestDeleteSession:
         """Returns 403 when user doesn't own session."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.sessions.SessionService") as mock_service_class:
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.delete_session = AsyncMock(
                 side_effect=AccessDeniedError("Session", session_id)

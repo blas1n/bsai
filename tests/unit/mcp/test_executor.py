@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.mcp.executor import McpToolCall, McpToolExecutor, McpToolResult
+from bsai.mcp.executor import McpToolCall, McpToolExecutor, McpToolResult
 
 
 def _create_mock_server(
@@ -63,7 +63,7 @@ def mock_settings() -> MagicMock:
 @pytest.fixture
 def executor(user_id: str, session_id, mock_ws_manager: MagicMock, mock_settings: MagicMock):
     """Create MCP tool executor."""
-    with patch("agent.mcp.executor.get_mcp_settings", return_value=mock_settings):
+    with patch("bsai.mcp.executor.get_mcp_settings", return_value=mock_settings):
         return McpToolExecutor(
             user_id=user_id,
             session_id=session_id,
@@ -206,7 +206,7 @@ class TestMcpToolExecutor:
 
     async def test_execute_stdio_tool_no_ws_manager(self, user_id: str, session_id):
         """Test executing stdio tool without WebSocket manager."""
-        with patch("agent.mcp.executor.get_mcp_settings") as mock_settings:
+        with patch("bsai.mcp.executor.get_mcp_settings") as mock_settings:
             mock_settings.return_value.tool_execution_timeout = 30.0
             mock_settings.return_value.blocked_tool_patterns = []
             mock_settings.return_value.high_risk_tool_patterns = []
@@ -252,7 +252,7 @@ class TestMcpToolExecutor:
 
     async def test_request_user_approval_no_ws(self, user_id: str, session_id):
         """Test requesting approval without WebSocket returns False."""
-        with patch("agent.mcp.executor.get_mcp_settings") as mock_settings:
+        with patch("bsai.mcp.executor.get_mcp_settings") as mock_settings:
             mock_settings.return_value.tool_execution_timeout = 30.0
             mock_settings.return_value.blocked_tool_patterns = []
             mock_settings.return_value.high_risk_tool_patterns = []
@@ -421,7 +421,7 @@ class TestMcpToolExecutor:
             mcp_server=server,
         )
 
-        with patch("agent.mcp.executor.build_mcp_auth_headers", return_value=None):
+        with patch("bsai.mcp.executor.build_mcp_auth_headers", return_value=None):
             result = await executor._execute_remote_tool(tool_call)
 
         assert result.success is False
@@ -464,7 +464,7 @@ class TestMcpToolExecutor:
         mock_log_repo = MagicMock()
         mock_log_repo.log_execution = AsyncMock()
 
-        with patch("agent.mcp.executor.McpToolLogRepository", return_value=mock_log_repo):
+        with patch("bsai.mcp.executor.McpToolLogRepository", return_value=mock_log_repo):
             await executor._log_execution(
                 db_session=mock_session,
                 tool_call=tool_call,
@@ -493,7 +493,7 @@ class TestMcpToolExecutor:
         mock_log_repo = MagicMock()
         mock_log_repo.log_execution = AsyncMock(side_effect=Exception("DB error"))
 
-        with patch("agent.mcp.executor.McpToolLogRepository", return_value=mock_log_repo):
+        with patch("bsai.mcp.executor.McpToolLogRepository", return_value=mock_log_repo):
             # Should not raise error
             await executor._log_execution(
                 db_session=mock_session,

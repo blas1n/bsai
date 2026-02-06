@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.repository.memory_snapshot_repo import MemorySnapshotRepository
+from bsai.db.repository.memory_snapshot_repo import MemorySnapshotRepository
 
 if TYPE_CHECKING:
     pass

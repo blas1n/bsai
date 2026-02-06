@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import WebSocketDisconnect
 
-from agent.api.auth import (
+from bsai.api.auth import (
     authenticate_websocket,
     authenticate_websocket_connection,
     get_current_user_id,
     get_keycloak_config,
     user_mapper,
 )
-from agent.api.exceptions import AuthenticationError
+from bsai.api.exceptions import AuthenticationError
 
 if TYPE_CHECKING:
     pass
@@ -51,7 +51,7 @@ class TestGetKeycloakConfig:
 
     def test_returns_keycloak_configuration(self) -> None:
         """get_keycloak_config returns KeycloakConfiguration object."""
-        with patch("agent.api.auth.get_auth_settings") as mock_settings:
+        with patch("bsai.api.auth.get_auth_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 keycloak_url="https://auth.example.com",
                 keycloak_realm="test-realm",
@@ -73,7 +73,7 @@ class TestGetCurrentUserId:
         """get_current_user_id returns user ID when authenticated."""
         mock_request = MagicMock()
 
-        with patch("agent.api.auth.get_user", new_callable=AsyncMock) as mock_get_user:
+        with patch("bsai.api.auth.get_user", new_callable=AsyncMock) as mock_get_user:
             mock_get_user.return_value = "user-123"
             result = await get_current_user_id(mock_request)
             assert result == "user-123"
@@ -83,7 +83,7 @@ class TestGetCurrentUserId:
         """get_current_user_id raises 401 when user is None."""
         mock_request = MagicMock()
 
-        with patch("agent.api.auth.get_user", new_callable=AsyncMock) as mock_get_user:
+        with patch("bsai.api.auth.get_user", new_callable=AsyncMock) as mock_get_user:
             mock_get_user.return_value = None
 
             with pytest.raises(AuthenticationError) as exc_info:
@@ -106,10 +106,10 @@ class TestAuthenticateWebsocket:
         mock_jwt.claims = '{"sub": "user-123"}'
 
         with (
-            patch("agent.api.auth.get_auth_settings") as mock_settings,
-            patch("agent.api.auth.httpx.AsyncClient") as mock_client,
-            patch("agent.api.auth.JWKSet") as mock_jwkset,
-            patch("agent.api.auth.jwt.JWT", return_value=mock_jwt),
+            patch("bsai.api.auth.get_auth_settings") as mock_settings,
+            patch("bsai.api.auth.httpx.AsyncClient") as mock_client,
+            patch("bsai.api.auth.JWKSet") as mock_jwkset,
+            patch("bsai.api.auth.jwt.JWT", return_value=mock_jwt),
         ):
             mock_settings.return_value = MagicMock(
                 keycloak_url="https://auth.example.com",
@@ -129,8 +129,8 @@ class TestAuthenticateWebsocket:
     async def test_raises_401_on_invalid_token(self) -> None:
         """authenticate_websocket raises 401 on invalid token."""
         with (
-            patch("agent.api.auth.get_auth_settings") as mock_settings,
-            patch("agent.api.auth.httpx.AsyncClient") as mock_client,
+            patch("bsai.api.auth.get_auth_settings") as mock_settings,
+            patch("bsai.api.auth.httpx.AsyncClient") as mock_client,
         ):
             mock_settings.return_value = MagicMock(
                 keycloak_url="https://auth.example.com",
@@ -158,7 +158,7 @@ class TestAuthenticateWebsocketConnection:
         mock_websocket = MagicMock()
 
         with patch(
-            "agent.api.auth.authenticate_websocket",
+            "bsai.api.auth.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
             mock_auth.return_value = "user-123"
@@ -179,7 +179,7 @@ class TestAuthenticateWebsocketConnection:
         )
 
         with patch(
-            "agent.api.auth.authenticate_websocket",
+            "bsai.api.auth.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
             mock_auth.return_value = "user-456"
@@ -230,7 +230,7 @@ class TestAuthenticateWebsocketConnection:
                 close_method()
             raise TimeoutError()
 
-        with patch("agent.api.auth.asyncio.wait_for", side_effect=mock_wait_for):
+        with patch("bsai.api.auth.asyncio.wait_for", side_effect=mock_wait_for):
             with pytest.raises(WebSocketDisconnect) as exc_info:
                 await authenticate_websocket_connection(mock_websocket, token=None)
 
@@ -251,7 +251,7 @@ class TestAuthenticateWebsocketConnection:
             raise AuthenticationError(message="Invalid token")
 
         with patch(
-            "agent.api.auth.authenticate_websocket",
+            "bsai.api.auth.authenticate_websocket",
             new=raise_auth_error,
         ):
             with pytest.raises(WebSocketDisconnect) as exc_info:

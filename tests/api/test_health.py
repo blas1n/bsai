@@ -26,12 +26,12 @@ class TestHealthEndpoints:
         """Ready endpoint returns status ready when all services are up."""
         with (
             patch(
-                "agent.api.routers.health.check_database",
+                "bsai.api.routers.health.check_database",
                 new_callable=AsyncMock,
                 return_value="healthy",
             ),
             patch(
-                "agent.api.routers.health.check_redis",
+                "bsai.api.routers.health.check_redis",
                 new_callable=AsyncMock,
                 return_value="healthy",
             ),
@@ -49,12 +49,12 @@ class TestHealthEndpoints:
         """Ready endpoint returns 503 when database is unhealthy."""
         with (
             patch(
-                "agent.api.routers.health.check_database",
+                "bsai.api.routers.health.check_database",
                 new_callable=AsyncMock,
                 return_value="unhealthy",
             ),
             patch(
-                "agent.api.routers.health.check_redis",
+                "bsai.api.routers.health.check_redis",
                 new_callable=AsyncMock,
                 return_value="healthy",
             ),
@@ -69,12 +69,12 @@ class TestHealthEndpoints:
         """Ready endpoint returns 503 when redis is unhealthy."""
         with (
             patch(
-                "agent.api.routers.health.check_database",
+                "bsai.api.routers.health.check_database",
                 new_callable=AsyncMock,
                 return_value="healthy",
             ),
             patch(
-                "agent.api.routers.health.check_redis",
+                "bsai.api.routers.health.check_redis",
                 new_callable=AsyncMock,
                 return_value="unhealthy",
             ),

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.llm.builtin_tools import (
+from bsai.llm.builtin_tools import (
     BUILTIN_TOOL_DEFINITIONS,
     BUILTIN_TOOL_NAMES,
     BuiltinToolExecutor,

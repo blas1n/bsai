@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.container import ContainerState, lifespan
+from bsai.container import ContainerState, lifespan
 
 
 class TestContainerState:
@@ -40,11 +40,11 @@ class TestLifespan:
     async def test_lifespan_yields_container_state(self) -> None:
         """Test that lifespan yields a ContainerState."""
         with (
-            patch("agent.container.container.PromptManager") as MockPM,
-            patch("agent.container.container.LiteLLMClient") as MockClient,
-            patch("agent.container.container.ModelRegistry") as MockRegistry,
-            patch("agent.container.container.LLMRouter") as MockRouter,
-            patch("agent.container.container.EmbeddingService") as MockEmbedding,
+            patch("bsai.container.container.PromptManager") as MockPM,
+            patch("bsai.container.container.LiteLLMClient") as MockClient,
+            patch("bsai.container.container.ModelRegistry") as MockRegistry,
+            patch("bsai.container.container.LLMRouter") as MockRouter,
+            patch("bsai.container.container.EmbeddingService") as MockEmbedding,
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()
@@ -62,13 +62,13 @@ class TestLifespan:
     async def test_lifespan_initializes_model_registry(self) -> None:
         """Test that lifespan initializes the model registry."""
         with (
-            patch("agent.container.container.PromptManager"),
-            patch("agent.container.container.LiteLLMClient"),
-            patch("agent.container.container.ModelRegistry") as MockRegistry,
-            patch("agent.container.container.LLMRouter"),
-            patch("agent.container.container.get_redis"),
-            patch("agent.container.container.SessionCache"),
-            patch("agent.container.container.EmbeddingService"),
+            patch("bsai.container.container.PromptManager"),
+            patch("bsai.container.container.LiteLLMClient"),
+            patch("bsai.container.container.ModelRegistry") as MockRegistry,
+            patch("bsai.container.container.LLMRouter"),
+            patch("bsai.container.container.get_redis"),
+            patch("bsai.container.container.SessionCache"),
+            patch("bsai.container.container.EmbeddingService"),
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()
@@ -83,13 +83,13 @@ class TestLifespan:
         mock_session = AsyncMock()
 
         with (
-            patch("agent.container.container.PromptManager"),
-            patch("agent.container.container.LiteLLMClient"),
-            patch("agent.container.container.ModelRegistry") as MockRegistry,
-            patch("agent.container.container.LLMRouter"),
-            patch("agent.container.container.get_redis"),
-            patch("agent.container.container.SessionCache"),
-            patch("agent.container.container.EmbeddingService"),
+            patch("bsai.container.container.PromptManager"),
+            patch("bsai.container.container.LiteLLMClient"),
+            patch("bsai.container.container.ModelRegistry") as MockRegistry,
+            patch("bsai.container.container.LLMRouter"),
+            patch("bsai.container.container.get_redis"),
+            patch("bsai.container.container.SessionCache"),
+            patch("bsai.container.container.EmbeddingService"),
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()
@@ -102,13 +102,13 @@ class TestLifespan:
     async def test_lifespan_creates_router_with_registry(self) -> None:
         """Test that lifespan creates LLMRouter with the model registry."""
         with (
-            patch("agent.container.container.PromptManager"),
-            patch("agent.container.container.LiteLLMClient"),
-            patch("agent.container.container.ModelRegistry") as MockRegistry,
-            patch("agent.container.container.LLMRouter") as MockRouter,
-            patch("agent.container.container.get_redis"),
-            patch("agent.container.container.SessionCache"),
-            patch("agent.container.container.EmbeddingService"),
+            patch("bsai.container.container.PromptManager"),
+            patch("bsai.container.container.LiteLLMClient"),
+            patch("bsai.container.container.ModelRegistry") as MockRegistry,
+            patch("bsai.container.container.LLMRouter") as MockRouter,
+            patch("bsai.container.container.get_redis"),
+            patch("bsai.container.container.SessionCache"),
+            patch("bsai.container.container.EmbeddingService"),
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()
@@ -121,13 +121,13 @@ class TestLifespan:
     async def test_lifespan_multiple_contexts_independent(self) -> None:
         """Test that multiple lifespan contexts are independent."""
         with (
-            patch("agent.container.container.PromptManager") as MockPM,
-            patch("agent.container.container.LiteLLMClient") as MockClient,
-            patch("agent.container.container.ModelRegistry") as MockRegistry,
-            patch("agent.container.container.LLMRouter"),
-            patch("agent.container.container.get_redis"),
-            patch("agent.container.container.SessionCache"),
-            patch("agent.container.container.EmbeddingService"),
+            patch("bsai.container.container.PromptManager") as MockPM,
+            patch("bsai.container.container.LiteLLMClient") as MockClient,
+            patch("bsai.container.container.ModelRegistry") as MockRegistry,
+            patch("bsai.container.container.LLMRouter"),
+            patch("bsai.container.container.get_redis"),
+            patch("bsai.container.container.SessionCache"),
+            patch("bsai.container.container.EmbeddingService"),
         ):
             mock_registry = MagicMock()
             mock_registry.initialize = AsyncMock()

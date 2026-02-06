@@ -10,10 +10,10 @@ import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 
-from agent.api.auth import get_current_user_id
-from agent.api.dependencies import get_db
-from agent.api.handlers import register_exception_handlers
-from agent.api.routers.artifacts import router
+from bsai.api.auth import get_current_user_id
+from bsai.api.dependencies import get_db
+from bsai.api.handlers import register_exception_handlers
+from bsai.api.routers.artifacts import router
 
 
 def _create_mock_session(user_id: str, **kwargs) -> MagicMock:

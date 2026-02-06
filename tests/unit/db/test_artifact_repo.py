@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.repository.artifact_repo import ArtifactRepository
+from bsai.db.repository.artifact_repo import ArtifactRepository
 
 
 def _create_mock_artifact(

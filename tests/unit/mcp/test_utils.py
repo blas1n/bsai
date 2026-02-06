@@ -2,7 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from agent.mcp.utils import load_all_mcp_tools, load_tools_from_mcp_server, load_user_mcp_servers
+from bsai.mcp.utils import load_all_mcp_tools, load_tools_from_mcp_server, load_user_mcp_servers
 
 
 def _create_mock_server(
@@ -83,7 +83,7 @@ class TestLoadToolsFromMcpServer:
         """Test that servers requiring auth without credentials are skipped."""
         server = _create_mock_server(auth_type="bearer")
 
-        with patch("agent.mcp.utils.build_mcp_auth_headers", return_value=None):
+        with patch("bsai.mcp.utils.build_mcp_auth_headers", return_value=None):
             result = await load_tools_from_mcp_server(server)
 
         assert result == []
@@ -108,14 +108,14 @@ class TestLoadToolsFromMcpServer:
         mock_session.initialize = AsyncMock()
         mock_session.list_tools = AsyncMock(return_value=mock_tools_result)
 
-        with patch("agent.mcp.utils.build_mcp_auth_headers", return_value=None):
-            with patch("agent.mcp.utils.sse_client") as mock_sse:
+        with patch("bsai.mcp.utils.build_mcp_auth_headers", return_value=None):
+            with patch("bsai.mcp.utils.sse_client") as mock_sse:
                 mock_sse.return_value.__aenter__ = AsyncMock(
                     return_value=(MagicMock(), MagicMock())
                 )
                 mock_sse.return_value.__aexit__ = AsyncMock()
 
-                with patch("agent.mcp.utils.ClientSession") as mock_client:
+                with patch("bsai.mcp.utils.ClientSession") as mock_client:
                     mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_session)
                     mock_client.return_value.__aexit__ = AsyncMock()
 
@@ -142,14 +142,14 @@ class TestLoadToolsFromMcpServer:
         mock_session.initialize = AsyncMock()
         mock_session.list_tools = AsyncMock(return_value=mock_tools_result)
 
-        with patch("agent.mcp.utils.build_mcp_auth_headers", return_value=None):
-            with patch("agent.mcp.utils.streamable_http_client") as mock_http:
+        with patch("bsai.mcp.utils.build_mcp_auth_headers", return_value=None):
+            with patch("bsai.mcp.utils.streamable_http_client") as mock_http:
                 mock_http.return_value.__aenter__ = AsyncMock(
                     return_value=(MagicMock(), MagicMock(), MagicMock())
                 )
                 mock_http.return_value.__aexit__ = AsyncMock()
 
-                with patch("agent.mcp.utils.ClientSession") as mock_client:
+                with patch("bsai.mcp.utils.ClientSession") as mock_client:
                     mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_session)
                     mock_client.return_value.__aexit__ = AsyncMock()
 
@@ -181,14 +181,14 @@ class TestLoadToolsFromMcpServer:
         mock_session.initialize = AsyncMock()
         mock_session.list_tools = AsyncMock(return_value=mock_tools_result)
 
-        with patch("agent.mcp.utils.build_mcp_auth_headers", return_value=None):
-            with patch("agent.mcp.utils.sse_client") as mock_sse:
+        with patch("bsai.mcp.utils.build_mcp_auth_headers", return_value=None):
+            with patch("bsai.mcp.utils.sse_client") as mock_sse:
                 mock_sse.return_value.__aenter__ = AsyncMock(
                     return_value=(MagicMock(), MagicMock())
                 )
                 mock_sse.return_value.__aexit__ = AsyncMock()
 
-                with patch("agent.mcp.utils.ClientSession") as mock_client:
+                with patch("bsai.mcp.utils.ClientSession") as mock_client:
                     mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_session)
                     mock_client.return_value.__aexit__ = AsyncMock()
 
@@ -201,8 +201,8 @@ class TestLoadToolsFromMcpServer:
         """Test loading tools when connection fails."""
         server = _create_mock_server(transport_type="sse")
 
-        with patch("agent.mcp.utils.build_mcp_auth_headers", return_value=None):
-            with patch("agent.mcp.utils.sse_client") as mock_sse:
+        with patch("bsai.mcp.utils.build_mcp_auth_headers", return_value=None):
+            with patch("bsai.mcp.utils.sse_client") as mock_sse:
                 mock_sse.return_value.__aenter__ = AsyncMock(
                     side_effect=Exception("Connection failed")
                 )
@@ -231,15 +231,15 @@ class TestLoadToolsFromMcpServer:
         mock_session.list_tools = AsyncMock(return_value=mock_tools_result)
 
         with patch(
-            "agent.mcp.utils.build_mcp_auth_headers", return_value={"Authorization": "Bearer token"}
+            "bsai.mcp.utils.build_mcp_auth_headers", return_value={"Authorization": "Bearer token"}
         ):
-            with patch("agent.mcp.utils.streamable_http_client") as mock_http:
+            with patch("bsai.mcp.utils.streamable_http_client") as mock_http:
                 mock_http.return_value.__aenter__ = AsyncMock(
                     return_value=(MagicMock(), MagicMock(), MagicMock())
                 )
                 mock_http.return_value.__aexit__ = AsyncMock()
 
-                with patch("agent.mcp.utils.ClientSession") as mock_client:
+                with patch("bsai.mcp.utils.ClientSession") as mock_client:
                     mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_session)
                     mock_client.return_value.__aexit__ = AsyncMock()
 
@@ -259,7 +259,7 @@ class TestLoadAllMcpTools:
         tools1 = [{"name": "tool1", "description": "desc", "inputSchema": {}}]
         tools2 = [{"name": "tool2", "description": "desc", "inputSchema": {}}]
 
-        with patch("agent.mcp.utils.load_tools_from_mcp_server") as mock_load:
+        with patch("bsai.mcp.utils.load_tools_from_mcp_server") as mock_load:
             mock_load.side_effect = [tools1, tools2]
 
             result = await load_all_mcp_tools([server1, server2])
@@ -283,7 +283,7 @@ class TestLoadAllMcpTools:
 
         tools1 = [{"name": "tool1", "description": "desc", "inputSchema": {}}]
 
-        with patch("agent.mcp.utils.load_tools_from_mcp_server") as mock_load:
+        with patch("bsai.mcp.utils.load_tools_from_mcp_server") as mock_load:
             # First server succeeds, second returns empty
             mock_load.side_effect = [tools1, []]
 
@@ -301,7 +301,7 @@ class TestLoadAllMcpTools:
 
         tools2 = [{"name": "tool2", "description": "desc", "inputSchema": {}}]
 
-        with patch("agent.mcp.utils.load_tools_from_mcp_server") as mock_load:
+        with patch("bsai.mcp.utils.load_tools_from_mcp_server") as mock_load:
             mock_load.side_effect = [[], tools2]
 
             result = await load_all_mcp_tools([server1, server2])

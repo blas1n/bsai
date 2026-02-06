@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.memory.embedding_service import EmbeddingService
+from bsai.memory.embedding_service import EmbeddingService
 
 if TYPE_CHECKING:
     pass
@@ -45,7 +45,7 @@ class TestEmbeddingService:
         self, service_no_cache: EmbeddingService, sample_embedding: list[float]
     ) -> None:
         """Test successful text embedding."""
-        with patch("agent.memory.embedding_service.litellm.aembedding") as mock_embed:
+        with patch("bsai.memory.embedding_service.litellm.aembedding") as mock_embed:
             mock_embed.return_value = MagicMock(data=[{"embedding": sample_embedding}])
 
             result = await service_no_cache.embed_text("test text")
@@ -59,7 +59,7 @@ class TestEmbeddingService:
     ) -> None:
         """Test successful batch embedding."""
         texts = ["text1", "text2", "text3"]
-        with patch("agent.memory.embedding_service.litellm.aembedding") as mock_embed:
+        with patch("bsai.memory.embedding_service.litellm.aembedding") as mock_embed:
             mock_embed.return_value = MagicMock(
                 data=[{"embedding": sample_embedding} for _ in texts]
             )
@@ -102,7 +102,7 @@ class TestEmbeddingService:
         """Test cache miss calls embed_text and caches result."""
         mock_cache.client.get = AsyncMock(return_value=None)
 
-        with patch("agent.memory.embedding_service.litellm.aembedding") as mock_embed:
+        with patch("bsai.memory.embedding_service.litellm.aembedding") as mock_embed:
             mock_embed.return_value = MagicMock(data=[{"embedding": sample_embedding}])
 
             result = await service.embed_with_cache("test text")
@@ -117,7 +117,7 @@ class TestEmbeddingService:
         sample_embedding: list[float],
     ) -> None:
         """Test embed_with_cache works when no cache is configured."""
-        with patch("agent.memory.embedding_service.litellm.aembedding") as mock_embed:
+        with patch("bsai.memory.embedding_service.litellm.aembedding") as mock_embed:
             mock_embed.return_value = MagicMock(data=[{"embedding": sample_embedding}])
 
             result = await service_no_cache.embed_with_cache("test text")

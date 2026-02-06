@@ -11,10 +11,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from agent.api.auth import get_current_user_id
-from agent.api.dependencies import get_cache, get_db
-from agent.db.models.enums import MemoryType
-from agent.db.models.episodic_memory import EpisodicMemory
+from bsai.api.auth import get_current_user_id
+from bsai.api.dependencies import get_cache, get_db
+from bsai.db.models.enums import MemoryType
+from bsai.db.models.episodic_memory import EpisodicMemory
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -89,8 +89,8 @@ def app(
     monkeypatch: pytest.MonkeyPatch,
 ) -> FastAPI:
     """Create test FastAPI app with mocked dependencies."""
-    from agent.api.config import get_auth_settings
-    from agent.api.main import create_app
+    from bsai.api.config import get_auth_settings
+    from bsai.api.main import create_app
 
     # Disable Keycloak auth for tests
     get_auth_settings.cache_clear()
@@ -129,7 +129,7 @@ class TestMemoriesSearch:
         sample_memory: MagicMock,
     ) -> None:
         """Test successful memory search."""
-        with patch("agent.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
+        with patch("bsai.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
             mock_manager = MagicMock()
             # Return list of tuples (memory, score) like the real implementation
             mock_manager.search_similar = AsyncMock(return_value=[(sample_memory, 0.85)])
@@ -160,7 +160,7 @@ class TestMemoriesSearch:
         client: TestClient,
     ) -> None:
         """Test search with memory type filter."""
-        with patch("agent.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
+        with patch("bsai.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
             mock_manager = MagicMock()
             mock_manager.search_similar = AsyncMock(return_value=[])
             mock_manager_class.return_value = mock_manager
@@ -188,7 +188,7 @@ class TestMemoriesList:
         test_user_id: str,
     ) -> None:
         """Test listing memories."""
-        with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
+        with patch("bsai.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_user_id = AsyncMock(return_value=[sample_memory])
             mock_repo.count_by_user = AsyncMock(return_value=1)
@@ -209,7 +209,7 @@ class TestMemoriesList:
         client: TestClient,
     ) -> None:
         """Test listing memories with pagination."""
-        with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
+        with patch("bsai.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_user_id = AsyncMock(return_value=[])
             mock_repo.count_by_user = AsyncMock(return_value=0)
@@ -228,7 +228,7 @@ class TestMemoriesList:
         client: TestClient,
     ) -> None:
         """Test listing memories with type filter."""
-        with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
+        with patch("bsai.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_user_id = AsyncMock(return_value=[])
             mock_repo.count_by_user = AsyncMock(return_value=0)
@@ -249,7 +249,7 @@ class TestMemoriesGet:
         sample_memory_id: str,
     ) -> None:
         """Test getting single memory."""
-        with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
+        with patch("bsai.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=sample_memory)
             mock_repo_class.return_value = mock_repo
@@ -265,7 +265,7 @@ class TestMemoriesGet:
         client: TestClient,
     ) -> None:
         """Test getting non-existent memory."""
-        with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
+        with patch("bsai.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=None)
             mock_repo_class.return_value = mock_repo
@@ -283,7 +283,7 @@ class TestMemoriesGet:
         """Test getting memory belonging to different user."""
         sample_memory.user_id = "different-user"
 
-        with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
+        with patch("bsai.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=sample_memory)
             mock_repo_class.return_value = mock_repo
@@ -303,7 +303,7 @@ class TestMemoriesDelete:
         sample_memory_id: str,
     ) -> None:
         """Test deleting memory."""
-        with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
+        with patch("bsai.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=sample_memory)
             mock_repo.delete = AsyncMock(return_value=True)
@@ -318,7 +318,7 @@ class TestMemoriesDelete:
         client: TestClient,
     ) -> None:
         """Test deleting non-existent memory."""
-        with patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
+        with patch("bsai.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=None)
             mock_repo_class.return_value = mock_repo
@@ -337,7 +337,7 @@ class TestMemoriesStats:
         mock_db: AsyncMock,
     ) -> None:
         """Test getting memory statistics."""
-        with patch("agent.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
+        with patch("bsai.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
             mock_manager = MagicMock()
             mock_manager.get_memory_stats = AsyncMock(
                 return_value={
@@ -366,8 +366,8 @@ class TestMemoriesConsolidate:
     ) -> None:
         """Test consolidating similar memories."""
         with (
-            patch("agent.api.routers.memories.LongTermMemoryManager") as mock_manager_class,
-            patch("agent.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class,
+            patch("bsai.api.routers.memories.LongTermMemoryManager") as mock_manager_class,
+            patch("bsai.api.routers.memories.EpisodicMemoryRepository") as mock_repo_class,
         ):
             mock_manager = MagicMock()
             mock_manager.consolidate_memories = AsyncMock(return_value=5)
@@ -393,7 +393,7 @@ class TestMemoriesDecay:
         client: TestClient,
     ) -> None:
         """Test applying importance decay."""
-        with patch("agent.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
+        with patch("bsai.api.routers.memories.LongTermMemoryManager") as mock_manager_class:
             mock_manager = MagicMock()
             mock_manager.decay_memories = AsyncMock(return_value=10)
             mock_manager_class.return_value = mock_manager

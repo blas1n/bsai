@@ -45,4 +45,4 @@ The system consists of 7 specialized agents:
 
 For the most up-to-date information, please refer to:
 - [Project README](../README.md)
-- [Development Guide](../src/agent/CLAUDE.md)
+- [Development Guide](../src/bsai/CLAUDE.md)

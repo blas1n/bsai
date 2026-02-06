@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.api.main import create_app, lifespan
+from bsai.api.main import create_app, lifespan
 
 if TYPE_CHECKING:
     pass
@@ -19,8 +19,8 @@ class TestCreateApp:
     def test_creates_fastapi_app(self) -> None:
         """Creates FastAPI application."""
         with (
-            patch("agent.api.main.get_api_settings") as mock_api_settings,
-            patch("agent.api.main.get_auth_settings") as mock_auth_settings,
+            patch("bsai.api.main.get_api_settings") as mock_api_settings,
+            patch("bsai.api.main.get_auth_settings") as mock_auth_settings,
         ):
             mock_api_settings.return_value = MagicMock(
                 title="Test API",
@@ -39,8 +39,8 @@ class TestCreateApp:
     def test_configures_cors_when_origins_set(self) -> None:
         """Configures CORS when origins are specified."""
         with (
-            patch("agent.api.main.get_api_settings") as mock_api_settings,
-            patch("agent.api.main.get_auth_settings") as mock_auth_settings,
+            patch("bsai.api.main.get_api_settings") as mock_api_settings,
+            patch("bsai.api.main.get_auth_settings") as mock_auth_settings,
         ):
             mock_api_settings.return_value = MagicMock(
                 title="Test API",
@@ -59,8 +59,8 @@ class TestCreateApp:
     def test_skips_cors_when_no_origins(self) -> None:
         """Skips CORS when no origins specified."""
         with (
-            patch("agent.api.main.get_api_settings") as mock_api_settings,
-            patch("agent.api.main.get_auth_settings") as mock_auth_settings,
+            patch("bsai.api.main.get_api_settings") as mock_api_settings,
+            patch("bsai.api.main.get_auth_settings") as mock_auth_settings,
         ):
             mock_api_settings.return_value = MagicMock(
                 title="Test API",
@@ -85,8 +85,8 @@ class TestLifespan:
         mock_app = MagicMock()
 
         with (
-            patch("agent.api.main.init_redis", new_callable=AsyncMock) as mock_init,
-            patch("agent.api.main.close_redis", new_callable=AsyncMock) as mock_close,
+            patch("bsai.api.main.init_redis", new_callable=AsyncMock) as mock_init,
+            patch("bsai.api.main.close_redis", new_callable=AsyncMock) as mock_close,
         ):
             async with lifespan(mock_app):
                 mock_init.assert_called_once()
@@ -99,8 +99,8 @@ class TestLifespan:
         mock_app = MagicMock()
 
         with (
-            patch("agent.api.main.init_redis", new_callable=AsyncMock),
-            patch("agent.api.main.close_redis", new_callable=AsyncMock) as mock_close,
+            patch("bsai.api.main.init_redis", new_callable=AsyncMock),
+            patch("bsai.api.main.close_redis", new_callable=AsyncMock) as mock_close,
         ):
             async with lifespan(mock_app):
                 pass

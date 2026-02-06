@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from agent.api.schemas.websocket import PreviousMilestoneInfo
-from agent.events.types import (
+from bsai.api.schemas.websocket import PreviousMilestoneInfo
+from bsai.events.types import (
     AgentActivityEvent,
     AgentStatus,
     BreakpointHitEvent,
@@ -48,9 +48,9 @@ class TestEventType:
         assert EventType.MILESTONE_RETRY == "milestone.retry"
 
         # Agent activity
-        assert EventType.AGENT_STARTED == "agent.started"
-        assert EventType.AGENT_COMPLETED == "agent.completed"
-        assert EventType.AGENT_FAILED == "agent.failed"
+        assert EventType.AGENT_STARTED == "bsai.started"
+        assert EventType.AGENT_COMPLETED == "bsai.completed"
+        assert EventType.AGENT_FAILED == "bsai.failed"
 
         # LLM streaming
         assert EventType.LLM_CHUNK == "llm.chunk"
@@ -515,7 +515,7 @@ class TestEventModelConfig:
         data = event.model_dump()
 
         # Should be string values, not enum objects
-        assert data["type"] == "agent.started"
+        assert data["type"] == "bsai.started"
         assert data["status"] == "started"
         assert isinstance(data["type"], str)
         assert isinstance(data["status"], str)

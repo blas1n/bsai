@@ -7,11 +7,11 @@ from uuid import uuid4
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from agent.db.models.enums import TaskStatus
-from agent.events.bus import EventBus
-from agent.graph.state import AgentState
-from agent.llm import LLMModel
-from agent.services import BreakpointService
+from bsai.db.models.enums import TaskStatus
+from bsai.events.bus import EventBus
+from bsai.graph.state import AgentState
+from bsai.llm import LLMModel
+from bsai.services import BreakpointService
 
 
 @pytest.fixture

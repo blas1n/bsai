@@ -6,10 +6,10 @@ from uuid import uuid4
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from agent.core.qa_agent import QADecision
-from agent.db.models.enums import TaskStatus
-from agent.graph.nodes.advance import advance_node
-from agent.graph.state import AgentState
+from bsai.core.qa_agent import QADecision
+from bsai.db.models.enums import TaskStatus
+from bsai.graph.nodes.advance import advance_node
+from bsai.graph.state import AgentState
 
 
 def _create_state_with_plan(
@@ -89,7 +89,7 @@ class TestAdvanceNode:
             retry_count=2,  # Will become 3 which equals max
         )
 
-        with patch("agent.graph.nodes.advance.get_agent_settings") as mock_settings:
+        with patch("bsai.graph.nodes.advance.get_agent_settings") as mock_settings:
             mock_settings.return_value = MagicMock(max_milestone_retries=3)
             result = await advance_node(state, mock_config, mock_session)
 
@@ -144,7 +144,7 @@ class TestAdvanceNode:
             current_task_id="T1",
         )
 
-        with patch("agent.graph.nodes.advance.ProjectPlanRepository") as MockRepo:
+        with patch("bsai.graph.nodes.advance.ProjectPlanRepository") as MockRepo:
             mock_repo = AsyncMock()
             MockRepo.return_value = mock_repo
 
@@ -176,7 +176,7 @@ class TestAdvanceNode:
             current_task_id="T1",
         )
 
-        with patch("agent.graph.nodes.advance.ProjectPlanRepository") as MockRepo:
+        with patch("bsai.graph.nodes.advance.ProjectPlanRepository") as MockRepo:
             mock_repo = AsyncMock()
             MockRepo.return_value = mock_repo
 

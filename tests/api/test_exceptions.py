@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, cast
 from uuid import uuid4
 
-from agent.api.exceptions import (
+from bsai.api.exceptions import (
     AccessDeniedError,
     APIError,
     AuthenticationError,

@@ -8,9 +8,9 @@ from uuid import uuid4
 
 import pytest
 
-from agent.api.schemas import WSMessageType
-from agent.events.handlers.websocket_handler import WebSocketEventHandler
-from agent.events.types import (
+from bsai.api.schemas import WSMessageType
+from bsai.events.handlers.websocket_handler import WebSocketEventHandler
+from bsai.events.types import (
     AgentActivityEvent,
     AgentStatus,
     BreakpointHitEvent,
@@ -531,7 +531,7 @@ class TestToWsMessageMethod:
     def test_unhandled_event_returns_none(self, handler: WebSocketEventHandler) -> None:
         """Test that unhandled event types return None."""
         # Create event with unhandled type
-        from agent.events.types import Event
+        from bsai.events.types import Event
 
         class CustomEvent(Event):
             type: EventType = EventType.TASK_CANCELLED

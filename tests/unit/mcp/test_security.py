@@ -2,8 +2,8 @@
 
 import pytest
 
-from agent.api.config import McpSettings
-from agent.mcp.security import CredentialEncryption, McpSecurityValidator
+from bsai.api.config import McpSettings
+from bsai.mcp.security import CredentialEncryption, McpSecurityValidator
 
 
 class TestMcpSecurityValidator:
@@ -343,7 +343,7 @@ class TestBuildMcpAuthHeaders:
 
     from unittest.mock import MagicMock
 
-    from agent.mcp.security import build_mcp_auth_headers
+    from bsai.mcp.security import build_mcp_auth_headers
 
     def _create_mock_server(self, **kwargs):
         """Create mock MCP server config."""
@@ -357,7 +357,7 @@ class TestBuildMcpAuthHeaders:
 
     def test_no_credentials_returns_none(self):
         """Test returns None when no credentials."""
-        from agent.mcp.security import build_mcp_auth_headers
+        from bsai.mcp.security import build_mcp_auth_headers
 
         server = self._create_mock_server(auth_credentials=None)
         result = build_mcp_auth_headers(server)
@@ -365,7 +365,7 @@ class TestBuildMcpAuthHeaders:
 
     def test_auth_type_none_returns_none(self):
         """Test returns None when auth type is 'none'."""
-        from agent.mcp.security import build_mcp_auth_headers
+        from bsai.mcp.security import build_mcp_auth_headers
 
         server = self._create_mock_server(auth_type="none", auth_credentials="encrypted")
         result = build_mcp_auth_headers(server)
@@ -373,7 +373,7 @@ class TestBuildMcpAuthHeaders:
 
     def test_no_auth_type_returns_none(self):
         """Test returns None when auth type is not set."""
-        from agent.mcp.security import build_mcp_auth_headers
+        from bsai.mcp.security import build_mcp_auth_headers
 
         server = self._create_mock_server(auth_type=None, auth_credentials="encrypted")
         result = build_mcp_auth_headers(server)
@@ -383,7 +383,7 @@ class TestBuildMcpAuthHeaders:
         """Test bearer token authentication builds headers."""
         from cryptography.fernet import Fernet
 
-        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+        from bsai.mcp.security import CredentialEncryption, build_mcp_auth_headers
 
         key = Fernet.generate_key().decode()
         settings = McpSettings(encryption_key=key)
@@ -399,7 +399,7 @@ class TestBuildMcpAuthHeaders:
         """Test API key authentication builds headers."""
         from cryptography.fernet import Fernet
 
-        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+        from bsai.mcp.security import CredentialEncryption, build_mcp_auth_headers
 
         key = Fernet.generate_key().decode()
         settings = McpSettings(encryption_key=key)
@@ -415,7 +415,7 @@ class TestBuildMcpAuthHeaders:
         """Test API key uses default header name."""
         from cryptography.fernet import Fernet
 
-        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+        from bsai.mcp.security import CredentialEncryption, build_mcp_auth_headers
 
         key = Fernet.generate_key().decode()
         settings = McpSettings(encryption_key=key)
@@ -431,7 +431,7 @@ class TestBuildMcpAuthHeaders:
         """Test OAuth2 authentication builds headers."""
         from cryptography.fernet import Fernet
 
-        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+        from bsai.mcp.security import CredentialEncryption, build_mcp_auth_headers
 
         key = Fernet.generate_key().decode()
         settings = McpSettings(encryption_key=key)
@@ -447,7 +447,7 @@ class TestBuildMcpAuthHeaders:
         """Test returns None when decryption fails."""
         from cryptography.fernet import Fernet
 
-        from agent.mcp.security import build_mcp_auth_headers
+        from bsai.mcp.security import build_mcp_auth_headers
 
         key = Fernet.generate_key().decode()
         settings = McpSettings(encryption_key=key)
@@ -460,7 +460,7 @@ class TestBuildMcpAuthHeaders:
         """Test returns None when token is empty."""
         from cryptography.fernet import Fernet
 
-        from agent.mcp.security import CredentialEncryption, build_mcp_auth_headers
+        from bsai.mcp.security import CredentialEncryption, build_mcp_auth_headers
 
         key = Fernet.generate_key().decode()
         settings = McpSettings(encryption_key=key)

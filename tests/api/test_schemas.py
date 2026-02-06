@@ -8,14 +8,14 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from agent.api.schemas import (
+from bsai.api.schemas import (
     SessionCreate,
     SessionResponse,
     TaskCreate,
     WSMessage,
     WSMessageType,
 )
-from agent.db.models.enums import SessionStatus
+from bsai.db.models.enums import SessionStatus
 
 
 class TestSessionSchemas:

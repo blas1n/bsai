@@ -13,11 +13,11 @@ class TestGetCheckpointer:
     @pytest.mark.asyncio
     async def test_returns_async_postgres_saver(self) -> None:
         """Test that get_checkpointer returns AsyncPostgresSaver."""
-        from agent.graph.checkpointer import get_checkpointer
+        from bsai.graph.checkpointer import get_checkpointer
 
         with (
-            patch("agent.graph.checkpointer.get_database_settings") as mock_get_settings,
-            patch("agent.graph.checkpointer.AsyncPostgresSaver") as mock_saver_class,
+            patch("bsai.graph.checkpointer.get_database_settings") as mock_get_settings,
+            patch("bsai.graph.checkpointer.AsyncPostgresSaver") as mock_saver_class,
         ):
             mock_settings = MagicMock()
             mock_settings.database_url = "postgresql+asyncpg://user:pass@localhost/db"
@@ -37,11 +37,11 @@ class TestGetCheckpointer:
     @pytest.mark.asyncio
     async def test_strips_asyncpg_from_url(self) -> None:
         """Test that asyncpg is stripped from database URL."""
-        from agent.graph.checkpointer import get_checkpointer
+        from bsai.graph.checkpointer import get_checkpointer
 
         with (
-            patch("agent.graph.checkpointer.get_database_settings") as mock_get_settings,
-            patch("agent.graph.checkpointer.AsyncPostgresSaver") as mock_saver_class,
+            patch("bsai.graph.checkpointer.get_database_settings") as mock_get_settings,
+            patch("bsai.graph.checkpointer.AsyncPostgresSaver") as mock_saver_class,
         ):
             mock_settings = MagicMock()
             mock_settings.database_url = "postgresql+asyncpg://user:pass@localhost/db"
@@ -65,11 +65,11 @@ class TestGetCheckpointer:
     @pytest.mark.asyncio
     async def test_calls_setup_on_saver(self) -> None:
         """Test that setup is called on the saver."""
-        from agent.graph.checkpointer import get_checkpointer
+        from bsai.graph.checkpointer import get_checkpointer
 
         with (
-            patch("agent.graph.checkpointer.get_database_settings") as mock_get_settings,
-            patch("agent.graph.checkpointer.AsyncPostgresSaver") as mock_saver_class,
+            patch("bsai.graph.checkpointer.get_database_settings") as mock_get_settings,
+            patch("bsai.graph.checkpointer.AsyncPostgresSaver") as mock_saver_class,
         ):
             mock_settings = MagicMock()
             mock_settings.database_url = "postgresql://user:pass@localhost/db"
@@ -90,11 +90,11 @@ class TestGetCheckpointer:
     @pytest.mark.asyncio
     async def test_handles_url_without_asyncpg(self) -> None:
         """Test handling URL that doesn't have asyncpg."""
-        from agent.graph.checkpointer import get_checkpointer
+        from bsai.graph.checkpointer import get_checkpointer
 
         with (
-            patch("agent.graph.checkpointer.get_database_settings") as mock_get_settings,
-            patch("agent.graph.checkpointer.AsyncPostgresSaver") as mock_saver_class,
+            patch("bsai.graph.checkpointer.get_database_settings") as mock_get_settings,
+            patch("bsai.graph.checkpointer.AsyncPostgresSaver") as mock_saver_class,
         ):
             mock_settings = MagicMock()
             # URL without asyncpg

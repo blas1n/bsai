@@ -2,8 +2,8 @@
 
 from uuid import uuid4
 
-from agent.db.models.enums import TaskStatus
-from agent.graph.state import AgentState
+from bsai.db.models.enums import TaskStatus
+from bsai.graph.state import AgentState
 
 
 class TestAgentState:

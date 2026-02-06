@@ -8,10 +8,10 @@ from uuid import uuid4
 
 import pytest
 
-from agent.api.schemas import WSMessageType
-from agent.api.websocket.handlers import WebSocketHandler
-from agent.api.websocket.manager import Connection
-from agent.services import BreakpointService
+from bsai.api.schemas import WSMessageType
+from bsai.api.websocket.handlers import WebSocketHandler
+from bsai.api.websocket.manager import Connection
+from bsai.services import BreakpointService
 
 if TYPE_CHECKING:
     pass
@@ -85,7 +85,7 @@ class TestHandleAuth:
         mock_connection.authenticated = False
 
         with patch(
-            "agent.api.websocket.handlers.authenticate_websocket",
+            "bsai.api.websocket.handlers.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
             mock_auth.return_value = "new-user-id"
@@ -127,7 +127,7 @@ class TestHandleAuth:
         mock_connection.authenticated = False
 
         with patch(
-            "agent.api.websocket.handlers.authenticate_websocket",
+            "bsai.api.websocket.handlers.authenticate_websocket",
             new_callable=AsyncMock,
         ) as mock_auth:
             mock_auth.side_effect = Exception("Invalid token")
@@ -154,7 +154,7 @@ class TestHandleSubscribe:
         """Successfully subscribes to session."""
         session_id = uuid4()
 
-        with patch("agent.api.websocket.handlers.get_db_session") as mock_get_db:
+        with patch("bsai.api.websocket.handlers.get_db_session") as mock_get_db:
 
             async def mock_generator():
                 mock_db = MagicMock()
@@ -162,7 +162,7 @@ class TestHandleSubscribe:
 
             mock_get_db.return_value = mock_generator()
 
-            with patch("agent.api.websocket.handlers.SessionRepository") as mock_repo_class:
+            with patch("bsai.api.websocket.handlers.SessionRepository") as mock_repo_class:
                 mock_repo = MagicMock()
                 mock_repo.verify_ownership = AsyncMock(return_value=True)
                 mock_repo_class.return_value = mock_repo

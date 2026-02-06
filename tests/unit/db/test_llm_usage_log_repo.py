@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.repository.llm_usage_log_repo import LLMUsageLogRepository
+from bsai.db.repository.llm_usage_log_repo import LLMUsageLogRepository
 
 if TYPE_CHECKING:
     pass

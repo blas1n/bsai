@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.llm.registry import ModelRegistry
+from bsai.llm.registry import ModelRegistry
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def registry(mock_session: AsyncMock) -> ModelRegistry:
 class TestModelRegistry:
     """Test ModelRegistry functionality."""
 
-    @patch("agent.llm.registry.litellm.get_model_info")
+    @patch("bsai.llm.registry.litellm.get_model_info")
     def test_load_from_litellm_success(
         self, mock_get_info: MagicMock, registry: ModelRegistry
     ) -> None:
@@ -51,7 +51,7 @@ class TestModelRegistry:
         assert model.context_window == 128000
         assert model.supports_streaming is True
 
-    @patch("agent.llm.registry.litellm.get_model_info")
+    @patch("bsai.llm.registry.litellm.get_model_info")
     def test_load_from_litellm_with_caching(
         self, mock_get_info: MagicMock, registry: ModelRegistry
     ) -> None:
@@ -73,7 +73,7 @@ class TestModelRegistry:
         # LiteLLM API called only once
         assert mock_get_info.call_count == 1
 
-    @patch("agent.llm.registry.litellm.get_model_info")
+    @patch("bsai.llm.registry.litellm.get_model_info")
     def test_load_from_litellm_missing_fields(
         self, mock_get_info: MagicMock, registry: ModelRegistry
     ) -> None:
@@ -92,7 +92,7 @@ class TestModelRegistry:
         assert model.context_window == 4096  # default
         assert model.supports_streaming is True  # default
 
-    @patch("agent.llm.registry.litellm.get_model_info")
+    @patch("bsai.llm.registry.litellm.get_model_info")
     def test_load_from_litellm_api_error(
         self, mock_get_info: MagicMock, registry: ModelRegistry
     ) -> None:
@@ -104,7 +104,7 @@ class TestModelRegistry:
 
     def test_get_with_litellm_model(self, registry: ModelRegistry) -> None:
         """Test get() loads from LiteLLM on demand."""
-        with patch("agent.llm.registry.litellm.get_model_info") as mock_get_info:
+        with patch("bsai.llm.registry.litellm.get_model_info") as mock_get_info:
             mock_get_info.return_value = {
                 "litellm_provider": "openai",
                 "input_cost_per_token": 0.00000015,
@@ -120,7 +120,7 @@ class TestModelRegistry:
 
     def test_get_nonexistent_model(self, registry: ModelRegistry) -> None:
         """Test get() returns None for nonexistent model."""
-        with patch("agent.llm.registry.litellm.get_model_info") as mock_get_info:
+        with patch("bsai.llm.registry.litellm.get_model_info") as mock_get_info:
             mock_get_info.side_effect = Exception("Not found")
 
             model = registry.get("unknown-model")
@@ -167,7 +167,7 @@ class TestModelRegistry:
 
     def test_get_all_models(self, registry: ModelRegistry) -> None:
         """Test get_all() returns all models."""
-        with patch("agent.llm.registry.litellm.get_model_info") as mock_get_info:
+        with patch("bsai.llm.registry.litellm.get_model_info") as mock_get_info:
             # Mock return value
             mock_get_info.return_value = {
                 "litellm_provider": "openai",

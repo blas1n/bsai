@@ -8,8 +8,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.models.enums import MemoryType
-from agent.memory.manager import LongTermMemoryManager
+from bsai.db.models.enums import MemoryType
+from bsai.memory.manager import LongTermMemoryManager
 
 if TYPE_CHECKING:
     pass

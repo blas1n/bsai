@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.db.repository.custom_llm_model_repo import CustomLLMModelRepository
+from bsai.db.repository.custom_llm_model_repo import CustomLLMModelRepository
 
 
 @pytest.fixture

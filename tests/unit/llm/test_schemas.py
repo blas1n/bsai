@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 import pytest
 from pydantic import ValidationError
 
-from agent.llm.schemas import ChatMessage, LLMRequest, LLMResponse, UsageInfo
+from bsai.llm.schemas import ChatMessage, LLMRequest, LLMResponse, UsageInfo
 
 if TYPE_CHECKING:
     pass

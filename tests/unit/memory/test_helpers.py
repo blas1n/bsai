@@ -8,8 +8,8 @@ from uuid import uuid4
 import pytest
 from litellm.exceptions import RateLimitError
 
-from agent.db.models.enums import MemoryType
-from agent.memory.helpers import get_memory_context, store_qa_learning, store_task_memory
+from bsai.db.models.enums import MemoryType
+from bsai.memory.helpers import get_memory_context, store_qa_learning, store_task_memory
 
 
 class TestGetMemoryContext:

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.cache.redis_client import (
+from bsai.cache.redis_client import (
     RedisClient,
     _create_redis_client,
     close_redis,
@@ -37,8 +37,8 @@ class TestRedisClient:
         client = RedisClient("redis://localhost:6379/0")
 
         with (
-            patch("agent.cache.redis_client.redis.ConnectionPool") as mock_pool_class,
-            patch("agent.cache.redis_client.redis.Redis") as mock_redis_class,
+            patch("bsai.cache.redis_client.redis.ConnectionPool") as mock_pool_class,
+            patch("bsai.cache.redis_client.redis.Redis") as mock_redis_class,
         ):
             mock_pool = MagicMock()
             mock_pool_class.from_url.return_value = mock_pool
@@ -59,7 +59,7 @@ class TestRedisClient:
         client = RedisClient("redis://localhost:6379/0")
         client._client = MagicMock()
 
-        with patch("agent.cache.redis_client.redis.ConnectionPool") as mock_pool:
+        with patch("bsai.cache.redis_client.redis.ConnectionPool") as mock_pool:
             await client.connect()
             mock_pool.from_url.assert_not_called()
 
@@ -143,7 +143,7 @@ class TestCreateRedisClient:
         """Creates client with settings from config."""
         _create_redis_client.cache_clear()
 
-        with patch("agent.cache.redis_client.get_cache_settings") as mock_settings:
+        with patch("bsai.cache.redis_client.get_cache_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 redis_url="redis://test:6379/1",
                 redis_max_connections=30,
@@ -160,7 +160,7 @@ class TestCreateRedisClient:
         """Caches and returns same client instance."""
         _create_redis_client.cache_clear()
 
-        with patch("agent.cache.redis_client.get_cache_settings") as mock_settings:
+        with patch("bsai.cache.redis_client.get_cache_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 redis_url="redis://localhost:6379/0",
                 redis_max_connections=20,
@@ -181,7 +181,7 @@ class TestGetRedis:
         """Returns RedisClient instance."""
         _create_redis_client.cache_clear()
 
-        with patch("agent.cache.redis_client.get_cache_settings") as mock_settings:
+        with patch("bsai.cache.redis_client.get_cache_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 redis_url="redis://localhost:6379/0",
                 redis_max_connections=20,
@@ -203,7 +203,7 @@ class TestInitRedis:
         _create_redis_client.cache_clear()
 
         with (
-            patch("agent.cache.redis_client.get_cache_settings") as mock_settings,
+            patch("bsai.cache.redis_client.get_cache_settings") as mock_settings,
             patch.object(RedisClient, "connect", new_callable=AsyncMock) as mock_connect,
         ):
             mock_settings.return_value = MagicMock(
@@ -228,7 +228,7 @@ class TestCloseRedis:
         _create_redis_client.cache_clear()
 
         with (
-            patch("agent.cache.redis_client.get_cache_settings") as mock_settings,
+            patch("bsai.cache.redis_client.get_cache_settings") as mock_settings,
             patch.object(RedisClient, "close", new_callable=AsyncMock) as mock_close,
         ):
             mock_settings.return_value = MagicMock(

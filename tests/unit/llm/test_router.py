@@ -5,10 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent.db.models.enums import TaskComplexity
-from agent.llm.models import LLMModel
-from agent.llm.registry import ModelRegistry
-from agent.llm.router import LLMRouter
+from bsai.db.models.enums import TaskComplexity
+from bsai.llm.models import LLMModel
+from bsai.llm.registry import ModelRegistry
+from bsai.llm.router import LLMRouter
 
 
 @pytest.fixture
