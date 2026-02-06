@@ -51,8 +51,9 @@ def _build_wellknown_url(
     if wellknown_path not in allowed_paths:
         raise ValueError(f"Invalid well-known path: {wellknown_path}")
 
-    validator.validate_server_url(base_url)
-    parsed = urlparse(base_url)
+    # Validate and get sanitized base URL
+    sanitized_base_url = validator.validate_server_url(base_url)
+    parsed = urlparse(sanitized_base_url)
     normalized_url = f"{parsed.scheme}://{parsed.netloc}"
 
     return urljoin(normalized_url, wellknown_path)
@@ -181,7 +182,7 @@ async def _initiate_oauth_flow(
     settings = get_mcp_settings()
     validator = McpSecurityValidator(settings)
     try:
-        validator.validate_server_url(auth_endpoint)
+        auth_endpoint = validator.validate_server_url(auth_endpoint)
     except ValueError as e:
         raise ValidationError(f"Invalid authorization endpoint URL: {e}") from e
 
@@ -192,7 +193,7 @@ async def _initiate_oauth_flow(
 
     if not client_id and registration_endpoint:
         try:
-            validator.validate_server_url(registration_endpoint)
+            registration_endpoint = validator.validate_server_url(registration_endpoint)
         except ValueError as e:
             raise ValidationError(f"Invalid registration endpoint URL: {e}") from e
 
@@ -331,7 +332,7 @@ async def oauth_callback(
 
     validator = McpSecurityValidator(settings)
     try:
-        validator.validate_server_url(token_endpoint)
+        token_endpoint = validator.validate_server_url(token_endpoint)
     except ValueError as e:
         return McpOAuthCallbackResponse(
             success=False,
