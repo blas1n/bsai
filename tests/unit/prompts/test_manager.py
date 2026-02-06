@@ -99,9 +99,9 @@ class TestPromptManager:
     def test_render_missing_key_raises_error(self, prompt_manager: PromptManager) -> None:
         """Test error when prompt key doesn't exist."""
         # Create enum with wrong value
-        from enum import Enum
+        from enum import StrEnum
 
-        class FakePrompts(str, Enum):
+        class FakePrompts(StrEnum):
             WRONG_KEY = "wrong_key"
 
         with pytest.raises(KeyError, match="not found"):
@@ -115,9 +115,9 @@ class TestPromptManager:
 
     def test_get_data_with_enum(self, prompt_manager: PromptManager) -> None:
         """Test getting raw data with enum key."""
-        from enum import Enum
+        from enum import StrEnum
 
-        class TestPrompts(str, Enum):
+        class TestPrompts(StrEnum):
             STRATEGIES = "strategies"
 
         strategies = prompt_manager.get_data("worker", TestPrompts.STRATEGIES)
@@ -129,9 +129,9 @@ class TestPromptManager:
 
     def test_get_data_missing_key_raises_error(self, prompt_manager: PromptManager) -> None:
         """Test error when data key doesn't exist."""
-        from enum import Enum
+        from enum import StrEnum
 
-        class FakePrompts(str, Enum):
+        class FakePrompts(StrEnum):
             WRONG_KEY = "wrong_key"
 
         with pytest.raises(KeyError, match="not found"):
@@ -196,7 +196,7 @@ class TestPromptManager:
 
     def test_conditional_template(self, temp_prompts_dir: Path) -> None:
         """Test Mako conditional in template."""
-        from enum import Enum
+        from enum import StrEnum
 
         # Create template with conditional
         test_prompts = {"conditional": """% if show_extra:
@@ -207,7 +207,7 @@ Main content"""}
 
         manager = PromptManager(prompts_dir=temp_prompts_dir)
 
-        class TestPrompts(str, Enum):
+        class TestPrompts(StrEnum):
             CONDITIONAL = "conditional"
 
         # With extra

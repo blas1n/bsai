@@ -1,43 +1,39 @@
 """End-to-end tests for complete task lifecycle."""
 
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 
-from agent.db.models.enums import MilestoneStatus, TaskComplexity, TaskStatus
-from agent.graph.state import AgentState, MilestoneData
+from agent.db.models.enums import TaskStatus
+from agent.graph.state import AgentState
 from agent.llm import ChatMessage
 
 
-def create_milestone(
+def create_task_data(
+    task_id: str = "T1.1.1",
     description: str = "Test",
-    complexity: TaskComplexity = TaskComplexity.SIMPLE,
-    status: MilestoneStatus = MilestoneStatus.PENDING,
-    selected_model: str | None = None,
+    complexity: str = "simple",
+    status: str = "pending",
     worker_output: str | None = None,
-    qa_feedback: str | None = None,
-    retry_count: int = 0,
-) -> MilestoneData:
-    """Helper to create a MilestoneData dict."""
+) -> dict[str, Any]:
+    """Helper to create a task data dict for project plan."""
     return {
-        "id": uuid4(),
+        "id": task_id,
         "description": description,
         "complexity": complexity,
-        "acceptance_criteria": "",
+        "acceptance_criteria": "Task completes successfully",
         "status": status,
-        "selected_model": selected_model,
-        "generated_prompt": None,
         "worker_output": worker_output,
-        "qa_feedback": qa_feedback,
-        "retry_count": retry_count,
     }
 
 
 def create_base_state(
     session_id: UUID | None = None,
     task_id: UUID | None = None,
+    user_id: str = "test-user",
     original_request: str = "Test request",
-    milestones: list[MilestoneData] | None = None,
+    current_task_id: str | None = None,
     current_milestone_index: int = 0,
     context_messages: list[ChatMessage] | None = None,
     current_context_tokens: int = 0,
@@ -47,15 +43,15 @@ def create_base_state(
     task_status: TaskStatus = TaskStatus.PENDING,
     should_continue: bool = True,
     workflow_complete: bool = False,
-    needs_compression: bool = False,
     context_summary: str | None = None,
 ) -> AgentState:
     """Helper to create an AgentState dict with defaults."""
     return {
         "session_id": session_id or uuid4(),
         "task_id": task_id or uuid4(),
+        "user_id": user_id,
         "original_request": original_request,
-        "milestones": milestones or [],
+        "current_task_id": current_task_id,
         "current_milestone_index": current_milestone_index,
         "context_messages": context_messages or [],
         "current_context_tokens": current_context_tokens,
@@ -65,7 +61,6 @@ def create_base_state(
         "task_status": task_status,
         "should_continue": should_continue,
         "workflow_complete": workflow_complete,
-        "needs_compression": needs_compression,
         "context_summary": context_summary,
     }
 
@@ -88,32 +83,34 @@ class TestTaskCreation:
         assert state.get("task_id") == task_id
         assert state.get("task_status") == TaskStatus.PENDING
 
-    def test_create_complex_task_with_milestones(self):
-        """Test creating a complex task with multiple milestones."""
-        milestones = [
-            create_milestone(
+    def test_create_complex_task_with_tasks(self):
+        """Test creating a complex task with multiple sub-tasks."""
+        tasks = [
+            create_task_data(
+                task_id="T1.1.1",
                 description="Parse and understand the task requirements",
-                complexity=TaskComplexity.SIMPLE,
+                complexity="simple",
             ),
-            create_milestone(
+            create_task_data(
+                task_id="T1.1.2",
                 description="Create a solution architecture",
-                complexity=TaskComplexity.MODERATE,
+                complexity="moderate",
             ),
-            create_milestone(
+            create_task_data(
+                task_id="T1.1.3",
                 description="Write the actual code",
-                complexity=TaskComplexity.COMPLEX,
+                complexity="complex",
             ),
         ]
 
         state = create_base_state(
             original_request="Build a REST API for user management",
-            milestones=milestones,
+            current_task_id=tasks[0]["id"],
         )
 
-        state_milestones = state.get("milestones", [])
-        assert len(state_milestones) == 3
-        assert state_milestones[0].get("complexity") == TaskComplexity.SIMPLE
-        assert state_milestones[2].get("complexity") == TaskComplexity.COMPLEX
+        # In the new architecture, tasks are stored in project_plan
+        assert state.get("current_task_id") == "T1.1.1"
+        assert state.get("task_status") == TaskStatus.PENDING
 
 
 class TestTaskExecution:
@@ -124,14 +121,7 @@ class TestTaskExecution:
         """Create a state for a running task."""
         return create_base_state(
             original_request="Write a hello world function",
-            milestones=[
-                create_milestone(
-                    description="Write the hello world function",
-                    complexity=TaskComplexity.TRIVIAL,
-                    status=MilestoneStatus.IN_PROGRESS,
-                    selected_model="gpt-4o-mini",
-                )
-            ],
+            current_task_id="T1.1.1",
             context_messages=[
                 ChatMessage(role="user", content="Write a hello world function"),
                 ChatMessage(role="assistant", content="I'll write a hello world function."),
@@ -143,8 +133,7 @@ class TestTaskExecution:
     def test_task_in_progress(self, running_task_state: AgentState):
         """Test task in progress state."""
         assert running_task_state.get("task_status") == TaskStatus.IN_PROGRESS
-        milestones = running_task_state.get("milestones", [])
-        assert milestones[0].get("status") == MilestoneStatus.IN_PROGRESS
+        assert running_task_state.get("current_task_id") == "T1.1.1"
         assert len(running_task_state.get("context_messages", [])) == 2
 
     def test_token_counting(self, running_task_state: AgentState):
@@ -165,16 +154,7 @@ class TestTaskCompletion:
         """Create a state for a completed task."""
         return create_base_state(
             original_request="Calculate 2 + 2",
-            milestones=[
-                create_milestone(
-                    description="Add the numbers",
-                    complexity=TaskComplexity.TRIVIAL,
-                    status=MilestoneStatus.PASSED,
-                    selected_model="gpt-4o-mini",
-                    worker_output="The answer is 4.",
-                    qa_feedback="Correct answer provided.",
-                )
-            ],
+            current_task_id="T1.1.1",
             context_messages=[
                 ChatMessage(role="user", content="Calculate 2 + 2"),
                 ChatMessage(role="assistant", content="The answer is 4."),
@@ -191,11 +171,6 @@ class TestTaskCompletion:
         assert completed_task_state.get("workflow_complete") is True
         assert completed_task_state.get("error") is None
 
-    def test_milestone_completed(self, completed_task_state: AgentState):
-        """Test milestone is marked passed."""
-        milestones = completed_task_state.get("milestones", [])
-        assert milestones[0].get("status") == MilestoneStatus.PASSED
-
     def test_no_retries_needed(self, completed_task_state: AgentState):
         """Test no retries were needed."""
         assert completed_task_state.get("retry_count") == 0
@@ -209,17 +184,7 @@ class TestTaskFailure:
         """Create a state for a failed task."""
         return create_base_state(
             original_request="Connect to invalid API",
-            milestones=[
-                create_milestone(
-                    description="Establish connection",
-                    complexity=TaskComplexity.SIMPLE,
-                    status=MilestoneStatus.FAILED,
-                    selected_model="gpt-4o",
-                    worker_output="Connection attempt failed",
-                    qa_feedback="Unable to establish connection after retries",
-                    retry_count=3,
-                )
-            ],
+            current_task_id="T1.1.1",
             retry_count=3,
             error="API connection failed after 3 retries",
             task_status=TaskStatus.FAILED,
@@ -237,11 +202,6 @@ class TestTaskFailure:
         """Test max retries were reached."""
         assert failed_task_state.get("retry_count") == 3
 
-    def test_milestone_failed(self, failed_task_state: AgentState):
-        """Test milestone is marked failed."""
-        milestones = failed_task_state.get("milestones", [])
-        assert milestones[0].get("status") == MilestoneStatus.FAILED
-
 
 class TestRetryFlow:
     """E2E tests for retry scenarios."""
@@ -250,17 +210,7 @@ class TestRetryFlow:
         """Test first retry."""
         state = create_base_state(
             original_request="Write code with quality check",
-            milestones=[
-                create_milestone(
-                    description="Write quality code",
-                    complexity=TaskComplexity.MODERATE,
-                    status=MilestoneStatus.IN_PROGRESS,
-                    selected_model="gpt-4o",
-                    worker_output="Initial code attempt",
-                    qa_feedback="Code needs improvement",
-                    retry_count=1,
-                )
-            ],
+            current_task_id="T1.1.1",
             retry_count=1,
             task_status=TaskStatus.IN_PROGRESS,
         )
@@ -272,17 +222,7 @@ class TestRetryFlow:
         """Test second retry."""
         state = create_base_state(
             original_request="Improve code quality",
-            milestones=[
-                create_milestone(
-                    description="Make code better",
-                    complexity=TaskComplexity.MODERATE,
-                    status=MilestoneStatus.IN_PROGRESS,
-                    selected_model="gpt-4o",
-                    worker_output="Second attempt",
-                    qa_feedback="Still needs work",
-                    retry_count=2,
-                )
-            ],
+            current_task_id="T1.1.1",
             current_context_tokens=200,
             retry_count=2,
             task_status=TaskStatus.IN_PROGRESS,
@@ -301,21 +241,7 @@ class TestSessionPauseResume:
         """Create a state for an interrupted session (mid-progress)."""
         return create_base_state(
             original_request="Long running task",
-            milestones=[
-                create_milestone(
-                    description="First step",
-                    complexity=TaskComplexity.SIMPLE,
-                    status=MilestoneStatus.PASSED,
-                    selected_model="gpt-4o-mini",
-                    worker_output="Step 1 done",
-                    qa_feedback="Step 1 passed",
-                ),
-                create_milestone(
-                    description="Second step",
-                    complexity=TaskComplexity.MODERATE,
-                    status=MilestoneStatus.PENDING,
-                ),
-            ],
+            current_task_id="T1.1.2",
             current_milestone_index=1,
             context_messages=[
                 ChatMessage(role="user", content="Start long task"),
@@ -339,9 +265,8 @@ class TestSessionPauseResume:
 
     def test_progress_preserved(self, interrupted_session_state: AgentState):
         """Test progress is preserved when interrupted."""
-        milestones = interrupted_session_state.get("milestones", [])
-        assert milestones[0].get("status") == MilestoneStatus.PASSED
-        assert milestones[1].get("status") == MilestoneStatus.PENDING
+        assert interrupted_session_state.get("current_task_id") == "T1.1.2"
+        assert interrupted_session_state.get("current_milestone_index") == 1
 
 
 class TestContextCompression:
@@ -354,7 +279,6 @@ class TestContextCompression:
             context_messages=[ChatMessage(role="assistant", content="x" * 50000)],
             current_context_tokens=88000,
             task_status=TaskStatus.IN_PROGRESS,
-            needs_compression=True,
         )
 
         current = state.get("current_context_tokens", 0)
@@ -373,7 +297,6 @@ class TestContextCompression:
             context_summary="Previous conversation summarized: User worked on complex task.",
             current_context_tokens=5000,
             task_status=TaskStatus.IN_PROGRESS,
-            needs_compression=False,
         )
 
         current = state.get("current_context_tokens", 0)

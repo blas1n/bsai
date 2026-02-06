@@ -10,7 +10,7 @@ The QA Agent is responsible for:
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID
 
 import structlog
@@ -40,7 +40,7 @@ from agent.services.qa_runner import QARunner
 logger = structlog.get_logger()
 
 
-class QADecision(str, Enum):
+class QADecision(StrEnum):
     """QA validation decision.
 
     Note: FAIL is only set by the system when max retries are exceeded.

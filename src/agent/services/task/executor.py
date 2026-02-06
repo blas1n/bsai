@@ -7,12 +7,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.cache import SessionCache
+
+if TYPE_CHECKING:
+    from agent.api.schemas import PreviousMilestoneInfo
 from agent.db.models.enums import TaskStatus
 from agent.db.repository.milestone_repo import MilestoneRepository
 from agent.db.repository.session_repo import SessionRepository
@@ -332,7 +336,7 @@ class TaskExecutor:
                     )
                 break
 
-    async def _get_previous_milestones(self, session_id: UUID) -> list:
+    async def _get_previous_milestones(self, session_id: UUID) -> list[PreviousMilestoneInfo]:
         """Get previous milestones for session continuity."""
         from agent.api.schemas import PreviousMilestoneInfo
 
@@ -354,12 +358,15 @@ class TaskExecutor:
 
     def _extract_final_result(self, final_state: AgentState) -> str:
         """Extract final result from workflow state."""
-        final_result = final_state.get("final_response", "")
+        final_result_raw = final_state.get("final_response", "")
+        final_result = str(final_result_raw) if final_result_raw else ""
         if not final_result:
             milestones = final_state.get("milestones", [])
-            if milestones:
+            if milestones and isinstance(milestones, list):
                 last_milestone = milestones[-1]
-                final_result = last_milestone.get("worker_output", "")
+                if isinstance(last_milestone, dict):
+                    worker_output = last_milestone.get("worker_output", "")
+                    final_result = str(worker_output) if worker_output else ""
         return final_result
 
     async def _finalize_success(

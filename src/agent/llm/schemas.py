@@ -5,7 +5,7 @@ Type-safe Pydantic models for LLM interactions.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -150,7 +150,7 @@ class LLMResponse(BaseModel):
 # =============================================================================
 
 
-class StructureType(str, Enum):
+class StructureType(StrEnum):
     """Project plan structure type."""
 
     FLAT = "flat"
@@ -158,7 +158,7 @@ class StructureType(str, Enum):
     HIERARCHICAL = "hierarchical"
 
 
-class PlanStatus(str, Enum):
+class PlanStatus(StrEnum):
     """Project plan status."""
 
     DRAFT = "draft"
@@ -168,7 +168,7 @@ class PlanStatus(str, Enum):
     REJECTED = "rejected"
 
 
-class PauseLevel(str, Enum):
+class PauseLevel(StrEnum):
     """Breakpoint pause level."""
 
     NONE = "none"
@@ -177,7 +177,7 @@ class PauseLevel(str, Enum):
     EPIC = "epic"
 
 
-class QAValidationType(str, Enum):
+class QAValidationType(StrEnum):
     """QA validation type."""
 
     STATIC = "static"

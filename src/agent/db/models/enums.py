@@ -1,9 +1,9 @@
 """Enums for database models."""
 
-from enum import Enum
+from enum import StrEnum
 
 
-class SessionStatus(str, Enum):
+class SessionStatus(StrEnum):
     """Session lifecycle status."""
 
     ACTIVE = "active"
@@ -12,7 +12,7 @@ class SessionStatus(str, Enum):
     FAILED = "failed"
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     """Task execution status."""
 
     PENDING = "pending"
@@ -21,7 +21,7 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
 
 
-class MilestoneStatus(str, Enum):
+class MilestoneStatus(StrEnum):
     """Milestone completion status."""
 
     PENDING = "pending"
@@ -30,7 +30,7 @@ class MilestoneStatus(str, Enum):
     FAILED = "failed"
 
 
-class TaskComplexity(str, Enum):
+class TaskComplexity(StrEnum):
     """Task complexity levels for LLM selection."""
 
     TRIVIAL = "trivial"
@@ -40,7 +40,7 @@ class TaskComplexity(str, Enum):
     CONTEXT_HEAVY = "context_heavy"
 
 
-class AgentType(str, Enum):
+class AgentType(StrEnum):
     """Agent types in the simplified 7-node workflow.
 
     Workflow: architect -> plan_review -> execute_worker -> verify_qa
@@ -53,7 +53,7 @@ class AgentType(str, Enum):
     RESPONDER = "responder"
 
 
-class SnapshotType(str, Enum):
+class SnapshotType(StrEnum):
     """Memory snapshot creation trigger."""
 
     AUTO = "auto"
@@ -61,7 +61,7 @@ class SnapshotType(str, Enum):
     MILESTONE = "milestone"
 
 
-class MemoryType(str, Enum):
+class MemoryType(StrEnum):
     """Episodic memory type classification."""
 
     TASK_RESULT = "task_result"

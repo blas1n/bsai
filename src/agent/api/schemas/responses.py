@@ -112,6 +112,10 @@ class TaskDetailResponse(TaskResponse):
         default=None,
         description="Project plan with hierarchical tasks",
     )
+    milestones: list[MilestoneResponse] = Field(
+        default_factory=list,
+        description="Task milestones",
+    )
     agent_steps: list[AgentStepResponse] = []
     progress: float = Field(
         default=0.0,

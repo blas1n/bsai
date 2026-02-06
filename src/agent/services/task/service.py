@@ -6,8 +6,12 @@ Handles task creation, retrieval, and status management.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from agent.graph.state import AgentState
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -738,20 +742,20 @@ class TaskService:
     async def _save_context_to_cache(
         self,
         session_id: UUID,
-        final_state,
+        final_state: AgentState,
     ) -> None:
         """Save context to cache (delegates to TaskExecutor)."""
         await self.executor._save_context_to_cache(session_id, final_state)
 
     async def _handle_task_failure(
         self,
-        db_session,
+        db_session: AsyncSession,
         session_id: UUID,
         task_id: UUID,
-        final_state,
+        final_state: AgentState,
         total_input_tokens: int,
         total_output_tokens: int,
-        total_cost,
+        total_cost: Decimal,
         stream: bool,
     ) -> None:
         """Handle task failure (delegates to TaskExecutor)."""

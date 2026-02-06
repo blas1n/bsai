@@ -75,7 +75,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
                     )
                     meta_response = await client.get(auth_server_meta_url)
                     if meta_response.status_code == 200:
-                        return meta_response.json()
+                        result: dict[str, Any] = meta_response.json()
+                        return result
         except ValueError:
             raise
         except Exception as e:
@@ -90,7 +91,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
             )
             response = await client.get(oauth_server_url)
             if response.status_code == 200:
-                return response.json()
+                oauth_result: dict[str, Any] = response.json()
+                return oauth_result
         except Exception as e:
             logger.debug(
                 "oauth_authorization_server_discovery_failed", server_url=server_url, error=str(e)
@@ -103,7 +105,8 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
             )
             response = await client.get(openid_url)
             if response.status_code == 200:
-                return response.json()
+                openid_result: dict[str, Any] = response.json()
+                return openid_result
         except Exception as e:
             logger.debug(
                 "openid_configuration_discovery_failed", server_url=server_url, error=str(e)
@@ -138,7 +141,8 @@ async def _register_oauth_client(
                 headers={"Content-Type": "application/json"},
             )
             if response.status_code in (200, 201):
-                return response.json()
+                result: dict[str, Any] = response.json()
+                return result
         except ValueError:
             raise
         except Exception as e:

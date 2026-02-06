@@ -171,7 +171,7 @@ class NodeContext:
         milestone_id: UUID,
         message: str,
         sequence_number: int = 0,
-        details: dict | None = None,
+        details: dict[str, object] | None = None,
     ) -> None:
         """Emit agent completed event.
 
@@ -198,7 +198,7 @@ class NodeContext:
             )
         )
 
-    def cancelled_response(self, node_name: str) -> dict:
+    def cancelled_response(self, node_name: str) -> dict[str, object]:
         """Return standard cancelled task response.
 
         Args:
@@ -221,7 +221,7 @@ class NodeContext:
         *,
         workflow_complete: bool = False,
         task_status: TaskStatus | None = None,
-    ) -> dict:
+    ) -> dict[str, object]:
         """Return standard error response.
 
         Args:
@@ -233,7 +233,7 @@ class NodeContext:
         Returns:
             Standard error state update
         """
-        result: dict = {
+        result: dict[str, object] = {
             "error": str(error),
             "error_node": node_name,
         }

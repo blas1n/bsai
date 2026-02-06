@@ -129,35 +129,34 @@ class TestAgentSettings:
         """Default values are set correctly."""
         settings = AgentSettings()
 
-        assert settings.conductor_temperature == 0.2
-        assert settings.meta_prompter_temperature == 0.3
+        assert settings.architect_temperature == 0.2
         assert settings.worker_temperature == 0.3
         assert settings.worker_max_tokens == 16000
         assert settings.qa_temperature == 0.1
-        assert settings.summarizer_temperature == 0.2
+        assert settings.responder_temperature == 0.3
         assert settings.max_milestone_retries == 3
         assert settings.max_tool_iterations == 10
 
     def test_custom_values(self) -> None:
         """Custom values can be set."""
         settings = AgentSettings(
-            conductor_temperature=0.5,
+            architect_temperature=0.5,
             worker_max_tokens=32000,
             max_milestone_retries=5,
         )
 
-        assert settings.conductor_temperature == 0.5
+        assert settings.architect_temperature == 0.5
         assert settings.worker_max_tokens == 32000
         assert settings.max_milestone_retries == 5
 
     def test_temperature_bounds(self) -> None:
         """Temperature values are bounded correctly."""
         settings = AgentSettings(
-            conductor_temperature=0.0,
+            architect_temperature=0.0,
             worker_temperature=2.0,
         )
 
-        assert settings.conductor_temperature == 0.0
+        assert settings.architect_temperature == 0.0
         assert settings.worker_temperature == 2.0
 
 

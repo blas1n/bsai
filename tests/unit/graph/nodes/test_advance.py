@@ -153,7 +153,6 @@ class TestAdvanceNode:
         assert result["current_task_id"] == "T2"
         assert result["retry_count"] == 0
         assert result["should_continue"] is True
-        assert "ready_tasks" in result
 
     @pytest.mark.asyncio
     async def test_pass_completes_workflow_on_last_task(

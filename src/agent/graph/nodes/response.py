@@ -52,10 +52,14 @@ async def generate_response_node(
                 session=session,
             )
 
+            # Cast failure_context since state.get returns object type
+            failure_context_dict: dict[str, Any] = (
+                failure_context if isinstance(failure_context, dict) else {}
+            )
             failure_report = await responder.generate_failure_report(
                 task_id=state["task_id"],
                 original_request=state["original_request"],
-                failure_context=failure_context,
+                failure_context=failure_context_dict,
             )
 
             # Emit failure report event

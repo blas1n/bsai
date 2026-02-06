@@ -75,7 +75,10 @@ async def advance_node(
         }
 
     qa_decision = state.get("current_qa_decision")
-    current_task_id: str | None = state.get("current_task_id")  # type: ignore[assignment]
+    current_task_id_raw = state.get("current_task_id")
+    current_task_id: str | None = (
+        current_task_id_raw if isinstance(current_task_id_raw, str) else None
+    )
     idx = state.get("current_milestone_index", 0)
 
     # Use task_id as fallback for milestone_id in events
@@ -123,7 +126,8 @@ def _get_next_pending_task(tasks: list[dict[str, Any]]) -> str | None:
     """
     for task in tasks:
         if task.get("status", "pending") == "pending":
-            return task["id"]
+            task_id = task["id"]
+            return str(task_id) if task_id is not None else None
     return None
 
 
