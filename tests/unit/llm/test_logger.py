@@ -9,9 +9,9 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.models.enums import AgentType
-from agent.llm.logger import LLMUsageLogger
-from agent.llm.models import LLMModel
+from bsai.db.models.enums import AgentType
+from bsai.llm.logger import LLMUsageLogger
+from bsai.llm.models import LLMModel
 
 if TYPE_CHECKING:
     pass
@@ -221,7 +221,7 @@ class TestLLMUsageLoggerInit:
 
     def test_creates_repository(self, mock_session: AsyncMock) -> None:
         """Creates repository with session."""
-        with patch("agent.llm.logger.LLMUsageLogRepository") as mock_repo_class:
+        with patch("bsai.llm.logger.LLMUsageLogRepository") as mock_repo_class:
             logger = LLMUsageLogger(mock_session)
 
             mock_repo_class.assert_called_once_with(mock_session)

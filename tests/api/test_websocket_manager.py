@@ -7,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent.api.schemas import WSMessage, WSMessageType
-from agent.api.websocket import ConnectionManager
+from bsai.api.schemas import WSMessage, WSMessageType
+from bsai.api.websocket import ConnectionManager
 
 if TYPE_CHECKING:
     pass

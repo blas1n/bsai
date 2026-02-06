@@ -12,8 +12,8 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from agent.api.config import McpSettings
-from agent.mcp.security import CredentialEncryption
+from bsai.api.config import McpSettings
+from bsai.mcp.security import CredentialEncryption
 
 
 def _create_mock_server(
@@ -277,7 +277,7 @@ class TestCreateMcpServer:
 
         db_session.refresh = AsyncMock(side_effect=mock_refresh)
 
-        with patch("agent.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
+        with patch("bsai.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
             payload = {
                 "name": "test-http-server",
                 "description": "Test HTTP server",
@@ -324,7 +324,7 @@ class TestCreateMcpServer:
 
         db_session.refresh = AsyncMock(side_effect=mock_refresh)
 
-        with patch("agent.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
+        with patch("bsai.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
             payload = {
                 "name": "test-stdio-server",
                 "transport_type": "stdio",
@@ -354,7 +354,7 @@ class TestCreateMcpServer:
         mock_name_result.scalar_one_or_none.return_value = None
         db_session.execute = AsyncMock(return_value=mock_name_result)
 
-        with patch("agent.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
+        with patch("bsai.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
             # HTTP server missing server_url
             payload = {
                 "name": "incomplete-server",
@@ -378,7 +378,7 @@ class TestCreateMcpServer:
         mock_name_result.scalar_one_or_none.return_value = None
         db_session.execute = AsyncMock(return_value=mock_name_result)
 
-        with patch("agent.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
+        with patch("bsai.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
             payload = {
                 "name": "malicious-server",
                 "transport_type": "stdio",
@@ -405,7 +405,7 @@ class TestCreateMcpServer:
         mock_name_result.scalar_one_or_none.return_value = None
         db_session.execute = AsyncMock(return_value=mock_name_result)
 
-        with patch("agent.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
+        with patch("bsai.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
             payload = {
                 "name": "ssrf-server",
                 "transport_type": "http",
@@ -448,7 +448,7 @@ class TestUpdateMcpServer:
         db_session.execute = AsyncMock(return_value=mock_result)
         db_session.flush = AsyncMock()
 
-        with patch("agent.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
+        with patch("bsai.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
             payload = {
                 "name": "updated-name",
                 "description": "Updated description",
@@ -478,7 +478,7 @@ class TestUpdateMcpServer:
         mock_result.scalar_one_or_none.return_value = None
         db_session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("agent.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
+        with patch("bsai.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
             payload = {"name": "hacked-name"}
 
             response = client.patch(
@@ -503,7 +503,7 @@ class TestUpdateMcpServer:
         mock_result.scalar_one_or_none.return_value = None
         db_session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("agent.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
+        with patch("bsai.api.routers.mcp.servers.get_mcp_settings", return_value=mcp_settings):
             payload = {"name": "new-name"}
 
             response = client.patch(

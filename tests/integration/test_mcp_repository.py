@@ -9,8 +9,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.repository.mcp_server_repo import McpServerRepository
-from agent.db.repository.mcp_tool_log_repo import McpToolLogRepository
+from bsai.db.repository.mcp_server_repo import McpServerRepository
+from bsai.db.repository.mcp_tool_log_repo import McpToolLogRepository
 
 
 @pytest.fixture

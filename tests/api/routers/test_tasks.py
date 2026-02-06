@@ -11,23 +11,23 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from agent.api.auth import get_current_user_id
-from agent.api.dependencies import (
+from bsai.api.auth import get_current_user_id
+from bsai.api.dependencies import (
     get_breakpoint_service,
     get_cache,
     get_db,
     get_event_bus,
     get_ws_manager,
 )
-from agent.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
-from agent.api.handlers import register_exception_handlers
-from agent.api.routers.tasks import router
-from agent.api.schemas import (
+from bsai.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
+from bsai.api.handlers import register_exception_handlers
+from bsai.api.routers.tasks import router
+from bsai.api.schemas import (
     PaginatedResponse,
     TaskDetailResponse,
     TaskResponse,
 )
-from agent.db.models.enums import TaskStatus
+from bsai.db.models.enums import TaskStatus
 
 if TYPE_CHECKING:
     pass
@@ -94,7 +94,7 @@ class TestCreateTask:
             final_result=None,
         )
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_and_execute_task = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -123,7 +123,7 @@ class TestCreateTask:
             final_result=None,
         )
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_and_execute_task = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -139,7 +139,7 @@ class TestCreateTask:
         """Returns 404 when session not found."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_and_execute_task = AsyncMock(
                 side_effect=NotFoundError("Session", session_id)
@@ -157,7 +157,7 @@ class TestCreateTask:
         """Returns 400 when session is not active."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.create_and_execute_task = AsyncMock(
                 side_effect=InvalidStateError(
@@ -203,7 +203,7 @@ class TestListTasks:
             has_more=False,
         )
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_tasks = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -218,7 +218,7 @@ class TestListTasks:
         """Filters tasks by status."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_tasks = AsyncMock(
                 return_value=PaginatedResponse(
@@ -235,7 +235,7 @@ class TestListTasks:
         """Supports pagination parameters."""
         session_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.list_tasks = AsyncMock(
                 return_value=PaginatedResponse(
@@ -272,7 +272,7 @@ class TestGetTask:
             cost_breakdown={},
         )
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_task = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -288,7 +288,7 @@ class TestGetTask:
         session_id = uuid4()
         task_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.get_task = AsyncMock(side_effect=NotFoundError("Task", task_id))
             mock_service_class.return_value = mock_service
@@ -316,7 +316,7 @@ class TestCancelTask:
             final_result="Task cancelled by user",
         )
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.cancel_task = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -331,7 +331,7 @@ class TestCancelTask:
         session_id = uuid4()
         task_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.cancel_task = AsyncMock(
                 side_effect=InvalidStateError(
@@ -351,7 +351,7 @@ class TestCancelTask:
         session_id = uuid4()
         task_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.cancel_task = AsyncMock(side_effect=AccessDeniedError("Task", task_id))
             mock_service_class.return_value = mock_service
@@ -379,7 +379,7 @@ class TestResumeTask:
             final_result=None,
         )
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.resume_task = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -407,7 +407,7 @@ class TestResumeTask:
             final_result=None,
         )
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.resume_task = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -428,7 +428,7 @@ class TestResumeTask:
         session_id = uuid4()
         task_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.resume_task = AsyncMock(
                 side_effect=InvalidStateError(
@@ -451,7 +451,7 @@ class TestResumeTask:
         session_id = uuid4()
         task_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.resume_task = AsyncMock(side_effect=NotFoundError("Task", task_id))
             mock_service_class.return_value = mock_service
@@ -482,7 +482,7 @@ class TestRejectTask:
             final_result="Task rejected by user",
         )
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.reject_task = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -510,7 +510,7 @@ class TestRejectTask:
             final_result="Task rejected: Quality not acceptable",
         )
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.reject_task = AsyncMock(return_value=mock_response)
             mock_service_class.return_value = mock_service
@@ -531,7 +531,7 @@ class TestRejectTask:
         session_id = uuid4()
         task_id = uuid4()
 
-        with patch("agent.api.routers.tasks.TaskService") as mock_service_class:
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
             mock_service.reject_task = AsyncMock(
                 side_effect=InvalidStateError(

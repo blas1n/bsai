@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.api.dependencies import get_cache, get_db
+from bsai.api.dependencies import get_cache, get_db
 
 if TYPE_CHECKING:
     pass
@@ -23,7 +23,7 @@ class TestGetDB:
         mock_session = AsyncMock()
 
         with patch(
-            "agent.api.dependencies.get_db_session",
+            "bsai.api.dependencies.get_db_session",
         ) as mock_get_session:
             # Mock the async generator
             async def mock_generator() -> AsyncGenerator[Any, None]:
@@ -45,7 +45,7 @@ class TestGetDB:
         mock_session = AsyncMock()
 
         with patch(
-            "agent.api.dependencies.get_db_session",
+            "bsai.api.dependencies.get_db_session",
         ) as mock_get_session:
 
             async def mock_generator() -> AsyncGenerator[Any, None]:
@@ -69,8 +69,8 @@ class TestGetCache:
         mock_redis = MagicMock()
 
         with (
-            patch("agent.api.dependencies.get_redis", return_value=mock_redis),
-            patch("agent.api.dependencies.SessionCache") as mock_cache_class,
+            patch("bsai.api.dependencies.get_redis", return_value=mock_redis),
+            patch("bsai.api.dependencies.SessionCache") as mock_cache_class,
         ):
             mock_cache_instance = MagicMock()
             mock_cache_class.return_value = mock_cache_instance
@@ -85,8 +85,8 @@ class TestGetCache:
         mock_redis = MagicMock()
 
         with (
-            patch("agent.api.dependencies.get_redis", return_value=mock_redis) as mock_get_redis,
-            patch("agent.api.dependencies.SessionCache") as mock_cache_class,
+            patch("bsai.api.dependencies.get_redis", return_value=mock_redis) as mock_get_redis,
+            patch("bsai.api.dependencies.SessionCache") as mock_cache_class,
         ):
             get_cache()
 
@@ -101,21 +101,21 @@ class TestTypeAliases:
 
     def test_db_session_type_alias_exists(self) -> None:
         """DBSession type alias is defined."""
-        from agent.api.dependencies import DBSession
+        from bsai.api.dependencies import DBSession
 
         # Should not raise
         assert DBSession is not None
 
     def test_cache_type_alias_exists(self) -> None:
         """Cache type alias is defined."""
-        from agent.api.dependencies import Cache
+        from bsai.api.dependencies import Cache
 
         # Should not raise
         assert Cache is not None
 
     def test_current_user_id_type_alias_exists(self) -> None:
         """CurrentUserId type alias is defined."""
-        from agent.api.dependencies import CurrentUserId
+        from bsai.api.dependencies import CurrentUserId
 
         # Should not raise
         assert CurrentUserId is not None

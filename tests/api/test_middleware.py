@@ -8,7 +8,7 @@ from unittest.mock import patch
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from agent.api.middleware import CORSMiddleware, LoggingMiddleware, RequestIDMiddleware
+from bsai.api.middleware import CORSMiddleware, LoggingMiddleware, RequestIDMiddleware
 
 if TYPE_CHECKING:
     pass
@@ -84,7 +84,7 @@ class TestLoggingMiddleware:
         async def test_endpoint() -> dict[str, str]:
             return {"status": "ok"}
 
-        with patch("agent.api.middleware.logger") as mock_logger:
+        with patch("bsai.api.middleware.logger") as mock_logger:
             client = TestClient(app)
             response = client.get("/test")
 
@@ -119,7 +119,7 @@ class TestLoggingMiddleware:
         async def test_endpoint() -> dict[str, str]:
             return {"status": "ok"}
 
-        with patch("agent.api.middleware.logger") as mock_logger:
+        with patch("bsai.api.middleware.logger") as mock_logger:
             client = TestClient(app)
             response = client.get("/test")
 

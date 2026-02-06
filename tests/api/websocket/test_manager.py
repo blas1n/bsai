@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.api.websocket.manager import Connection, ConnectionManager
+from bsai.api.websocket.manager import Connection, ConnectionManager
 
 if TYPE_CHECKING:
     pass

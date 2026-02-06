@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import FastAPI
 
-from agent.api.routers.websocket import _get_manager
+from bsai.api.routers.websocket import _get_manager
 
 
 class TestGetManager:

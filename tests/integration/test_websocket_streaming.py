@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.api.schemas.websocket import (
+from bsai.api.schemas.websocket import (
     LLMChunkPayload,
     LLMCompletePayload,
     MilestoneProgressPayload,
@@ -17,7 +17,7 @@ from agent.api.schemas.websocket import (
     WSMessage,
     WSMessageType,
 )
-from agent.db.models.enums import MilestoneStatus
+from bsai.db.models.enums import MilestoneStatus
 
 
 class TestWSMessageTypes:

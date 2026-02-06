@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.repository.session_repo import SessionRepository
+from bsai.db.repository.session_repo import SessionRepository
 
 
 class TestSessionRepository:

@@ -8,11 +8,11 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.core.qa_agent import QAAgent
-from agent.core.worker import WorkerAgent
-from agent.db.repository.mcp_server_repo import McpServerRepository
-from agent.llm import LiteLLMClient
-from agent.mcp.executor import McpToolCall, McpToolExecutor
+from bsai.core.qa_agent import QAAgent
+from bsai.core.worker import WorkerAgent
+from bsai.db.repository.mcp_server_repo import McpServerRepository
+from bsai.llm import LiteLLMClient
+from bsai.mcp.executor import McpToolCall, McpToolExecutor
 
 
 @pytest.fixture
@@ -110,7 +110,7 @@ class TestMcpToolExecutor:
         session_id: UUID,
     ) -> None:
         """Test risk assessment for low-risk tools."""
-        from agent.mcp.security import McpSecurityValidator
+        from bsai.mcp.security import McpSecurityValidator
 
         validator = McpSecurityValidator()
 
@@ -128,7 +128,7 @@ class TestMcpToolExecutor:
         db_session: AsyncSession,
     ) -> None:
         """Test risk assessment for medium-risk tools."""
-        from agent.mcp.security import McpSecurityValidator
+        from bsai.mcp.security import McpSecurityValidator
 
         validator = McpSecurityValidator()
 
@@ -345,7 +345,7 @@ class TestWorkerAgentMcp:
         )
 
         # Load MCP servers (user_id passed at call time)
-        from agent.mcp.utils import load_user_mcp_servers
+        from bsai.mcp.utils import load_user_mcp_servers
 
         servers = await load_user_mcp_servers(worker.mcp_server_repo, user_id, "worker")
 
@@ -408,7 +408,7 @@ class TestQAAgentMcp:
         )
 
         # Load MCP servers (user_id passed at call time)
-        from agent.mcp.utils import load_user_mcp_servers
+        from bsai.mcp.utils import load_user_mcp_servers
 
         servers = await load_user_mcp_servers(qa_agent.mcp_server_repo, user_id, "qa")
 
@@ -480,7 +480,7 @@ class TestMcpToolCallLoop:
         user_id: str,
     ) -> None:
         """Test that chat_completion handles both tool and non-tool modes."""
-        from agent.llm import LLMRequest
+        from bsai.llm import LLMRequest
 
         llm_client = LiteLLMClient()
 

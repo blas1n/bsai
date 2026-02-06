@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.repository.milestone_repo import MilestoneRepository
+from bsai.db.repository.milestone_repo import MilestoneRepository
 
 if TYPE_CHECKING:
     pass

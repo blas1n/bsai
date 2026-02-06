@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.repository.task_repo import TaskRepository
+from bsai.db.repository.task_repo import TaskRepository
 
 if TYPE_CHECKING:
     pass

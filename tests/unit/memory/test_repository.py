@@ -9,9 +9,9 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.models.enums import MemoryType
-from agent.db.models.episodic_memory import EpisodicMemory
-from agent.db.repository.episodic_memory_repo import EpisodicMemoryRepository
+from bsai.db.models.enums import MemoryType
+from bsai.db.models.episodic_memory import EpisodicMemory
+from bsai.db.repository.episodic_memory_repo import EpisodicMemoryRepository
 
 if TYPE_CHECKING:
     pass

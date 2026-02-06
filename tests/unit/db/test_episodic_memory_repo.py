@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.repository.episodic_memory_repo import EpisodicMemoryRepository
+from bsai.db.repository.episodic_memory_repo import EpisodicMemoryRepository
 
 
 class TestEpisodicMemoryRepository:

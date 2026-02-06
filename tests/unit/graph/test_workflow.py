@@ -6,19 +6,19 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from agent.api.websocket.manager import ConnectionManager
-from agent.cache import SessionCache
-from agent.db.models.enums import TaskStatus
-from agent.events.bus import EventBus
-from agent.graph.nodes import Node
-from agent.graph.workflow import (
+from bsai.api.websocket.manager import ConnectionManager
+from bsai.cache import SessionCache
+from bsai.db.models.enums import TaskStatus
+from bsai.events.bus import EventBus
+from bsai.graph.nodes import Node
+from bsai.graph.workflow import (
     WorkflowResult,
     WorkflowRunner,
     _create_node_with_session,
     build_workflow,
     compile_workflow,
 )
-from agent.services import BreakpointService
+from bsai.services import BreakpointService
 
 
 @pytest.fixture
@@ -181,10 +181,10 @@ class TestWorkflowRunner:
     ) -> None:
         """Test that run calls ainvoke on the graph."""
         with (
-            patch("agent.graph.workflow.lifespan") as mock_lifespan,
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
+            patch("bsai.graph.workflow.lifespan") as mock_lifespan,
+            patch("bsai.graph.workflow.get_checkpointer") as mock_get_checkpointer,
+            patch("bsai.graph.workflow.compile_workflow") as mock_compile,
+            patch("bsai.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
                 WorkflowRunner,
                 "_load_previous_context",
@@ -263,10 +263,10 @@ class TestWorkflowRunner:
     ) -> None:
         """Test that run accepts UUID objects."""
         with (
-            patch("agent.graph.workflow.lifespan") as mock_lifespan,
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
+            patch("bsai.graph.workflow.lifespan") as mock_lifespan,
+            patch("bsai.graph.workflow.get_checkpointer") as mock_get_checkpointer,
+            patch("bsai.graph.workflow.compile_workflow") as mock_compile,
+            patch("bsai.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
                 WorkflowRunner,
                 "_load_previous_context",
@@ -342,7 +342,7 @@ class TestWorkflowRunner:
         mock_breakpoint_service: MagicMock,
     ) -> None:
         """Test that run raises ValueError when session not found."""
-        with patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class:
+        with patch("bsai.graph.workflow.SessionRepository") as mock_session_repo_class:
             mock_session_repo = MagicMock()
             mock_session_repo.get_by_id = AsyncMock(return_value=None)
             mock_session_repo_class.return_value = mock_session_repo
@@ -373,10 +373,10 @@ class TestWorkflowRunner:
     ) -> None:
         """Test that run returns interrupted result when workflow is paused."""
         with (
-            patch("agent.graph.workflow.lifespan") as mock_lifespan,
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
-            patch("agent.graph.workflow.SessionRepository") as mock_session_repo_class,
+            patch("bsai.graph.workflow.lifespan") as mock_lifespan,
+            patch("bsai.graph.workflow.get_checkpointer") as mock_get_checkpointer,
+            patch("bsai.graph.workflow.compile_workflow") as mock_compile,
+            patch("bsai.graph.workflow.SessionRepository") as mock_session_repo_class,
             patch.object(
                 WorkflowRunner,
                 "_load_previous_context",
@@ -450,9 +450,9 @@ class TestWorkflowRunnerResume:
     ) -> None:
         """Test that resume calls ainvoke on the graph."""
         with (
-            patch("agent.graph.workflow.lifespan") as mock_lifespan,
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch("bsai.graph.workflow.lifespan") as mock_lifespan,
+            patch("bsai.graph.workflow.get_checkpointer") as mock_get_checkpointer,
+            patch("bsai.graph.workflow.compile_workflow") as mock_compile,
         ):
             mock_container = MagicMock()
             mock_lifespan.return_value.__aenter__ = AsyncMock(return_value=mock_container)
@@ -499,8 +499,8 @@ class TestWorkflowRunnerGetState:
     ) -> None:
         """Test that get_state returns state from checkpoint."""
         with (
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch("bsai.graph.workflow.get_checkpointer") as mock_get_checkpointer,
+            patch("bsai.graph.workflow.compile_workflow") as mock_compile,
         ):
             mock_checkpointer = MagicMock()
             mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
@@ -539,8 +539,8 @@ class TestWorkflowRunnerGetState:
     ) -> None:
         """Test that get_state returns None when no state exists."""
         with (
-            patch("agent.graph.workflow.get_checkpointer") as mock_get_checkpointer,
-            patch("agent.graph.workflow.compile_workflow") as mock_compile,
+            patch("bsai.graph.workflow.get_checkpointer") as mock_get_checkpointer,
+            patch("bsai.graph.workflow.compile_workflow") as mock_compile,
         ):
             mock_checkpointer = MagicMock()
             mock_get_checkpointer.return_value.__aenter__ = AsyncMock(
@@ -629,7 +629,7 @@ class TestWorkflowRunnerLoadContext:
         mock_snapshot.compressed_context = "Previous summary"
         mock_snapshot.token_count = 200
 
-        with patch("agent.graph.workflow.MemorySnapshotRepository") as mock_snapshot_repo:
+        with patch("bsai.graph.workflow.MemorySnapshotRepository") as mock_snapshot_repo:
             mock_snapshot_repo.return_value.get_latest_snapshot = AsyncMock(
                 return_value=mock_snapshot
             )

@@ -10,17 +10,17 @@ from uuid import uuid4
 
 import pytest
 
-from agent.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
-from agent.api.schemas import TaskCreate
-from agent.api.services.task_service import TaskService
-from agent.db.models.enums import SessionStatus, TaskStatus
-from agent.services import BreakpointService
-from agent.services.task import TaskExecutor, TaskNotifier
+from bsai.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
+from bsai.api.schemas import TaskCreate
+from bsai.api.services.task_service import TaskService
+from bsai.db.models.enums import SessionStatus, TaskStatus
+from bsai.services import BreakpointService
+from bsai.services.task import TaskExecutor, TaskNotifier
 
 if TYPE_CHECKING:
     pass
 
-from agent.graph.state import AgentState
+from bsai.graph.state import AgentState
 
 
 @pytest.fixture
@@ -1698,13 +1698,13 @@ class TestExecuteTask:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
-            patch("agent.services.task.executor.SessionRepository") as mock_session_repo_class,
-            patch("agent.services.task.executor.MilestoneRepository") as mock_milestone_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.SessionRepository") as mock_session_repo_class,
+            patch("bsai.services.task.executor.MilestoneRepository") as mock_milestone_repo_class,
             patch.object(
                 task_service,
                 "_save_context_to_cache",
@@ -1768,11 +1768,11 @@ class TestExecuteTask:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
         ):
             mock_runner = MagicMock()
             mock_runner.run = AsyncMock(return_value=mock_result)
@@ -1835,12 +1835,12 @@ class TestExecuteTask:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
-            patch("agent.services.task.executor.SessionRepository") as mock_session_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.SessionRepository") as mock_session_repo_class,
             patch.object(
                 task_service.executor,
                 "_handle_failure",
@@ -1897,12 +1897,12 @@ class TestExecuteTask:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
-            patch("agent.services.task.executor.MilestoneRepository") as mock_milestone_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.MilestoneRepository") as mock_milestone_repo_class,
         ):
             mock_runner = MagicMock()
             mock_runner.run = AsyncMock(side_effect=Exception("Workflow error"))
@@ -1972,12 +1972,12 @@ class TestExecuteTask:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
-            patch("agent.services.task.executor.SessionRepository") as mock_session_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.SessionRepository") as mock_session_repo_class,
             patch.object(
                 task_service,
                 "_save_context_to_cache",
@@ -2052,11 +2052,11 @@ class TestHandleTaskFailure:
 
         with (
             patch(
-                "agent.services.task.executor.TaskRepository",
+                "bsai.services.task.executor.TaskRepository",
                 return_value=mock_task_repo,
             ),
             patch(
-                "agent.services.task.executor.SessionRepository",
+                "bsai.services.task.executor.SessionRepository",
                 return_value=mock_session_repo,
             ),
         ):
@@ -2116,11 +2116,11 @@ class TestHandleTaskFailure:
 
         with (
             patch(
-                "agent.services.task.executor.TaskRepository",
+                "bsai.services.task.executor.TaskRepository",
                 return_value=mock_task_repo,
             ),
             patch(
-                "agent.services.task.executor.SessionRepository",
+                "bsai.services.task.executor.SessionRepository",
                 return_value=mock_session_repo,
             ),
         ):
@@ -2186,11 +2186,11 @@ class TestHandleTaskFailure:
 
         with (
             patch(
-                "agent.services.task.executor.TaskRepository",
+                "bsai.services.task.executor.TaskRepository",
                 return_value=mock_task_repo,
             ),
             patch(
-                "agent.services.task.executor.SessionRepository",
+                "bsai.services.task.executor.SessionRepository",
                 return_value=mock_session_repo,
             ),
         ):
@@ -2234,11 +2234,11 @@ class TestHandleTaskFailure:
 
         with (
             patch(
-                "agent.services.task.executor.TaskRepository",
+                "bsai.services.task.executor.TaskRepository",
                 return_value=mock_task_repo,
             ),
             patch(
-                "agent.services.task.executor.SessionRepository",
+                "bsai.services.task.executor.SessionRepository",
                 return_value=mock_session_repo,
             ),
         ):
@@ -2301,11 +2301,11 @@ class TestResumeTaskExecution:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
         ):
             mock_runner = MagicMock()
             mock_runner.resume = AsyncMock(return_value=mock_result)
@@ -2355,10 +2355,10 @@ class TestResumeTaskExecution:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
         ):
             mock_runner = MagicMock()
             mock_runner.resume = AsyncMock(return_value=mock_result)
@@ -2398,10 +2398,10 @@ class TestResumeTaskExecution:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
         ):
             mock_runner = MagicMock()
             mock_runner.resume = AsyncMock(return_value=None)
@@ -2456,10 +2456,10 @@ class TestResumeTaskExecution:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
             patch.object(
                 task_service.executor,
                 "_handle_failure",
@@ -2507,11 +2507,11 @@ class TestResumeTaskExecution:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
         ):
             mock_runner = MagicMock()
             mock_runner.resume = AsyncMock(side_effect=Exception("Resume error"))
@@ -2568,11 +2568,11 @@ class TestResumeTaskExecution:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
         ):
             mock_runner = MagicMock()
             mock_runner.resume = AsyncMock(return_value=mock_result)
@@ -2630,11 +2630,11 @@ class TestResumeTaskExecution:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
         ):
             mock_runner = MagicMock()
             mock_runner.resume = AsyncMock(return_value=mock_result)
@@ -2693,11 +2693,11 @@ class TestResumeTaskExecution:
 
         with (
             patch(
-                "agent.services.task.executor.get_db_session",
+                "bsai.services.task.executor.get_db_session",
                 mock_get_db_session,
             ),
-            patch("agent.services.task.executor.WorkflowRunner") as mock_runner_class,
-            patch("agent.services.task.executor.TaskRepository") as mock_task_repo_class,
+            patch("bsai.services.task.executor.WorkflowRunner") as mock_runner_class,
+            patch("bsai.services.task.executor.TaskRepository") as mock_task_repo_class,
         ):
             mock_runner = MagicMock()
             mock_runner.resume = AsyncMock(return_value=mock_result)

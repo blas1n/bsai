@@ -9,9 +9,9 @@ from uuid import uuid4
 
 import pytest
 
-from agent.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
-from agent.api.services.session_service import SessionService
-from agent.db.models.enums import SessionStatus
+from bsai.api.exceptions import AccessDeniedError, InvalidStateError, NotFoundError
+from bsai.api.services.session_service import SessionService
+from bsai.db.models.enums import SessionStatus
 
 if TYPE_CHECKING:
     pass

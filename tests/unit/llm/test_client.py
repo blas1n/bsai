@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent.llm.client import LiteLLMClient
-from agent.llm.schemas import ChatMessage, LLMRequest
+from bsai.llm.client import LiteLLMClient
+from bsai.llm.schemas import ChatMessage, LLMRequest
 
 if TYPE_CHECKING:
     pass
@@ -77,7 +77,7 @@ class TestChatCompletion:
             model="gpt-4",
         )
 
-        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+        with patch("bsai.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
             result = await client.chat_completion(sample_request, mcp_servers=[])
@@ -110,7 +110,7 @@ class TestChatCompletion:
             model="claude-3-opus",
         )
 
-        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+        with patch("bsai.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
             await client.chat_completion(request, mcp_servers=[])
@@ -140,7 +140,7 @@ class TestChatCompletion:
             completion_tokens=5,
         )
 
-        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+        with patch("bsai.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
             await client.chat_completion(request, mcp_servers=[])
@@ -158,8 +158,8 @@ class TestChatCompletion:
         mock_response = create_mock_response()
 
         with (
-            patch("agent.llm.client.litellm.acompletion", return_value=mock_response),
-            patch("agent.llm.client.logger") as mock_logger,
+            patch("bsai.llm.client.litellm.acompletion", return_value=mock_response),
+            patch("bsai.llm.client.logger") as mock_logger,
         ):
             await client.chat_completion(sample_request, mcp_servers=[])
 
@@ -184,7 +184,7 @@ class TestChatCompletion:
             return mock_response
 
         with (
-            patch("agent.llm.client.litellm.acompletion", side_effect=mock_completion),
+            patch("bsai.llm.client.litellm.acompletion", side_effect=mock_completion),
             patch("tenacity.nap.time.sleep", return_value=None),  # Skip retry delays
         ):
             result = await client.chat_completion(sample_request, mcp_servers=[])
@@ -200,7 +200,7 @@ class TestChatCompletion:
     ) -> None:
         """Raises exception after all retries fail."""
         with (
-            patch("agent.llm.client.litellm.acompletion") as mock_completion,
+            patch("bsai.llm.client.litellm.acompletion") as mock_completion,
             patch("tenacity.nap.time.sleep", return_value=None),  # Skip retry delays
         ):
             mock_completion.side_effect = Exception("Persistent error")
@@ -236,7 +236,7 @@ class TestStreamCompletion:
             for content in ["Hello", " World", "!"]:
                 yield create_stream_chunk(content)
 
-        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+        with patch("bsai.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_stream()
 
             chunks = []
@@ -265,7 +265,7 @@ class TestStreamCompletion:
             # Chunk with content
             yield create_stream_chunk("!")
 
-        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+        with patch("bsai.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_stream()
 
             chunks = []
@@ -285,7 +285,7 @@ class TestStreamCompletion:
         async def mock_stream():
             yield create_stream_chunk("Test")
 
-        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+        with patch("bsai.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_stream()
 
             chunks = []
@@ -307,8 +307,8 @@ class TestStreamCompletion:
             yield create_stream_chunk("Test")
 
         with (
-            patch("agent.llm.client.litellm.acompletion", return_value=mock_stream()),
-            patch("agent.llm.client.logger") as mock_logger,
+            patch("bsai.llm.client.litellm.acompletion", return_value=mock_stream()),
+            patch("bsai.llm.client.logger") as mock_logger,
         ):
             chunks = []
             async for chunk in get_unwrapped(client.stream_completion)(client, sample_request):
@@ -335,7 +335,7 @@ class TestToolExecution:
 
         mock_response = create_mock_response(content="Done with tools")
 
-        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+        with patch("bsai.llm.client.litellm.acompletion") as mock_completion:
             with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
 
                 async def async_build(*args, **kwargs):
@@ -417,7 +417,7 @@ class TestToolExecution:
                 return mock_response_with_tools
             return mock_final_response
 
-        with patch("agent.llm.client.litellm.acompletion", side_effect=mock_completion):
+        with patch("bsai.llm.client.litellm.acompletion", side_effect=mock_completion):
             with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
 
                 async def async_build(*args, **kwargs):
@@ -428,7 +428,7 @@ class TestToolExecution:
 
                 mock_build.side_effect = async_build
 
-                with patch("agent.llm.client.get_agent_settings") as mock_settings:
+                with patch("bsai.llm.client.get_agent_settings") as mock_settings:
                     mock_settings.return_value.max_tool_iterations = 5
 
                     result = await client.chat_completion(
@@ -485,7 +485,7 @@ class TestToolExecution:
         async def mock_completion(**kwargs):
             return responses.pop(0)
 
-        with patch("agent.llm.client.litellm.acompletion", side_effect=mock_completion):
+        with patch("bsai.llm.client.litellm.acompletion", side_effect=mock_completion):
             with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
 
                 async def async_build(*args, **kwargs):
@@ -496,7 +496,7 @@ class TestToolExecution:
 
                 mock_build.side_effect = async_build
 
-                with patch("agent.llm.client.get_agent_settings") as mock_settings:
+                with patch("bsai.llm.client.get_agent_settings") as mock_settings:
                     mock_settings.return_value.max_tool_iterations = 5
 
                     result = await client.chat_completion(
@@ -544,7 +544,7 @@ class TestToolExecution:
         async def mock_completion(**kwargs):
             return responses.pop(0)
 
-        with patch("agent.llm.client.litellm.acompletion", side_effect=mock_completion):
+        with patch("bsai.llm.client.litellm.acompletion", side_effect=mock_completion):
             with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
 
                 async def async_build(*args, **kwargs):
@@ -556,7 +556,7 @@ class TestToolExecution:
 
                 mock_build.side_effect = async_build
 
-                with patch("agent.llm.client.get_agent_settings") as mock_settings:
+                with patch("bsai.llm.client.get_agent_settings") as mock_settings:
                     mock_settings.return_value.max_tool_iterations = 5
 
                     result = await client.chat_completion(
@@ -581,7 +581,7 @@ class TestToolExecution:
 
         mock_response = create_mock_response(content="No tools available")
 
-        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+        with patch("bsai.llm.client.litellm.acompletion") as mock_completion:
             with patch.object(client, "_build_tools_from_mcp_servers") as mock_build:
 
                 async def async_build(*args, **kwargs):
@@ -612,7 +612,7 @@ class TestToolExecution:
 
         mock_response = create_mock_response()
 
-        with patch("agent.llm.client.litellm.acompletion") as mock_completion:
+        with patch("bsai.llm.client.litellm.acompletion") as mock_completion:
             mock_completion.return_value = mock_response
 
             await client.chat_completion(request, mcp_servers=[])
@@ -638,7 +638,7 @@ class TestBuildToolsFromMcpServers:
             {"name": "tool2", "description": "Tool 2", "inputSchema": {}},
         ]
 
-        with patch("agent.llm.client.load_tools_from_mcp_server") as mock_load:
+        with patch("bsai.llm.client.load_tools_from_mcp_server") as mock_load:
 
             async def async_load(*args, **kwargs):
                 return mock_tools
@@ -667,7 +667,7 @@ class TestBuildToolsFromMcpServers:
             ]
         }
 
-        with patch("agent.llm.client.load_tools_from_mcp_server") as mock_load:
+        with patch("bsai.llm.client.load_tools_from_mcp_server") as mock_load:
             tools, _ = await client._build_tools_from_mcp_servers(
                 [mock_server], tool_schemas=preloaded
             )
@@ -691,7 +691,7 @@ class TestBuildToolsFromMcpServers:
             {"name": "valid_tool", "description": "Valid"},
         ]
 
-        with patch("agent.llm.client.load_tools_from_mcp_server") as mock_load:
+        with patch("bsai.llm.client.load_tools_from_mcp_server") as mock_load:
 
             async def async_load(*args, **kwargs):
                 return mock_tools
@@ -713,7 +713,7 @@ class TestBuildToolsFromMcpServers:
         mock_server = MagicMock()
         mock_server.name = "empty-server"
 
-        with patch("agent.llm.client.load_tools_from_mcp_server") as mock_load:
+        with patch("bsai.llm.client.load_tools_from_mcp_server") as mock_load:
 
             async def async_load(*args, **kwargs):
                 return []

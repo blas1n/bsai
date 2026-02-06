@@ -9,8 +9,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent.api.exceptions import NotFoundError, ValidationError
-from agent.api.routers.mcp import (
+from bsai.api.exceptions import NotFoundError, ValidationError
+from bsai.api.routers.mcp import (
     _build_server_response,
     _build_wellknown_url,
     _discover_oauth_metadata,
@@ -20,8 +20,8 @@ from agent.api.routers.mcp import (
     list_mcp_tools_from_server,
     oauth_callback,
 )
-from agent.api.schemas.mcp import McpOAuthCallbackRequest, McpServerDetailResponse
-from agent.mcp.security import (
+from bsai.api.schemas.mcp import McpOAuthCallbackRequest, McpServerDetailResponse
+from bsai.mcp.security import (
     McpSecurityValidator,
     McpSettings,
     build_mcp_auth_headers,
@@ -179,7 +179,7 @@ class TestDiscoverOAuthMetadata:
         }
 
         with patch(
-            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            "bsai.api.routers.mcp.oauth.ssrf_safe_get",
             new_callable=AsyncMock,
             side_effect=[protected_resource_response, auth_server_response],
         ):
@@ -203,7 +203,7 @@ class TestDiscoverOAuthMetadata:
         }
 
         with patch(
-            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            "bsai.api.routers.mcp.oauth.ssrf_safe_get",
             new_callable=AsyncMock,
             side_effect=[protected_fail, oauth_server_response],
         ):
@@ -220,7 +220,7 @@ class TestDiscoverOAuthMetadata:
         not_found_response.status_code = 404
 
         with patch(
-            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            "bsai.api.routers.mcp.oauth.ssrf_safe_get",
             new_callable=AsyncMock,
             return_value=not_found_response,
         ):
@@ -243,7 +243,7 @@ class TestRegisterOAuthClient:
         }
 
         with patch(
-            "agent.api.routers.mcp.oauth.ssrf_safe_post",
+            "bsai.api.routers.mcp.oauth.ssrf_safe_post",
             new_callable=AsyncMock,
             return_value=response,
         ):
@@ -262,7 +262,7 @@ class TestRegisterOAuthClient:
         response.status_code = 400
 
         with patch(
-            "agent.api.routers.mcp.oauth.ssrf_safe_post",
+            "bsai.api.routers.mcp.oauth.ssrf_safe_post",
             new_callable=AsyncMock,
             return_value=response,
         ):
@@ -287,11 +287,11 @@ class TestInitiateOAuthFlow:
         }
 
         with patch(
-            "agent.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
+            "bsai.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
         ) as mock_discover:
             mock_discover.return_value = metadata
 
-            with patch("agent.api.routers.mcp.oauth.get_redis") as mock_get_redis:
+            with patch("bsai.api.routers.mcp.oauth.get_redis") as mock_get_redis:
                 mock_redis = MagicMock()
                 mock_redis.client = AsyncMock()
                 mock_redis.client.setex = AsyncMock()
@@ -311,7 +311,7 @@ class TestInitiateOAuthFlow:
     async def test_initiate_oauth_flow_no_metadata(self):
         """Test OAuth flow when metadata discovery fails."""
         with patch(
-            "agent.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
+            "bsai.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
         ) as mock_discover:
             mock_discover.return_value = None
 
@@ -326,7 +326,7 @@ class TestInitiateOAuthFlow:
     async def test_initiate_oauth_flow_missing_auth_endpoint(self):
         """Test OAuth flow when authorization endpoint is missing."""
         with patch(
-            "agent.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
+            "bsai.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
         ) as mock_discover:
             mock_discover.return_value = {"token_endpoint": "https://example.com/token"}
 
@@ -356,12 +356,12 @@ class TestConnectMcpServer:
         """Test SSE transport connection."""
         mock_server = _create_mock_server("test-user", transport_type="sse")
 
-        with patch("agent.api.routers.mcp._common.sse_client") as mock_sse_client:
+        with patch("bsai.api.routers.mcp._common.sse_client") as mock_sse_client:
             mock_read = AsyncMock()
             mock_write = AsyncMock()
             mock_sse_client.return_value.__aenter__.return_value = (mock_read, mock_write)
 
-            with patch("agent.api.routers.mcp._common.ClientSession") as MockSession:
+            with patch("bsai.api.routers.mcp._common.ClientSession") as MockSession:
                 mock_session = AsyncMock()
                 mock_session.initialize = AsyncMock()
                 MockSession.return_value.__aenter__.return_value = mock_session
@@ -376,12 +376,12 @@ class TestConnectMcpServer:
         """Test HTTP transport connection."""
         mock_server = _create_mock_server("test-user", transport_type="http")
 
-        with patch("agent.api.routers.mcp._common.streamable_http_client") as mock_http_client:
+        with patch("bsai.api.routers.mcp._common.streamable_http_client") as mock_http_client:
             mock_read = AsyncMock()
             mock_write = AsyncMock()
             mock_http_client.return_value.__aenter__.return_value = (mock_read, mock_write, None)
 
-            with patch("agent.api.routers.mcp._common.ClientSession") as MockSession:
+            with patch("bsai.api.routers.mcp._common.ClientSession") as MockSession:
                 mock_session = AsyncMock()
                 mock_session.initialize = AsyncMock()
                 MockSession.return_value.__aenter__.return_value = mock_session
@@ -400,7 +400,7 @@ class TestListMcpToolsFromServer:
         """Test listing tools from server."""
         mock_server = _create_mock_server("test-user")
 
-        with patch("agent.api.routers.mcp._common.connect_mcp_server") as mock_connect:
+        with patch("bsai.api.routers.mcp._common.connect_mcp_server") as mock_connect:
             mock_session = AsyncMock()
             mock_tool = MagicMock()
             mock_tool.name = "test_tool"
@@ -441,8 +441,8 @@ class TestOAuthCallback:
         )
 
         with (
-            patch("agent.api.routers.mcp.oauth.get_redis") as mock_get_redis,
-            patch("agent.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
+            patch("bsai.api.routers.mcp.oauth.get_redis") as mock_get_redis,
+            patch("bsai.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
         ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
@@ -475,8 +475,8 @@ class TestOAuthCallback:
         )
 
         with (
-            patch("agent.api.routers.mcp.oauth.get_redis") as mock_get_redis,
-            patch("agent.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
+            patch("bsai.api.routers.mcp.oauth.get_redis") as mock_get_redis,
+            patch("bsai.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
         ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
@@ -502,8 +502,8 @@ class TestOAuthCallback:
         )
 
         with (
-            patch("agent.api.routers.mcp.oauth.get_redis") as mock_get_redis,
-            patch("agent.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
+            patch("bsai.api.routers.mcp.oauth.get_redis") as mock_get_redis,
+            patch("bsai.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
         ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
@@ -536,8 +536,8 @@ class TestOAuthCallback:
         )
 
         with (
-            patch("agent.api.routers.mcp.oauth.get_redis") as mock_get_redis,
-            patch("agent.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
+            patch("bsai.api.routers.mcp.oauth.get_redis") as mock_get_redis,
+            patch("bsai.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
         ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
@@ -572,8 +572,8 @@ class TestOAuthCallback:
         )
 
         with (
-            patch("agent.api.routers.mcp.oauth.get_redis") as mock_get_redis,
-            patch("agent.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
+            patch("bsai.api.routers.mcp.oauth.get_redis") as mock_get_redis,
+            patch("bsai.api.routers.mcp.oauth.get_mcp_settings", return_value=valid_mcp_settings),
         ):
             mock_redis = MagicMock()
             mock_redis.client = AsyncMock()
@@ -613,7 +613,7 @@ class TestDiscoverOAuthMetadataEdgeCases:
         }
 
         with patch(
-            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            "bsai.api.routers.mcp.oauth.ssrf_safe_get",
             new_callable=AsyncMock,
             side_effect=[protected_fail, oauth_fail, openid_response],
         ):
@@ -626,7 +626,7 @@ class TestDiscoverOAuthMetadataEdgeCases:
     async def test_discover_oauth_metadata_exception_handling(self):
         """Test exception handling during discovery."""
         with patch(
-            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            "bsai.api.routers.mcp.oauth.ssrf_safe_get",
             new_callable=AsyncMock,
             side_effect=Exception("Network error"),
         ):
@@ -642,7 +642,7 @@ class TestInitiateOAuthFlowEdgeCases:
     async def test_initiate_oauth_flow_discovery_exception(self):
         """Test OAuth flow when discovery raises exception."""
         with patch(
-            "agent.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
+            "bsai.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
         ) as mock_discover:
             mock_discover.side_effect = Exception("Network error")
 
@@ -665,12 +665,12 @@ class TestInitiateOAuthFlowEdgeCases:
 
         with (
             patch(
-                "agent.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
+                "bsai.api.routers.mcp.oauth._discover_oauth_metadata", new_callable=AsyncMock
             ) as mock_discover,
             patch(
-                "agent.api.routers.mcp.oauth._register_oauth_client", new_callable=AsyncMock
+                "bsai.api.routers.mcp.oauth._register_oauth_client", new_callable=AsyncMock
             ) as mock_register,
-            patch("agent.api.routers.mcp.oauth.get_redis") as mock_get_redis,
+            patch("bsai.api.routers.mcp.oauth.get_redis") as mock_get_redis,
         ):
             mock_discover.return_value = metadata
             mock_register.return_value = {
@@ -725,7 +725,7 @@ class TestBuildMcpAuthHeaders:
         )
 
         # Mock encrypted credentials that decrypt to a bearer token
-        with patch("agent.mcp.security.CredentialEncryption") as MockEncryption:
+        with patch("bsai.mcp.security.CredentialEncryption") as MockEncryption:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {"token": "test-bearer-token"}
             MockEncryption.return_value = mock_encryptor
@@ -746,7 +746,7 @@ class TestBuildMcpAuthHeaders:
             auth_type="api_key",
         )
 
-        with patch("agent.mcp.security.CredentialEncryption") as MockEncryption:
+        with patch("bsai.mcp.security.CredentialEncryption") as MockEncryption:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.return_value = {
                 "api_key": "test-api-key",
@@ -771,7 +771,7 @@ class TestBuildMcpAuthHeaders:
         )
         mock_server.auth_credentials = "encrypted-data"
 
-        with patch("agent.mcp.security.CredentialEncryption") as MockEncryption:
+        with patch("bsai.mcp.security.CredentialEncryption") as MockEncryption:
             mock_encryptor = MagicMock()
             mock_encryptor.decrypt.side_effect = Exception("Decryption failed")
             MockEncryption.return_value = mock_encryptor
@@ -789,12 +789,12 @@ class TestConnectMcpServerEdgeCases:
         """Test connection with unknown transport type defaults to HTTP."""
         mock_server = _create_mock_server("test-user", transport_type="unknown")
 
-        with patch("agent.api.routers.mcp._common.streamable_http_client") as mock_http_client:
+        with patch("bsai.api.routers.mcp._common.streamable_http_client") as mock_http_client:
             mock_read = AsyncMock()
             mock_write = AsyncMock()
             mock_http_client.return_value.__aenter__.return_value = (mock_read, mock_write, None)
 
-            with patch("agent.api.routers.mcp._common.ClientSession") as MockSession:
+            with patch("bsai.api.routers.mcp._common.ClientSession") as MockSession:
                 mock_session = AsyncMock()
                 mock_session.initialize = AsyncMock()
                 MockSession.return_value.__aenter__.return_value = mock_session

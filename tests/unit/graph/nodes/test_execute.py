@@ -6,15 +6,15 @@ from uuid import uuid4
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from agent.core.artifact_extractor import ExtractionResult
-from agent.graph.nodes.execute import (
+from bsai.core.artifact_extractor import ExtractionResult
+from bsai.graph.nodes.execute import (
     _build_artifacts_context_message,
     _get_artifact_key,
     _prepare_worker_prompt,
     execute_worker_node,
 )
-from agent.graph.state import AgentState
-from agent.llm import LLMResponse, UsageInfo
+from bsai.graph.state import AgentState
+from bsai.llm import LLMResponse, UsageInfo
 
 
 def _create_state_with_plan(
@@ -69,15 +69,15 @@ class TestExecuteWorkerNode:
         state, mock_plan = _create_state_with_plan()
 
         with (
-            patch("agent.graph.nodes.execute.WorkerAgent") as MockWorker,
-            patch("agent.graph.nodes.execute.ProjectPlanRepository") as MockPlanRepo,
-            patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
+            patch("bsai.graph.nodes.execute.WorkerAgent") as MockWorker,
+            patch("bsai.graph.nodes.execute.ProjectPlanRepository") as MockPlanRepo,
+            patch("bsai.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
             patch(
-                "agent.graph.nodes.execute.extract_artifacts",
+                "bsai.graph.nodes.execute.extract_artifacts",
                 return_value=ExtractionResult(artifacts=[], deleted_paths=[]),
             ),
             patch(
-                "agent.graph.nodes.execute.check_task_cancelled",
+                "bsai.graph.nodes.execute.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -121,15 +121,15 @@ class TestExecuteWorkerNode:
         )
 
         with (
-            patch("agent.graph.nodes.execute.WorkerAgent") as MockWorker,
-            patch("agent.graph.nodes.execute.ProjectPlanRepository") as MockPlanRepo,
-            patch("agent.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
+            patch("bsai.graph.nodes.execute.WorkerAgent") as MockWorker,
+            patch("bsai.graph.nodes.execute.ProjectPlanRepository") as MockPlanRepo,
+            patch("bsai.graph.nodes.execute.ArtifactRepository") as MockArtifactRepo,
             patch(
-                "agent.graph.nodes.execute.extract_artifacts",
+                "bsai.graph.nodes.execute.extract_artifacts",
                 return_value=ExtractionResult(artifacts=[], deleted_paths=[]),
             ),
             patch(
-                "agent.graph.nodes.execute.check_task_cancelled",
+                "bsai.graph.nodes.execute.check_task_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -173,7 +173,7 @@ class TestExecuteWorkerNode:
         )
 
         with patch(
-            "agent.graph.nodes.execute.check_task_cancelled",
+            "bsai.graph.nodes.execute.check_task_cancelled",
             new_callable=AsyncMock,
             return_value=False,
         ):

@@ -11,9 +11,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
-from agent.api.auth import get_current_user_id
-from agent.api.dependencies import get_db
-from agent.cache import SessionCache
+from bsai.api.auth import get_current_user_id
+from bsai.api.dependencies import get_db
+from bsai.cache import SessionCache
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -108,8 +108,8 @@ def app(
     monkeypatch: pytest.MonkeyPatch,
 ) -> FastAPI:
     """Create test FastAPI app with mocked dependencies."""
-    from agent.api.config import get_auth_settings
-    from agent.api.main import create_app
+    from bsai.api.config import get_auth_settings
+    from bsai.api.main import create_app
 
     # Disable Keycloak auth for tests
     get_auth_settings.cache_clear()

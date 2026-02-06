@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.tracing.client import (
+from bsai.tracing.client import (
     LangfuseTracer,
     get_langfuse_callback,
     get_langfuse_tracer,
@@ -20,7 +20,7 @@ class TestLangfuseTracer:
     @pytest.fixture
     def mock_settings(self):
         """Create mock Langfuse settings."""
-        with patch("agent.tracing.client.get_langfuse_settings") as mock:
+        with patch("bsai.tracing.client.get_langfuse_settings") as mock:
             settings = MagicMock()
             settings.enabled = True
             settings.host = "http://langfuse:3000"  # Internal Docker network URL
@@ -36,7 +36,7 @@ class TestLangfuseTracer:
     @pytest.fixture
     def disabled_settings(self):
         """Create mock disabled Langfuse settings."""
-        with patch("agent.tracing.client.get_langfuse_settings") as mock:
+        with patch("bsai.tracing.client.get_langfuse_settings") as mock:
             settings = MagicMock()
             settings.enabled = False
             settings.host = "http://localhost:3000"
@@ -148,9 +148,7 @@ class TestLangfuseTracer:
         """Test client is properly initialized on first access."""
         mock_client = MagicMock()
 
-        with patch(
-            "agent.tracing.client.Langfuse", return_value=mock_client
-        ) as mock_langfuse_class:
+        with patch("bsai.tracing.client.Langfuse", return_value=mock_client) as mock_langfuse_class:
             tracer = LangfuseTracer()
             client = tracer.client
 
@@ -167,7 +165,7 @@ class TestLangfuseTracer:
 
     def test_client_initialization_failure(self, mock_settings):
         """Test graceful handling of client initialization failure."""
-        with patch("agent.tracing.client.Langfuse", side_effect=Exception("Connection failed")):
+        with patch("bsai.tracing.client.Langfuse", side_effect=Exception("Connection failed")):
             tracer = LangfuseTracer()
             client = tracer.client
 
@@ -185,7 +183,7 @@ class TestLangfuseTracer:
         mock_handler = MagicMock()
 
         with patch(
-            "agent.tracing.client.CallbackHandler", return_value=mock_handler
+            "bsai.tracing.client.CallbackHandler", return_value=mock_handler
         ) as mock_callback_class:
             tracer = LangfuseTracer()
             session_id = uuid4()
@@ -219,7 +217,7 @@ class TestLangfuseTracer:
         """Test callback handler is None when not sampled."""
         mock_settings.sample_rate = 0.0
 
-        with patch("agent.tracing.client.CallbackHandler") as mock_callback_class:
+        with patch("bsai.tracing.client.CallbackHandler") as mock_callback_class:
             tracer = LangfuseTracer()
             handler = tracer.create_callback_handler()
             assert handler is None
@@ -231,7 +229,7 @@ class TestLangfuseTracer:
         mock_span = MagicMock()
         mock_client.start_span.return_value = mock_span
 
-        with patch("agent.tracing.client.Langfuse", return_value=mock_client):
+        with patch("bsai.tracing.client.Langfuse", return_value=mock_client):
             tracer = LangfuseTracer()
             session_id = uuid4()
             task_id = uuid4()
@@ -258,7 +256,7 @@ class TestLangfuseTracer:
         """Test flush method."""
         mock_client = MagicMock()
 
-        with patch("agent.tracing.client.Langfuse", return_value=mock_client):
+        with patch("bsai.tracing.client.Langfuse", return_value=mock_client):
             tracer = LangfuseTracer()
             _ = tracer.client  # Initialize client
             tracer.flush()
@@ -269,7 +267,7 @@ class TestLangfuseTracer:
         """Test shutdown method."""
         mock_client = MagicMock()
 
-        with patch("agent.tracing.client.Langfuse", return_value=mock_client):
+        with patch("bsai.tracing.client.Langfuse", return_value=mock_client):
             tracer = LangfuseTracer()
             _ = tracer.client  # Initialize client
             tracer.shutdown()
@@ -299,7 +297,7 @@ class TestGetLangfuseCallback:
     @pytest.fixture
     def mock_tracer(self):
         """Create mock tracer."""
-        with patch("agent.tracing.client.get_langfuse_tracer") as mock:
+        with patch("bsai.tracing.client.get_langfuse_tracer") as mock:
             tracer = MagicMock()
             mock.return_value = tracer
             yield tracer

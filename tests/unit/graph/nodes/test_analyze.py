@@ -6,10 +6,10 @@ from uuid import uuid4
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from agent.db.models.enums import TaskStatus
-from agent.graph.nodes.analyze import analyze_task_node
-from agent.graph.state import AgentState
-from agent.llm.schemas import ChatMessage, PlanStatus
+from bsai.db.models.enums import TaskStatus
+from bsai.graph.nodes.analyze import analyze_task_node
+from bsai.graph.state import AgentState
+from bsai.llm.schemas import ChatMessage, PlanStatus
 
 
 def create_mock_project_plan(
@@ -37,8 +37,8 @@ class TestAnalyzeTaskNode:
     ) -> None:
         """Test successful task analysis."""
         with (
-            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+            patch("bsai.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
+            patch("bsai.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # Mock memory context retrieval
             mock_get_memory_context.return_value = ([], "")
@@ -76,8 +76,8 @@ class TestAnalyzeTaskNode:
     ) -> None:
         """Test error handling in analyze_task."""
         with (
-            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+            patch("bsai.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
+            patch("bsai.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # Mock memory context retrieval
             mock_get_memory_context.return_value = ([], "")
@@ -109,8 +109,8 @@ class TestAnalyzeTaskNode:
         state_with_handover = AgentState(**{**base_state, "context_messages": [handover_msg]})
 
         with (
-            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+            patch("bsai.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
+            patch("bsai.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # Mock memory context retrieval with actual context
             mock_get_memory_context.return_value = ([], "Related memory: previous project info")
@@ -157,8 +157,8 @@ class TestAnalyzeTaskNode:
         state_with_handover = AgentState(**{**base_state, "context_messages": [handover_msg]})
 
         with (
-            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+            patch("bsai.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
+            patch("bsai.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # No memory context, only handover
             mock_get_memory_context.return_value = ([], None)
@@ -196,8 +196,8 @@ class TestAnalyzeTaskNode:
     ) -> None:
         """Test handling empty tasks list."""
         with (
-            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+            patch("bsai.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
+            patch("bsai.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             mock_get_memory_context.return_value = ([], "")
 
@@ -223,8 +223,8 @@ class TestAnalyzeTaskNode:
     ) -> None:
         """Test handling multiple tasks in plan."""
         with (
-            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+            patch("bsai.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
+            patch("bsai.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             mock_get_memory_context.return_value = ([], "")
 
@@ -274,8 +274,8 @@ class TestAnalyzeTaskNode:
     ) -> None:
         """Test task analysis with only memory context (no handover)."""
         with (
-            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+            patch("bsai.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
+            patch("bsai.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             # Only memory context, no handover
             mock_get_memory_context.return_value = (
@@ -317,8 +317,8 @@ class TestAnalyzeTaskNode:
     ) -> None:
         """Test that agent started and completed events are broadcast."""
         with (
-            patch("agent.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
-            patch("agent.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
+            patch("bsai.graph.nodes.analyze.ArchitectAgent") as MockArchitect,
+            patch("bsai.graph.nodes.analyze.get_memory_context") as mock_get_memory_context,
         ):
             mock_get_memory_context.return_value = ([], "")
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent.api.config import (
+from bsai.api.config import (
     AgentSettings,
     APISettings,
     AuthSettings,

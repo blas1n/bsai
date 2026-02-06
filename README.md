@@ -157,7 +157,7 @@ docker-compose up -d
 alembic upgrade head
 
 # Start API server
-uvicorn src.agent.main:app --reload
+uvicorn src.bsai.main:app --reload
 ```
 
 API will be available at: http://localhost:8000
@@ -238,7 +238,7 @@ Dashboard will be available at: http://localhost:3000
 
 ```
 bsai/
-├── src/agent/                  # Main source code
+├── src/bsai/                   # Main source code
 │   ├── db/                    # Database layer
 │   │   ├── session.py        # Async session factory
 │   │   ├── models/           # 11 SQLAlchemy models

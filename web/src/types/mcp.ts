@@ -1,6 +1,6 @@
 /**
  * MCP (Model Context Protocol) type definitions.
- * These types mirror the backend schemas from agent.api.schemas.mcp
+ * These types mirror the backend schemas from bsai.api.schemas.mcp
  */
 
 export type TransportType = 'stdio' | 'http' | 'sse';

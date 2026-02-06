@@ -9,8 +9,8 @@ from uuid import uuid4
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from agent.db.models.enums import TaskStatus
-from agent.graph.nodes import (
+from bsai.db.models.enums import TaskStatus
+from bsai.graph.nodes import (
     Node,
     NodeContext,
     check_task_cancelled,
@@ -182,7 +182,7 @@ class TestCheckTaskCancelled:
         mock_task = MagicMock()
         mock_task.status = TaskStatus.FAILED.value
 
-        with patch("agent.graph.nodes.TaskRepository") as MockRepo:
+        with patch("bsai.graph.nodes.TaskRepository") as MockRepo:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=mock_task)
             MockRepo.return_value = mock_repo
@@ -202,7 +202,7 @@ class TestCheckTaskCancelled:
         mock_task = MagicMock()
         mock_task.status = TaskStatus.COMPLETED.value
 
-        with patch("agent.graph.nodes.TaskRepository") as MockRepo:
+        with patch("bsai.graph.nodes.TaskRepository") as MockRepo:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=mock_task)
             MockRepo.return_value = mock_repo
@@ -222,7 +222,7 @@ class TestCheckTaskCancelled:
         mock_task = MagicMock()
         mock_task.status = TaskStatus.IN_PROGRESS.value
 
-        with patch("agent.graph.nodes.TaskRepository") as MockRepo:
+        with patch("bsai.graph.nodes.TaskRepository") as MockRepo:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=mock_task)
             MockRepo.return_value = mock_repo
@@ -242,7 +242,7 @@ class TestCheckTaskCancelled:
         mock_task = MagicMock()
         mock_task.status = TaskStatus.PENDING.value
 
-        with patch("agent.graph.nodes.TaskRepository") as MockRepo:
+        with patch("bsai.graph.nodes.TaskRepository") as MockRepo:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=mock_task)
             MockRepo.return_value = mock_repo
@@ -259,7 +259,7 @@ class TestCheckTaskCancelled:
         mock_session = AsyncMock()
         task_id = uuid4()
 
-        with patch("agent.graph.nodes.TaskRepository") as MockRepo:
+        with patch("bsai.graph.nodes.TaskRepository") as MockRepo:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=None)
             MockRepo.return_value = mock_repo
@@ -424,7 +424,7 @@ class TestNodeContext:
         mock_task = MagicMock()
         mock_task.status = TaskStatus.FAILED.value
 
-        with patch("agent.graph.nodes.TaskRepository") as MockRepo:
+        with patch("bsai.graph.nodes.TaskRepository") as MockRepo:
             mock_repo = MagicMock()
             mock_repo.get_by_id = AsyncMock(return_value=mock_task)
             MockRepo.return_value = mock_repo

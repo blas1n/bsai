@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.core.responder import (
+from bsai.core.responder import (
     ResponderAgent,
     detect_language,
     get_language_name,
@@ -153,7 +153,7 @@ class TestResponderAgent:
         """Test generating response successfully."""
         task_id = uuid4()
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_response(
@@ -176,7 +176,7 @@ class TestResponderAgent:
         """Test generating response for Korean request."""
         task_id = uuid4()
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_response(
@@ -201,7 +201,7 @@ class TestResponderAgent:
         """Test generating response without artifacts."""
         task_id = uuid4()
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_response(
@@ -230,7 +230,7 @@ class TestResponderAgent:
 
         task_id = uuid4()
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_response(
@@ -249,7 +249,7 @@ class TestResponderAgent:
         """Test that SIMPLE complexity model is selected."""
         task_id = uuid4()
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             await responder.generate_response(
@@ -261,7 +261,7 @@ class TestResponderAgent:
         mock_router.select_model.assert_called_once()
         # Verify TaskComplexity.SIMPLE was used
         call_args = mock_router.select_model.call_args
-        from agent.db.models.enums import TaskComplexity
+        from bsai.db.models.enums import TaskComplexity
 
         assert call_args[0][0] == TaskComplexity.SIMPLE
 
@@ -289,7 +289,7 @@ class TestResponderAgent:
             "final_error": "Task failed after max retries",
         }
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_failure_report(
@@ -321,7 +321,7 @@ class TestResponderAgent:
             "final_error": "Unknown error",
         }
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_failure_report(
@@ -364,7 +364,7 @@ class TestResponderAgent:
             "final_error": "Deployment error",
         }
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_failure_report(
@@ -394,7 +394,7 @@ class TestResponderAgent:
             "final_error": None,
         }
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_failure_report(
@@ -420,7 +420,7 @@ class TestResponderAgent:
         mock_response.usage.total_tokens = 100
         mock_llm_client.chat_completion = AsyncMock(return_value=mock_response)
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             await responder.generate_failure_report(
@@ -429,7 +429,7 @@ class TestResponderAgent:
                 failure_context={"attempted_milestones": [], "final_error": "Error"},
             )
 
-        from agent.db.models.enums import TaskComplexity
+        from bsai.db.models.enums import TaskComplexity
 
         call_args = mock_router.select_model.call_args
         assert call_args[0][0] == TaskComplexity.MODERATE
@@ -458,7 +458,7 @@ class TestResponderAgent:
             "final_error": "Error",
         }
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_failure_report(
@@ -494,7 +494,7 @@ class TestResponderAgent:
             "final_error": "Error",
         }
 
-        with patch("agent.core.responder.get_agent_settings") as mock_settings:
+        with patch("bsai.core.responder.get_agent_settings") as mock_settings:
             mock_settings.return_value.worker_temperature = 0.7
 
             result = await responder.generate_failure_report(

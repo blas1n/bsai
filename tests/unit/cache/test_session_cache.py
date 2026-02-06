@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.cache.session_cache import SessionCache
+from bsai.cache.session_cache import SessionCache
 
 
 class TestSessionCache:

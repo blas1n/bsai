@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.db.repository.user_settings_repo import UserSettingsRepository
+from bsai.db.repository.user_settings_repo import UserSettingsRepository
 
 
 @pytest.fixture

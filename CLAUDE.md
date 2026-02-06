@@ -36,7 +36,7 @@ analyze_task → select_llm → [generate_prompt?] → execute_worker
 
 ## Development Guidelines
 
-- **Backend**: [src/agent/CLAUDE.md](src/agent/CLAUDE.md)
+- **Backend**: [src/bsai/CLAUDE.md](src/bsai/CLAUDE.md)
 - **Frontend**: [web/CLAUDE.md](web/CLAUDE.md)
 
 ## Quick Reference

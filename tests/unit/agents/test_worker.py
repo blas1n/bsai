@@ -6,9 +6,9 @@ from uuid import uuid4
 
 import pytest
 
-from agent.core.worker import WorkerAgent
-from agent.db.models.enums import TaskComplexity
-from agent.llm import LLMModel, LLMResponse, UsageInfo
+from bsai.core.worker import WorkerAgent
+from bsai.db.models.enums import TaskComplexity
+from bsai.llm import LLMModel, LLMResponse, UsageInfo
 
 
 @pytest.fixture

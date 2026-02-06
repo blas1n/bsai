@@ -1,6 +1,6 @@
 """Tests for conditional edge functions."""
 
-from agent.graph.edges import (
+from bsai.graph.edges import (
     MAX_RETRIES,
     AdvanceRoute,
     QARoute,
@@ -8,7 +8,7 @@ from agent.graph.edges import (
     route_advance,
     route_qa_decision,
 )
-from agent.graph.state import AgentState
+from bsai.graph.state import AgentState
 
 
 class TestRouteQaDecision:

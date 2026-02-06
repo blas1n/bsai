@@ -6,9 +6,9 @@ from uuid import uuid4
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from agent.graph.nodes.qa import verify_qa_node
-from agent.graph.state import AgentState
-from agent.llm.schemas import QAOutput
+from bsai.graph.nodes.qa import verify_qa_node
+from bsai.graph.state import AgentState
+from bsai.llm.schemas import QAOutput
 
 
 def _make_qa_output(
@@ -81,14 +81,14 @@ class TestVerifyQaNode:
         mock_session: AsyncMock,
     ) -> None:
         """Test QA pass decision."""
-        from agent.core import QADecision
+        from bsai.core import QADecision
 
         state = _create_state_with_plan(worker_output="Good output")
 
         with (
-            patch("agent.graph.nodes.qa.QAAgent") as MockQA,
+            patch("bsai.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.NodeContext.check_cancelled",
+                "bsai.graph.nodes.qa.NodeContext.check_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -112,7 +112,7 @@ class TestVerifyQaNode:
         mock_session: AsyncMock,
     ) -> None:
         """Test QA retry decision."""
-        from agent.core import QADecision
+        from bsai.core import QADecision
 
         state = _create_state_with_plan(
             worker_output="Partial output",
@@ -120,9 +120,9 @@ class TestVerifyQaNode:
         )
 
         with (
-            patch("agent.graph.nodes.qa.QAAgent") as MockQA,
+            patch("bsai.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.NodeContext.check_cancelled",
+                "bsai.graph.nodes.qa.NodeContext.check_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -154,7 +154,7 @@ class TestVerifyQaNode:
         }
 
         with patch(
-            "agent.graph.nodes.qa.NodeContext.check_cancelled",
+            "bsai.graph.nodes.qa.NodeContext.check_cancelled",
             new_callable=AsyncMock,
             return_value=False,
         ):
@@ -173,9 +173,9 @@ class TestVerifyQaNode:
         state = _create_state_with_plan(worker_output="Output")
 
         with (
-            patch("agent.graph.nodes.qa.QAAgent") as MockQA,
+            patch("bsai.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.NodeContext.check_cancelled",
+                "bsai.graph.nodes.qa.NodeContext.check_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -197,14 +197,14 @@ class TestVerifyQaNode:
         mock_event_bus: MagicMock,
     ) -> None:
         """Test QA broadcasts started and completed events."""
-        from agent.core import QADecision
+        from bsai.core import QADecision
 
         state = _create_state_with_plan(worker_output="Output")
 
         with (
-            patch("agent.graph.nodes.qa.QAAgent") as MockQA,
+            patch("bsai.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.NodeContext.check_cancelled",
+                "bsai.graph.nodes.qa.NodeContext.check_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -239,7 +239,7 @@ class TestVerifyQaNode:
         mock_session: AsyncMock,
     ) -> None:
         """Test that PASS after retry stores QA learning."""
-        from agent.core import QADecision
+        from bsai.core import QADecision
 
         state = _create_state_with_plan(
             worker_output="Improved output",
@@ -249,13 +249,13 @@ class TestVerifyQaNode:
         )
 
         with (
-            patch("agent.graph.nodes.qa.QAAgent") as MockQA,
+            patch("bsai.graph.nodes.qa.QAAgent") as MockQA,
             patch(
-                "agent.graph.nodes.qa.NodeContext.check_cancelled",
+                "bsai.graph.nodes.qa.NodeContext.check_cancelled",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
-            patch("agent.graph.nodes.qa.store_qa_learning", new_callable=AsyncMock) as mock_store,
+            patch("bsai.graph.nodes.qa.store_qa_learning", new_callable=AsyncMock) as mock_store,
         ):
             mock_qa = AsyncMock()
             mock_qa.validate_output.return_value = (

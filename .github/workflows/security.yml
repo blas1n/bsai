@@ -46,7 +46,7 @@ jobs:
         uses: advanced-security/filter-sarif@v1
         with:
           patterns: |-
-            -src/agent/db/models/**:py/unsafe-cyclic-import
+            -src/bsai/db/models/**:py/unsafe-cyclic-import
           input: sarif-results/${{ matrix.language }}.sarif
           output: sarif-results/${{ matrix.language }}.sarif
 

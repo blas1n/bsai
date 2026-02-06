@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from agent.db.repository.agent_step_repo import AgentStepRepository
+from bsai.db.repository.agent_step_repo import AgentStepRepository
 
 
 class TestAgentStepRepository:

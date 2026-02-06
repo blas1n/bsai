@@ -7,7 +7,7 @@ Note: Task-level snapshot system with explicit delete support.
 
 import json
 
-from agent.core.artifact_extractor import (
+from bsai.core.artifact_extractor import (
     ExtractedArtifact,
     ExtractionResult,
     extract_artifacts,
