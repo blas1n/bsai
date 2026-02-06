@@ -163,29 +163,26 @@ class TestDiscoverOAuthMetadata:
     @pytest.mark.asyncio
     async def test_discover_oauth_metadata_protected_resource(self):
         """Test discovering OAuth metadata via protected resource endpoint."""
-        with patch("agent.api.routers.mcp.oauth.httpx.AsyncClient") as MockClient:
-            mock_client = AsyncMock()
-            MockClient.return_value.__aenter__.return_value = mock_client
+        # First call for protected resource
+        protected_resource_response = MagicMock()
+        protected_resource_response.status_code = 200
+        protected_resource_response.json.return_value = {
+            "authorization_servers": ["https://auth.example.com"]
+        }
 
-            # First call for protected resource
-            protected_resource_response = MagicMock()
-            protected_resource_response.status_code = 200
-            protected_resource_response.json.return_value = {
-                "authorization_servers": ["https://auth.example.com"]
-            }
+        # Second call for auth server metadata
+        auth_server_response = MagicMock()
+        auth_server_response.status_code = 200
+        auth_server_response.json.return_value = {
+            "authorization_endpoint": "https://auth.example.com/authorize",
+            "token_endpoint": "https://auth.example.com/token",
+        }
 
-            # Second call for auth server metadata
-            auth_server_response = MagicMock()
-            auth_server_response.status_code = 200
-            auth_server_response.json.return_value = {
-                "authorization_endpoint": "https://auth.example.com/authorize",
-                "token_endpoint": "https://auth.example.com/token",
-            }
-
-            mock_client.get = AsyncMock(
-                side_effect=[protected_resource_response, auth_server_response]
-            )
-
+        with patch(
+            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            new_callable=AsyncMock,
+            side_effect=[protected_resource_response, auth_server_response],
+        ):
             result = await _discover_oauth_metadata("https://example.com")
 
             assert result is not None
@@ -194,23 +191,22 @@ class TestDiscoverOAuthMetadata:
     @pytest.mark.asyncio
     async def test_discover_oauth_metadata_fallback_to_oauth_server(self):
         """Test falling back to OAuth authorization server discovery."""
-        with patch("agent.api.routers.mcp.oauth.httpx.AsyncClient") as MockClient:
-            mock_client = AsyncMock()
-            MockClient.return_value.__aenter__.return_value = mock_client
+        # First call fails (protected resource)
+        protected_fail = MagicMock()
+        protected_fail.status_code = 404
 
-            # First call fails (protected resource)
-            protected_fail = MagicMock()
-            protected_fail.status_code = 404
+        # Second call succeeds (oauth-authorization-server)
+        oauth_server_response = MagicMock()
+        oauth_server_response.status_code = 200
+        oauth_server_response.json.return_value = {
+            "authorization_endpoint": "https://example.com/authorize",
+        }
 
-            # Second call succeeds (oauth-authorization-server)
-            oauth_server_response = MagicMock()
-            oauth_server_response.status_code = 200
-            oauth_server_response.json.return_value = {
-                "authorization_endpoint": "https://example.com/authorize",
-            }
-
-            mock_client.get = AsyncMock(side_effect=[protected_fail, oauth_server_response])
-
+        with patch(
+            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            new_callable=AsyncMock,
+            side_effect=[protected_fail, oauth_server_response],
+        ):
             result = await _discover_oauth_metadata("https://example.com")
 
             assert result is not None
@@ -219,16 +215,15 @@ class TestDiscoverOAuthMetadata:
     @pytest.mark.asyncio
     async def test_discover_oauth_metadata_not_found(self):
         """Test when no OAuth metadata is found."""
-        with patch("agent.api.routers.mcp.oauth.httpx.AsyncClient") as MockClient:
-            mock_client = AsyncMock()
-            MockClient.return_value.__aenter__.return_value = mock_client
+        # All calls fail
+        not_found_response = MagicMock()
+        not_found_response.status_code = 404
 
-            # All calls fail
-            not_found_response = MagicMock()
-            not_found_response.status_code = 404
-
-            mock_client.get = AsyncMock(return_value=not_found_response)
-
+        with patch(
+            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            new_callable=AsyncMock,
+            return_value=not_found_response,
+        ):
             result = await _discover_oauth_metadata("https://example.com")
 
             assert result is None
@@ -240,18 +235,18 @@ class TestRegisterOAuthClient:
     @pytest.mark.asyncio
     async def test_register_oauth_client_success(self):
         """Test successful OAuth client registration."""
-        with patch("agent.api.routers.mcp.oauth.httpx.AsyncClient") as MockClient:
-            mock_client = AsyncMock()
-            MockClient.return_value.__aenter__.return_value = mock_client
+        response = MagicMock()
+        response.status_code = 201
+        response.json.return_value = {
+            "client_id": "new-client-id",
+            "client_secret": "new-client-secret",
+        }
 
-            response = MagicMock()
-            response.status_code = 201
-            response.json.return_value = {
-                "client_id": "new-client-id",
-                "client_secret": "new-client-secret",
-            }
-            mock_client.post = AsyncMock(return_value=response)
-
+        with patch(
+            "agent.api.routers.mcp.oauth.ssrf_safe_post",
+            new_callable=AsyncMock,
+            return_value=response,
+        ):
             result = await _register_oauth_client(
                 "https://example.com/register",
                 "https://app.example.com/callback",
@@ -263,14 +258,14 @@ class TestRegisterOAuthClient:
     @pytest.mark.asyncio
     async def test_register_oauth_client_failure(self):
         """Test OAuth client registration failure."""
-        with patch("agent.api.routers.mcp.oauth.httpx.AsyncClient") as MockClient:
-            mock_client = AsyncMock()
-            MockClient.return_value.__aenter__.return_value = mock_client
+        response = MagicMock()
+        response.status_code = 400
 
-            response = MagicMock()
-            response.status_code = 400
-            mock_client.post = AsyncMock(return_value=response)
-
+        with patch(
+            "agent.api.routers.mcp.oauth.ssrf_safe_post",
+            new_callable=AsyncMock,
+            return_value=response,
+        ):
             result = await _register_oauth_client(
                 "https://example.com/register",
                 "https://app.example.com/callback",
@@ -601,28 +596,27 @@ class TestDiscoverOAuthMetadataEdgeCases:
     @pytest.mark.asyncio
     async def test_discover_oauth_metadata_openid_fallback(self):
         """Test falling back to OpenID Connect discovery."""
-        with patch("agent.api.routers.mcp.oauth.httpx.AsyncClient") as MockClient:
-            mock_client = AsyncMock()
-            MockClient.return_value.__aenter__.return_value = mock_client
+        # Protected resource fails
+        protected_fail = MagicMock()
+        protected_fail.status_code = 404
 
-            # Protected resource fails
-            protected_fail = MagicMock()
-            protected_fail.status_code = 404
+        # OAuth server fails
+        oauth_fail = MagicMock()
+        oauth_fail.status_code = 404
 
-            # OAuth server fails
-            oauth_fail = MagicMock()
-            oauth_fail.status_code = 404
+        # OpenID Connect succeeds
+        openid_response = MagicMock()
+        openid_response.status_code = 200
+        openid_response.json.return_value = {
+            "authorization_endpoint": "https://example.com/openid/authorize",
+            "token_endpoint": "https://example.com/openid/token",
+        }
 
-            # OpenID Connect succeeds
-            openid_response = MagicMock()
-            openid_response.status_code = 200
-            openid_response.json.return_value = {
-                "authorization_endpoint": "https://example.com/openid/authorize",
-                "token_endpoint": "https://example.com/openid/token",
-            }
-
-            mock_client.get = AsyncMock(side_effect=[protected_fail, oauth_fail, openid_response])
-
+        with patch(
+            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            new_callable=AsyncMock,
+            side_effect=[protected_fail, oauth_fail, openid_response],
+        ):
             result = await _discover_oauth_metadata("https://example.com")
 
             assert result is not None
@@ -631,13 +625,11 @@ class TestDiscoverOAuthMetadataEdgeCases:
     @pytest.mark.asyncio
     async def test_discover_oauth_metadata_exception_handling(self):
         """Test exception handling during discovery."""
-        with patch("agent.api.routers.mcp.oauth.httpx.AsyncClient") as MockClient:
-            mock_client = AsyncMock()
-            MockClient.return_value.__aenter__.return_value = mock_client
-
-            # All calls raise exceptions
-            mock_client.get = AsyncMock(side_effect=Exception("Network error"))
-
+        with patch(
+            "agent.api.routers.mcp.oauth.ssrf_safe_get",
+            new_callable=AsyncMock,
+            side_effect=Exception("Network error"),
+        ):
             result = await _discover_oauth_metadata("https://example.com")
 
             assert result is None
