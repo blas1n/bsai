@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import shlex
+import socket
 from base64 import b64decode, b64encode
 from typing import Any
+from urllib.parse import urlparse
 
+import httpx
 import structlog
 from cryptography.fernet import Fernet
 
@@ -93,6 +97,46 @@ class McpSecurityValidator:
                     f"URL blocked: Cannot access internal/private IP addresses. "
                     f"Matched pattern: {pattern}"
                 )
+
+        # Extract and validate hostname
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError("URL must contain a valid hostname")
+
+        # Resolve hostname and validate IP address
+        self._validate_resolved_ip(hostname)
+
+    def _validate_resolved_ip(self, hostname: str) -> None:
+        """Validate that hostname resolves to a public IP address.
+
+        Args:
+            hostname: Hostname to validate
+
+        Raises:
+            ValueError: If hostname resolves to private/internal IP
+        """
+        try:
+            # Get all IP addresses for the hostname
+            addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC)
+            for _family, _, _, _, sockaddr in addr_info:
+                ip_str = sockaddr[0]
+                try:
+                    ip = ipaddress.ip_address(ip_str)
+                    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                        raise ValueError(
+                            f"URL blocked: Hostname '{hostname}' resolves to "
+                            f"private/internal IP address '{ip_str}'"
+                        )
+                except ValueError as e:
+                    if "private/internal" in str(e):
+                        raise
+                    # If IP parsing fails, continue checking other addresses
+                    continue
+        except socket.gaierror:
+            # DNS resolution failed - allow the request to proceed
+            # (it will fail naturally when httpx tries to connect)
+            pass
 
     def assess_tool_risk(
         self,
@@ -297,3 +341,77 @@ def build_mcp_auth_headers(
         )
 
     return headers
+
+
+async def ssrf_safe_get(
+    url: str,
+    validator: McpSecurityValidator,
+    timeout: float = 10.0,
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    """Perform an SSRF-safe HTTP GET request.
+
+    Validates the URL against SSRF patterns and disables redirects
+    to prevent redirect-based SSRF attacks.
+
+    Args:
+        url: URL to fetch
+        validator: Security validator for URL validation
+        timeout: Request timeout in seconds
+        headers: Optional headers to include
+
+    Returns:
+        httpx.Response object
+
+    Raises:
+        ValueError: If URL fails SSRF validation
+        httpx.HTTPError: If request fails
+    """
+    # Validate URL before making request
+    validator.validate_server_url(url)
+
+    # Use follow_redirects=False to prevent redirect-based SSRF
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        follow_redirects=False,
+    ) as client:
+        return await client.get(url, headers=headers)
+
+
+async def ssrf_safe_post(
+    url: str,
+    validator: McpSecurityValidator,
+    data: dict[str, Any] | None = None,
+    json_data: dict[str, Any] | None = None,
+    timeout: float = 10.0,
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    """Perform an SSRF-safe HTTP POST request.
+
+    Validates the URL against SSRF patterns and disables redirects
+    to prevent redirect-based SSRF attacks.
+
+    Args:
+        url: URL to post to
+        validator: Security validator for URL validation
+        data: Form data to send
+        json_data: JSON data to send
+        timeout: Request timeout in seconds
+        headers: Optional headers to include
+
+    Returns:
+        httpx.Response object
+
+    Raises:
+        ValueError: If URL fails SSRF validation
+        httpx.HTTPError: If request fails
+    """
+    # Validate URL before making request
+    validator.validate_server_url(url)
+
+    # Use follow_redirects=False to prevent redirect-based SSRF
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        follow_redirects=False,
+    ) as client:
+        return await client.post(url, data=data, json=json_data, headers=headers)

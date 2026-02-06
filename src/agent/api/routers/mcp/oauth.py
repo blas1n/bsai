@@ -8,7 +8,6 @@ from typing import Any
 from urllib.parse import urlencode, urljoin, urlparse
 from uuid import UUID
 
-import httpx
 import structlog
 from fastapi import APIRouter
 
@@ -16,7 +15,12 @@ from agent.api.config import get_mcp_settings
 from agent.api.exceptions import NotFoundError, ValidationError
 from agent.cache.redis_client import get_redis
 from agent.db.repository.mcp_server_repo import McpServerRepository
-from agent.mcp.security import CredentialEncryption, McpSecurityValidator
+from agent.mcp.security import (
+    CredentialEncryption,
+    McpSecurityValidator,
+    ssrf_safe_get,
+    ssrf_safe_post,
+)
 
 from ...dependencies import CurrentUserId, DBSession
 from ...schemas.mcp import (
@@ -59,58 +63,55 @@ async def _discover_oauth_metadata(server_url: str) -> dict[str, Any] | None:
     settings = get_mcp_settings()
     validator = McpSecurityValidator(settings)
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        # Try protected resource metadata first (RFC 9728)
-        try:
-            protected_resource_url = _build_wellknown_url(
-                server_url, "/.well-known/oauth-protected-resource", validator
-            )
-            response = await client.get(protected_resource_url)
-            if response.status_code == 200:
-                resource_meta = response.json()
-                auth_server = resource_meta.get("authorization_servers", [None])[0]
-                if auth_server:
-                    auth_server_meta_url = _build_wellknown_url(
-                        auth_server, "/.well-known/oauth-authorization-server", validator
-                    )
-                    meta_response = await client.get(auth_server_meta_url)
-                    if meta_response.status_code == 200:
-                        result: dict[str, Any] = meta_response.json()
-                        return result
-        except ValueError:
-            raise
-        except Exception as e:
-            logger.debug(
-                "oauth_protected_resource_discovery_failed", server_url=server_url, error=str(e)
-            )
+    # Try protected resource metadata first (RFC 9728)
+    try:
+        protected_resource_url = _build_wellknown_url(
+            server_url, "/.well-known/oauth-protected-resource", validator
+        )
+        response = await ssrf_safe_get(protected_resource_url, validator)
+        if response.status_code == 200:
+            resource_meta = response.json()
+            auth_server = resource_meta.get("authorization_servers", [None])[0]
+            if auth_server:
+                auth_server_meta_url = _build_wellknown_url(
+                    auth_server, "/.well-known/oauth-authorization-server", validator
+                )
+                meta_response = await ssrf_safe_get(auth_server_meta_url, validator)
+                if meta_response.status_code == 200:
+                    result: dict[str, Any] = meta_response.json()
+                    return result
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.debug(
+            "oauth_protected_resource_discovery_failed", server_url=server_url, error=str(e)
+        )
 
-        # Try standard OAuth metadata discovery (RFC 8414)
-        try:
-            oauth_server_url = _build_wellknown_url(
-                server_url, "/.well-known/oauth-authorization-server", validator
-            )
-            response = await client.get(oauth_server_url)
-            if response.status_code == 200:
-                oauth_result: dict[str, Any] = response.json()
-                return oauth_result
-        except Exception as e:
-            logger.debug(
-                "oauth_authorization_server_discovery_failed", server_url=server_url, error=str(e)
-            )
+    # Try standard OAuth metadata discovery (RFC 8414)
+    try:
+        oauth_server_url = _build_wellknown_url(
+            server_url, "/.well-known/oauth-authorization-server", validator
+        )
+        response = await ssrf_safe_get(oauth_server_url, validator)
+        if response.status_code == 200:
+            oauth_result: dict[str, Any] = response.json()
+            return oauth_result
+    except Exception as e:
+        logger.debug(
+            "oauth_authorization_server_discovery_failed", server_url=server_url, error=str(e)
+        )
 
-        # Try OpenID Connect discovery
-        try:
-            openid_url = _build_wellknown_url(
-                server_url, "/.well-known/openid-configuration", validator
-            )
-            response = await client.get(openid_url)
-            if response.status_code == 200:
-                openid_result: dict[str, Any] = response.json()
-                return openid_result
-        except Exception as e:
-            logger.debug(
-                "openid_configuration_discovery_failed", server_url=server_url, error=str(e)
-            )
+    # Try OpenID Connect discovery
+    try:
+        openid_url = _build_wellknown_url(
+            server_url, "/.well-known/openid-configuration", validator
+        )
+        response = await ssrf_safe_get(openid_url, validator)
+        if response.status_code == 200:
+            openid_result: dict[str, Any] = response.json()
+            return openid_result
+    except Exception as e:
+        logger.debug("openid_configuration_discovery_failed", server_url=server_url, error=str(e))
 
     return None
 
@@ -123,7 +124,6 @@ async def _register_oauth_client(
     """Dynamically register an OAuth client (RFC 7591)."""
     settings = get_mcp_settings()
     validator = McpSecurityValidator(settings)
-    validator.validate_server_url(registration_endpoint)
 
     registration_request = {
         "client_name": client_name,
@@ -133,22 +133,22 @@ async def _register_oauth_client(
         "token_endpoint_auth_method": "none",
     }
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            response = await client.post(
-                registration_endpoint,
-                json=registration_request,
-                headers={"Content-Type": "application/json"},
-            )
-            if response.status_code in (200, 201):
-                result: dict[str, Any] = response.json()
-                return result
-        except ValueError:
-            raise
-        except Exception as e:
-            logger.debug(
-                "oauth_client_registration_failed", endpoint=registration_endpoint, error=str(e)
-            )
+    try:
+        response = await ssrf_safe_post(
+            registration_endpoint,
+            validator,
+            json_data=registration_request,
+            headers={"Content-Type": "application/json"},
+        )
+        if response.status_code in (200, 201):
+            result: dict[str, Any] = response.json()
+            return result
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.debug(
+            "oauth_client_registration_failed", endpoint=registration_endpoint, error=str(e)
+        )
 
     return None
 
@@ -359,21 +359,22 @@ async def oauth_callback(
         token_data["client_secret"] = client_secret
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                token_endpoint,
-                data=token_data,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
+        response = await ssrf_safe_post(
+            token_endpoint,
+            validator,
+            data=token_data,
+            timeout=30.0,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+        if response.status_code != 200:
+            error_detail = response.text[:200] if response.text else "Unknown error"
+            return McpOAuthCallbackResponse(
+                success=False,
+                error=f"Token exchange failed: {error_detail}",
             )
 
-            if response.status_code != 200:
-                error_detail = response.text[:200] if response.text else "Unknown error"
-                return McpOAuthCallbackResponse(
-                    success=False,
-                    error=f"Token exchange failed: {error_detail}",
-                )
-
-            tokens = response.json()
+        tokens = response.json()
 
     except Exception as e:
         return McpOAuthCallbackResponse(
