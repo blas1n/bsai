@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import bsai.db.session as session_module
 from bsai.db.session import (
     DatabaseSessionManager,
     close_db,
@@ -16,7 +17,6 @@ from bsai.db.session import (
 @pytest.fixture(autouse=True)
 def reset_session_manager():
     """Reset global session manager before and after each test."""
-    import bsai.db.session as session_module
 
     original = session_module.session_manager
     session_module.session_manager = None
@@ -152,7 +152,6 @@ class TestCloseDb:
 
     async def test_close_db_success(self) -> None:
         """Test successful database close."""
-        import bsai.db.session as session_module
 
         mock_manager = AsyncMock()
         session_module.session_manager = mock_manager
@@ -164,7 +163,6 @@ class TestCloseDb:
 
     async def test_close_db_not_initialized(self) -> None:
         """Test close when not initialized."""
-        import bsai.db.session as session_module
 
         session_module.session_manager = None
 
@@ -177,7 +175,6 @@ class TestGetSessionManager:
 
     def test_get_session_manager_success(self) -> None:
         """Test getting session manager."""
-        import bsai.db.session as session_module
 
         mock_manager = MagicMock()
         session_module.session_manager = mock_manager
@@ -197,7 +194,6 @@ class TestGetDbSession:
 
     async def test_get_db_session(self) -> None:
         """Test getting database session via dependency."""
-        import bsai.db.session as session_module
 
         mock_session = AsyncMock()
 
