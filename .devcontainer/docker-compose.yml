@@ -14,7 +14,7 @@ services:
     volumes:
       - ..:/workspace:cached
       - claude-code-bashhistory:/commandhistory
-      - claude-code-config:/home/vscode/.claude
+      - ~/.claude:/home/vscode/.claude:cached
     ports:
       - "${EXTERNAL_BACKEND_PORT:-18000}:8000"   # FastAPI
       - "${EXTERNAL_FRONTEND_PORT:-13000}:3000"  # Frontend (Next.js)
@@ -22,7 +22,6 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       - ENVIRONMENT=development
-      - CLAUDE_CONFIG_DIR=/home/vscode/.claude
       - LANG=C.UTF-8
       - LC_ALL=C.UTF-8
       - NEXT_PUBLIC_WS_URL=ws://localhost:${EXTERNAL_BACKEND_PORT:-18000}
@@ -111,7 +110,6 @@ services:
 
 volumes:
   claude-code-bashhistory:
-  claude-code-config:
   postgres-data:
   redis-data:
 
