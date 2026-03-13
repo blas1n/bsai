@@ -123,3 +123,6 @@ web/out/
 
 # Internal documentation (not for public)
 docs/internal/
+
+# Devcontainer local overrides (git worktree mount)
+docker-compose.override.yml
