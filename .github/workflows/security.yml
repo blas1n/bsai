@@ -111,4 +111,4 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run pip-audit
-        run: pip-audit --desc on --fix --dry-run
+        run: pip-audit --desc on --fix --dry-run --ignore-vuln CVE-2026-4539  # Pygments: no fix available yet
