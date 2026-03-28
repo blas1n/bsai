@@ -322,6 +322,86 @@ class TestCompleteSession:
             assert response.json()["status"] == "completed"
 
 
+class TestBulkSessionAction:
+    """Tests for POST /sessions/bulk endpoint."""
+
+    def test_bulk_pause_all_succeed(self, client: TestClient) -> None:
+        """Bulk pause succeeds for all sessions."""
+        session_ids = [str(uuid4()), str(uuid4())]
+
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.pause_session = AsyncMock(return_value=None)
+            mock_service_class.return_value = mock_service
+
+            response = client.post(
+                "/api/v1/sessions/bulk",
+                json={"session_ids": session_ids, "action": "pause"},
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["success"]) == 2
+            assert len(data["failed"]) == 0
+
+    def test_bulk_complete_all_succeed(self, client: TestClient) -> None:
+        """Bulk complete succeeds for all sessions."""
+        session_ids = [str(uuid4())]
+
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.complete_session = AsyncMock(return_value=None)
+            mock_service_class.return_value = mock_service
+
+            response = client.post(
+                "/api/v1/sessions/bulk",
+                json={"session_ids": session_ids, "action": "complete"},
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["success"]) == 1
+
+    def test_bulk_delete_all_succeed(self, client: TestClient) -> None:
+        """Bulk delete succeeds for all sessions."""
+        session_ids = [str(uuid4())]
+
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.delete_session = AsyncMock(return_value=None)
+            mock_service_class.return_value = mock_service
+
+            response = client.post(
+                "/api/v1/sessions/bulk",
+                json={"session_ids": session_ids, "action": "delete"},
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["success"]) == 1
+
+    def test_bulk_action_with_partial_failure(self, client: TestClient) -> None:
+        """Returns partial success when some sessions fail."""
+        sid1 = str(uuid4())
+        sid2 = str(uuid4())
+
+        with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.pause_session = AsyncMock(side_effect=[None, Exception("Not found")])
+            mock_service_class.return_value = mock_service
+
+            response = client.post(
+                "/api/v1/sessions/bulk",
+                json={"session_ids": [sid1, sid2], "action": "pause"},
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["success"]) == 1
+            assert len(data["failed"]) == 1
+            assert data["failed"][0]["session_id"] == sid2
+
+
 class TestDeleteSession:
     """Tests for DELETE /sessions/{session_id} endpoint."""
 

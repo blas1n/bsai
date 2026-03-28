@@ -550,5 +550,170 @@ class TestRejectTask:
             assert response.status_code == 400
 
 
-# Note: Milestones endpoints are in a separate router (milestones.py)
-# with path /tasks/{task_id}/milestones, not under sessions
+class TestGetTaskProgress:
+    """Tests for GET /sessions/{session_id}/tasks/{task_id}/progress endpoint."""
+
+    def test_returns_task_progress(self, client: TestClient) -> None:
+        """Returns progress information for a task."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        mock_progress = {
+            "total_tasks": 5,
+            "completed_tasks": 3,
+            "pending_tasks": 1,
+            "failed_tasks": 1,
+            "overall_percent": 60.0,
+            "current_task": None,
+            "breakpoint_reason": None,
+            "feature_progress": [],
+        }
+
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.get_progress = AsyncMock(return_value=mock_progress)
+            mock_service_class.return_value = mock_service
+
+            response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}/progress")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total_tasks"] == 5
+            assert data["overall_percent"] == 60.0
+
+    def test_returns_404_for_missing_task(self, client: TestClient) -> None:
+        """Returns 404 when task not found."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.get_progress = AsyncMock(side_effect=NotFoundError("Task", task_id))
+            mock_service_class.return_value = mock_service
+
+            response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}/progress")
+
+            assert response.status_code == 404
+
+
+class TestUpdateBreakpointConfig:
+    """Tests for PUT /sessions/{session_id}/tasks/{task_id}/breakpoint-config endpoint."""
+
+    def test_updates_breakpoint_config(self, client: TestClient) -> None:
+        """Updates breakpoint configuration successfully."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.update_breakpoint_config = AsyncMock(return_value=None)
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/breakpoint-config",
+                json={
+                    "pause_on_plan_review": False,
+                    "pause_level": "task",
+                    "pause_on_task_ids": [],
+                    "pause_on_failure": True,
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["message"] == "Breakpoint config updated"
+
+
+class TestGetQAResults:
+    """Tests for GET /sessions/{session_id}/tasks/{task_id}/qa-results endpoint."""
+
+    def test_returns_qa_results(self, client: TestClient) -> None:
+        """Returns QA results for a task."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        mock_qa = MagicMock()
+        mock_qa.decision = "PASS"
+        mock_qa.confidence = 0.95
+        mock_qa.summary = "All checks passed"
+        mock_qa.static_issues = None
+        mock_qa.static_suggestions = None
+        mock_qa.lint_result = None
+        mock_qa.typecheck_result = None
+        mock_qa.test_result = None
+        mock_qa.build_result = None
+
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.get_qa_result = AsyncMock(return_value=mock_qa)
+            mock_service_class.return_value = mock_service
+
+            response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}/qa-results")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["decision"] == "PASS"
+            assert data["confidence"] == 0.95
+
+    def test_returns_404_when_no_qa_results(self, client: TestClient) -> None:
+        """Returns 404 when QA results not found."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.get_qa_result = AsyncMock(return_value=None)
+            mock_service_class.return_value = mock_service
+
+            response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}/qa-results")
+
+            assert response.status_code == 404
+
+
+class TestUpdateQAConfig:
+    """Tests for PUT /sessions/{session_id}/tasks/{task_id}/qa-config endpoint."""
+
+    def test_updates_qa_config(self, client: TestClient) -> None:
+        """Updates QA configuration successfully."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.update_qa_config = AsyncMock(return_value=None)
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/qa-config",
+                json={
+                    "validations": ["static", "lint", "test"],
+                    "test_command": "pytest",
+                    "lint_command": "ruff check .",
+                    "allow_lint_warnings": True,
+                    "require_all_tests_pass": True,
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["message"] == "QA config updated"
+
+    def test_updates_qa_config_with_defaults(self, client: TestClient) -> None:
+        """Updates QA configuration with default values."""
+        session_id = uuid4()
+        task_id = uuid4()
+
+        with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
+            mock_service = MagicMock()
+            mock_service.update_qa_config = AsyncMock(return_value=None)
+            mock_service_class.return_value = mock_service
+
+            response = client.put(
+                f"/api/v1/sessions/{session_id}/tasks/{task_id}/qa-config",
+                json={},
+            )
+
+            assert response.status_code == 200
+            mock_service.update_qa_config.assert_called_once()
