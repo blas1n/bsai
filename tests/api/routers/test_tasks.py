@@ -574,9 +574,7 @@ class TestGetTaskProgress:
             mock_service.get_progress = AsyncMock(return_value=mock_progress)
             mock_service_class.return_value = mock_service
 
-            response = client.get(
-                f"/api/v1/sessions/{session_id}/tasks/{task_id}/progress"
-            )
+            response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}/progress")
 
             assert response.status_code == 200
             data = response.json()
@@ -590,14 +588,10 @@ class TestGetTaskProgress:
 
         with patch("bsai.api.routers.tasks.TaskService") as mock_service_class:
             mock_service = MagicMock()
-            mock_service.get_progress = AsyncMock(
-                side_effect=NotFoundError("Task", task_id)
-            )
+            mock_service.get_progress = AsyncMock(side_effect=NotFoundError("Task", task_id))
             mock_service_class.return_value = mock_service
 
-            response = client.get(
-                f"/api/v1/sessions/{session_id}/tasks/{task_id}/progress"
-            )
+            response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}/progress")
 
             assert response.status_code == 404
 
@@ -655,9 +649,7 @@ class TestGetQAResults:
             mock_service.get_qa_result = AsyncMock(return_value=mock_qa)
             mock_service_class.return_value = mock_service
 
-            response = client.get(
-                f"/api/v1/sessions/{session_id}/tasks/{task_id}/qa-results"
-            )
+            response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}/qa-results")
 
             assert response.status_code == 200
             data = response.json()
@@ -674,9 +666,7 @@ class TestGetQAResults:
             mock_service.get_qa_result = AsyncMock(return_value=None)
             mock_service_class.return_value = mock_service
 
-            response = client.get(
-                f"/api/v1/sessions/{session_id}/tasks/{task_id}/qa-results"
-            )
+            response = client.get(f"/api/v1/sessions/{session_id}/tasks/{task_id}/qa-results")
 
             assert response.status_code == 404
 

@@ -387,9 +387,7 @@ class TestBulkSessionAction:
 
         with patch("bsai.api.routers.sessions.SessionService") as mock_service_class:
             mock_service = MagicMock()
-            mock_service.pause_session = AsyncMock(
-                side_effect=[None, Exception("Not found")]
-            )
+            mock_service.pause_session = AsyncMock(side_effect=[None, Exception("Not found")])
             mock_service_class.return_value = mock_service
 
             response = client.post(
